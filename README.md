@@ -41,7 +41,6 @@
 
 ### 2. 安装依赖
 
-```bash
 pip install -r requirements.txt
 requirements.txt 内容如下：
 
@@ -52,7 +51,8 @@ psutil
 opencv-python
 pywin32
 serverchan-sdk
-3. 准备图像资源（非常重要）
+
+### 3. 准备图像资源（非常重要）
 程序依赖图像识别来点击按钮。请在项目根目录创建 resources 文件夹，并自行截图以下两张图片放入其中：
 
 resources/maa_start.png：MAA 界面右下角的 "Link Start!" 按钮。
@@ -67,7 +67,7 @@ resources/maaend_start.png：MaaEnd 界面下方的 "开始任务" 按钮。
 
 如果程序报错“找图超时”，请重新截图并替换。
 
-4. 配置与运行
+### 4. 配置与运行
 直接运行源码：
 
 bash
@@ -98,7 +98,8 @@ MaaAutoProject/
 │   └── maaend_start.png
 ├── config/                 # 自动生成：配置文件夹
 └── logs/                   # 自动生成：日志文件夹
-⚠️ 免责声明
+
+### ⚠️ 免责声明
 本项目仅供学习 Python 自动化、GUI 开发和进程管理技术使用。
 
 本项目为第三方调度工具，与 MAA、MaaEnd 官方无任何关联。
@@ -107,5 +108,5 @@ MaaAutoProject/
 
 使用本软件产生的任何直接或间接后果（包括但不限于游戏账号封禁、数据丢失、系统异常），由使用者自行承担。
 
-📄 开源协议
+### 📄 开源协议
 本项目采用 MIT License 协议开源。
