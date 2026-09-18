@@ -24,7 +24,7 @@ from ui.animations import theme_transition
 
 class Worker(QThread):
     log_signal = Signal(str)
-    task_finished = Signal(str)          # ← 新增
+    task_finished = Signal(str)
 
     def __init__(self, config, run_log_dir):
         super().__init__()
@@ -126,6 +126,7 @@ class MainWindow(QMainWindow):
         self.settings_page.config_changed.connect(self._on_config_changed)
         self.settings_page.theme_changed.connect(self._on_theme_changed)
         self.settings_page.language_changed.connect(self._on_language_changed)
+        self.settings_page.accent_changed.connect(self._on_accent_changed)   # ← 新增
         self.i18n.language_changed.connect(self._retranslate_all)
 
         self._apply_background()
@@ -209,7 +210,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(index)
 
     # ==================================================================
-    # 配置 / 主题 / 语言
+    # 配置 / 主题 / 语言 / 强调色
     # ==================================================================
     def _on_config_changed(self, cfg):
         self.config.update(cfg)
@@ -224,8 +225,13 @@ class MainWindow(QMainWindow):
         self.config["theme"] = theme
         save_config(self.config)
 
+        # 主题切换时把当前强调色一起传进去（避免内部缓存丢失）
+        accent = self.config.get("accent_color", "#3b82f6")
+
         def do_switch():
-            self.theme_manager.apply_theme(theme, QApplication.instance())
+            self.theme_manager.apply_theme(
+                theme, QApplication.instance(), accent_color=accent
+            )
 
         theme_transition(self, do_switch, duration=260)
 
@@ -233,6 +239,15 @@ class MainWindow(QMainWindow):
         self.config["language"] = code
         save_config(self.config)
         self.i18n.load_language(code)
+
+    def _on_accent_changed(self, hexv):
+        """强调色变化：保存 + 立即重刷样式表（不做淡入淡出，避免闪烁）。"""
+        self.config["accent_color"] = hexv
+        save_config(self.config)
+        try:
+            self.theme_manager.apply_accent(hexv, QApplication.instance())
+        except Exception as e:
+            self.logger.error(f"应用强调色失败: {e}")
 
     def _retranslate_all(self, *_):
         self.setWindowTitle(self.i18n.t("app.title"))
@@ -343,7 +358,7 @@ class MainWindow(QMainWindow):
 
         self.worker = Worker(self.config, run_dir)
         self.worker.log_signal.connect(self.home_page.append_log)
-        self.worker.task_finished.connect(self._on_task_finished)   # ← 新增
+        self.worker.task_finished.connect(self._on_task_finished)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.start()
 
@@ -403,11 +418,27 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.activateWindow()
 
+    def _shutdown_worker(self, timeout_ms=3000):
+        """
+        优雅关闭后台任务线程：
+          1. 请求中断（automation 内部的 check_interrupt 会感知并退出）
+          2. 等待至多 timeout_ms 毫秒
+          3. 超时后强制 terminate 兜底，再等 1 秒
+        """
+        if not (self.worker and self.worker.isRunning()):
+            return
+        self.logger.info("正在请求任务线程退出...")
+        self.worker.requestInterruption()
+        if not self.worker.wait(timeout_ms):
+            self.logger.warning(f"任务线程 {timeout_ms}ms 内未退出，强制终止。")
+            self.worker.terminate()
+            self.worker.wait(1000)
+
     def cleanup_on_exit(self):
+        # 先停线程（它可能还在操作系统进程），再清理残留
+        self._shutdown_worker()
         if self.config.get("kill_on_exit", True):
             kill_all_related_processes()
-        if self.worker and self.worker.isRunning():
-            self.worker.terminate()
 
     def quit_app(self):
         self.is_quitting = True

@@ -22,8 +22,20 @@ def check_interrupt():
         raise TaskInterrupted("用户中止")
 
 
-# 兼容旧调用（automation.py 里仍写成 _check_interrupt as check_interrupt）
-_check_interrupt = check_interrupt
+def interruptible_sleep(seconds, chunk=0.5):
+    """
+    分段睡眠，每 chunk 秒检查一次中断。
+    用于替代裸 time.sleep()，让用户中止能得到及时响应。
+
+    :param seconds: 总睡眠时长（秒），支持小数
+    :param chunk:   单片时长（秒），默认 0.5 秒。越小响应越快，但轮询越频繁。
+    """
+    remaining = float(seconds)
+    while remaining > 0:
+        check_interrupt()
+        step = min(chunk, remaining)
+        time.sleep(step)
+        remaining -= step
 
 
 WHITE_LIST = [
@@ -216,7 +228,7 @@ def bring_process_to_front(process_names):
                             win32con.SWP_NOMOVE | win32con.SWP_NOSIZE
                         )
                         win32gui.SetForegroundWindow(hwnd)
-                        time.sleep(1)  # 给窗口一点时间渲染
+                        time.sleep(1)  # 给窗口一点时间渲染（短，无需中断）
                         win32gui.SetWindowPos(
                             hwnd,
                             win32con.HWND_NOTOPMOST,

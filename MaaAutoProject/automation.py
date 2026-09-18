@@ -10,7 +10,8 @@ from process_utils import (kill_foreground_apps, kill_blacklist_apps,
                            is_process_running,
                            wait_for_process_exit, wait_for_process_start,
                            minimize_process_windows, bring_process_to_front,
-                           TaskInterrupted, _check_interrupt as check_interrupt)
+                           TaskInterrupted, check_interrupt,
+                           interruptible_sleep)
 from notifier import send_task_report  # <--- 引入独立的推送模块
 
 logger = logging.getLogger("MaaAuto")
@@ -35,7 +36,7 @@ def find_and_click(image_name, timeout=60):
                 return True
         except pyautogui.ImageNotFoundException:
             pass
-        time.sleep(2)
+        interruptible_sleep(2)     # ← 原本是 time.sleep(2)，改为可中断
 
     raise TimeoutError(f"找图超时，未能找到: {image_name}")
 
@@ -52,13 +53,13 @@ def run_maa_phase(config, logger):
     if is_process_running(maa_procs):
         logger.info("检测到 MAA 已在运行，正在拉取到前台...")
         bring_process_to_front(maa_procs)
-        time.sleep(3)
+        interruptible_sleep(3)
     else:
         if not os.path.exists(maa_path):
             raise FileNotFoundError(f"MAA 路径无效: {maa_path}")
         logger.info(f"MAA 未运行，正在启动新进程: {maa_path}")
         subprocess.Popen(maa_path, shell=True)
-        time.sleep(5)
+        interruptible_sleep(5)
 
     logger.info("正在尝试点击 MAA 的【Link Start!】按钮...")
     find_and_click("maa_start.png", config.get("wait_timeout", 60))
@@ -70,7 +71,7 @@ def run_maa_phase(config, logger):
 
     logger.info("模拟器已关闭，正在将 MAA 最小化到后台备用...")
     minimize_process_windows(maa_procs)
-    time.sleep(3)
+    interruptible_sleep(3)
     return True
 
 
@@ -80,19 +81,19 @@ def run_maaend_phase(config, logger):
         logger.info("未配置 MaaEnd 启动地址，跳过 MaaEnd 阶段。")
         return False
 
-    pc_game_proc = config.get("pc_game_proc", "Arknights.exe")
+    pc_game_proc = config.get("pc_game_proc", "Endfield.exe")
     maaend_procs = ["maaend"]
 
     if is_process_running(maaend_procs):
         logger.info("检测到 MaaEnd 已在运行，正在拉取到前台...")
         bring_process_to_front(maaend_procs)
-        time.sleep(3)
+        interruptible_sleep(3)
     else:
         if not os.path.exists(maaend_path):
             raise FileNotFoundError(f"MaaEnd 路径无效: {maaend_path}")
         logger.info(f"MaaEnd 未运行，正在启动新进程: {maaend_path}")
         subprocess.Popen(maaend_path, shell=True)
-        time.sleep(10)
+        interruptible_sleep(10)
 
     logger.info("正在尝试点击 MaaEnd 的【开始任务】按钮...")
     find_and_click("maaend_start.png", config.get("wait_timeout", 60))
@@ -104,7 +105,7 @@ def run_maaend_phase(config, logger):
 
     logger.info("PC端游戏已关闭，正在将 MaaEnd 最小化到后台备用...")
     minimize_process_windows(maaend_procs)
-    time.sleep(3)
+    interruptible_sleep(3)
     return True
 
 
@@ -172,7 +173,7 @@ def execute_workflow(config, logger):
                         logger.info(f"将在 {retry_interval} 秒后重试 MAA 阶段...")
                         if is_process_running(["maa.exe", "maa-cli.exe"]):
                             bring_process_to_front(["maa.exe", "maa-cli.exe"])
-                        time.sleep(retry_interval)
+                        interruptible_sleep(retry_interval)   # ← 可中断
                     else:
                         logger.error("MAA 阶段重试次数已达上限，跳过该阶段。")
                         overall_status = "报错"
@@ -195,7 +196,7 @@ def execute_workflow(config, logger):
                         logger.info(f"将在 {retry_interval} 秒后重试 MaaEnd 阶段...")
                         if is_process_running(["maaend.exe"]):
                             bring_process_to_front(["maaend.exe"])
-                        time.sleep(retry_interval)
+                        interruptible_sleep(retry_interval)   # ← 可中断
                     else:
                         logger.error("MaaEnd 阶段重试次数已达上限。")
                         overall_status = "报错"
@@ -217,7 +218,3 @@ def execute_workflow(config, logger):
 
     logger.info("整个自动化流程结束！")
     return overall_status          # ← 返回状态
-
-
-# 兼容旧调用（如果你在主程序里用 main.py 调这个名字）
-# 也可以直接在外层用 `from automation import execute_workflow as run_workflow`

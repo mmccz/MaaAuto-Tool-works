@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QTime
 
-from ui.components import SettingItem, SettingGroup, Switch, SegmentedControl
+from ui.components import (SettingItem, SettingGroup, Switch, SegmentedControl,
+                           AccentColorPicker)
 from ui.pages.process_picker import ProcessPickerDialog
 from ui.no_wheel import NoWheelComboBox, IntLineEdit
 from ui.wheel_time_picker import WheelTimePicker
@@ -23,6 +24,7 @@ class SettingsPage(QWidget):
     config_changed = Signal(dict)
     theme_changed = Signal(str)
     language_changed = Signal(str)
+    accent_changed = Signal(str)          # ← 新增
 
     def __init__(self, config, i18n, theme_manager, parent=None):
         super().__init__(parent)
@@ -112,7 +114,6 @@ class SettingsPage(QWidget):
         self.vbox.addSpacing(40)
 
         # 初始化时滚动到顶部，触发一次高亮
-        self.scroll.setViewportMargins(0, 0, 0, 0)
         self.scroll.verticalScrollBar().setValue(0)
 
     # ------------------------------------------------------------------
@@ -216,12 +217,10 @@ class SettingsPage(QWidget):
         self._add_item(g, "settings.emulator_proc", "settings.emulator_proc.desc",
                        self.emulator_edit)
 
-        # 7.1 默认值改 Endfield
         self.pc_game_edit = QLineEdit(self.config.get("pc_game_proc", "Endfield.exe"))
         self._add_item(g, "settings.pc_game_proc", "settings.pc_game_proc.desc",
                        self.pc_game_edit)
 
-        # 7.2 给 spin 补说明
         self.wait_timeout_spin = self._make_spin(10, 300, self.config.get("wait_timeout", 60))
         self._add_item(g, "settings.wait_timeout", "settings.wait_timeout.desc",
                        self.wait_timeout_spin)
@@ -285,7 +284,6 @@ class SettingsPage(QWidget):
             "enable_schedule", False,
         )
 
-        # 7.3 系统通知 Switch
         self.sys_notify_sw = self._add_switch(
             g, "settings.enable_system_notify", "settings.enable_system_notify.desc",
             "enable_system_notify", True,
@@ -341,6 +339,13 @@ class SettingsPage(QWidget):
             self.theme_combo.setCurrentIndex(idx)
         self.theme_combo.setMinimumWidth(160)
         self._add_item(g, "settings.theme", None, self.theme_combo)
+
+        # 强调色 ← 新增
+        self.accent_picker = AccentColorPicker(self.i18n)
+        self.accent_picker.set_color(self.config.get("accent_color", "#3b82f6"))
+        self.accent_picker.colorChanged.connect(self._on_accent_changed)
+        self._add_item(g, "settings.accent_color", "settings.accent_color.desc",
+                       self.accent_picker)
 
         # 语言
         self.lang_combo = NoWheelComboBox()
@@ -452,7 +457,7 @@ class SettingsPage(QWidget):
         self.bg_opacity_slider.valueChanged.connect(emit_config)
         self.bg_mode_combo.currentIndexChanged.connect(emit_config)
 
-        # 主题 / 语言：专用信号
+        # 主题 / 语言 / 强调色：专用信号
         self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         self.lang_combo.currentIndexChanged.connect(self._on_lang_changed)
 
@@ -470,6 +475,10 @@ class SettingsPage(QWidget):
             return
         self.config["language"] = code
         self.language_changed.emit(code)
+
+    def _on_accent_changed(self, hexv):
+        self.config["accent_color"] = hexv
+        self.accent_changed.emit(hexv)
 
     # ==================================================================
     # 交互
@@ -571,6 +580,7 @@ class SettingsPage(QWidget):
         c["background_mode"] = self.bg_mode_combo.currentData() or "cover"
         c["theme"] = (self.theme_combo.currentData() or "settings.theme.system").split(".")[-1]
         c["language"] = self.lang_combo.currentData() or "zh_CN"
+        c["accent_color"] = self.accent_picker.color()          # ← 新增
 
         # Switch -> bool
         for sw, key in self._switches:
@@ -639,6 +649,9 @@ class SettingsPage(QWidget):
 
         # SegmentedControl
         self.fg_seg.retranslate()
+
+        # 强调色选择器
+        self.accent_picker.retranslate()
 
         # 占位符
         self.blacklist_edit.setPlaceholderText(self.i18n.t("settings.blacklist_apps.desc"))

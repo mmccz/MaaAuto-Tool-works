@@ -117,6 +117,10 @@
     "tray.settings": "设置",
     "tray.minimized": "已最小化到托盘，继续后台运行。",
 
+    "settings.accent_color": "强调色",
+    "settings.accent_color.desc": "影响按钮、开关、滑块、选中项的主题色",
+    "settings.accent_color.custom": "自定义…",
+    
     "common.ok": "确定",
     "common.cancel": "取消",
     "common.save": "保存",

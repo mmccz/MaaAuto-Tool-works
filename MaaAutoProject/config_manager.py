@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
     "enable_system_notify": True,
     "theme": "system",              # light / dark / system
     "language": "zh_CN",
+    "accent_color": "#3b82f6",      # 强调色（十六进制，用于主题强调色自定义）
     "background_image": "",
     "background_opacity": 0.3,
     "background_blur": 0,

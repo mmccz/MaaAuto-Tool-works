@@ -119,6 +119,10 @@
     "tray.settings": "Settings",
     "tray.minimized": "Minimized to tray, running in background.",
 
+    "settings.accent_color": "Accent Color",
+    "settings.accent_color.desc": "Used by buttons, switches, sliders and selections",
+    "settings.accent_color.custom": "Custom…",
+    
     "common.ok": "OK",
     "common.cancel": "Cancel",
     "common.save": "Save",

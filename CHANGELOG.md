@@ -3,6 +3,62 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
 ---
+## [2.0.1] - 2026-09-18
+
+### ✨ 新增
+
+- **强调色自定义**：设置页 → 外观 → 新增「强调色」选择器。
+  - 8 个预设色块（蓝 / 绿 / 青 / 琥珀 / 橙 / 红 / 粉 / 紫）+ 一个「自定义…」按钮（`QColorDialog`）。
+  - 界面配色实时联动：主按钮、Switch、Slider、JumpChip、NavButton 高亮、选中项、焦点边框等全部同步。
+  - 同一颜色在浅色 / 深色主题下自动重新派生明暗变体（HSL 微调），深色主题自动提亮一档。
+  - 配置项：`accent_color`（hex 字符串，默认 `#3b82f6`）。
+- **一键打包脚本** `build.py`（PyInstaller）：
+  - 默认 `--onedir` + `--windowed`，`--onefile` / `--debug` 可切换。
+  - 自动从 `app_info.py` 读取元信息并生成 `_version_info.txt`（exe 属性：公司 / 版本 / 版权 / 许可）。
+  - 自动收集 `resources/` `themes/` `i18n/` 资源目录。
+  - 覆盖 pyautogui 全家桶 / PIL 子模块 / pywin32 全家桶的隐式导入。
+  - 排除 matplotlib / numpy / scipy / pandas / PyQt5 / PyQt6 / PySide2 / wx 等无用包，缩小体积。
+  - 自动清理 `dist/` `build/` `*.spec`（`--keep-build` 可保留）。
+
+### 🚀 优化
+
+- **任务中止响应速度大幅提升**：
+  - 新增 `process_utils.interruptible_sleep(seconds, chunk=0.5)`，替代长循环中的裸 `time.sleep()`。
+  - `automation.py` 中所有 ≥ 2 秒的等待（找图轮询、进程启动/退出等待、重试间隔）全部改为可中断睡眠。
+  - 效果：过去重试等待最长 30 秒才能响应「结束任务」，现在几乎秒响应。
+- **退出流程更优雅**：
+  - `MainWindow` 新增 `_shutdown_worker()`：`requestInterruption()` → `wait(3000ms)` → 超时才 `terminate()` 兜底。
+  - `cleanup_on_exit()` 顺序调整为先停线程、再清理残留进程，避免竞态。
+  - 不再直接 `worker.terminate()`，避免句柄泄漏和资源未释放。
+- **主题系统解耦**：
+  - `ThemeManager.apply_theme()` 支持 `accent_color` 参数；新增 `apply_accent()` 单独重刷强调色（不触发主题淡入淡出）。
+  - QSS 中所有蓝色系硬编码替换为占位符：`{accent}` `{accent_rgb}` `{accent_hover}` `{accent_pressed}` `{accent_soft}` `{accent_deep}`。
+  - 使用 `re.sub(r"\{(\w+)\}", ...)` 安全替换，不会误伤 QSS 规则块的大括号。
+- **JumpChip 选中态补齐**：`QPushButton#JumpChip:checked` 新增样式（浅色 / 深色主题均同步）。
+
+### 🐛 修复
+
+- 修复 `main.py` 中提权逻辑被硬编码注释、无法通过配置恢复的问题。
+- 修复 `ui/pages/settings_page.py` 中 `setViewportMargins(0, 0, 0, 0)` 空操作死代码。
+
+### 🧹 清理
+
+- 移除 `process_utils._check_interrupt` 别名，统一使用 `check_interrupt`。
+- `automation.py` 的 import 语句同步更新。
+
+### ⚙️ 内部变更
+
+- `main.py` 新增 `ENABLE_ELEVATION = False` 常量开关（默认关闭提权；将来需要时置 True 即可恢复完整逻辑）。
+- `config_manager.DEFAULT_CONFIG` 新增键 `"accent_color": "#3b82f6"`。
+- `SettingsPage` 新增信号 `accent_changed = Signal(str)`，与 `theme_changed` / `language_changed` 并列。
+- `MainWindow` 新增槽 `_on_accent_changed(hexv)`。
+- `MainWindow._on_theme_changed()` 现在会把当前强调色一并传给 `apply_theme()`。
+
+### 📦 依赖 / 环境
+
+- 打包新增依赖：`pyinstaller`（仅构建期需要，运行期无影响）。
+- 运行期依赖无变化。
+
 
 ## [2.0.0] - 2026-09-18
 

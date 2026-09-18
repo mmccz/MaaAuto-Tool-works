@@ -28,12 +28,12 @@ QPushButton#NavButton {
     font-size: 13px;
 }
 QPushButton#NavButton:hover {
-    background-color: rgba(59, 130, 246, 0.12);
-    color: #1e40af;
+    background-color: rgba({accent_rgb}, 0.12);
+    color: {accent_deep};
 }
 QPushButton#NavButton:checked {
-    background-color: rgba(59, 130, 246, 0.20);
-    color: #1e40af;
+    background-color: rgba({accent_rgb}, 0.20);
+    color: {accent_deep};
     font-weight: 600;
 }
 
@@ -62,13 +62,13 @@ QFrame#Separator { background-color: rgba(0, 0, 0, 0.06); border: none; }
 
 /* ============ 按钮 ============ */
 QPushButton#PrimaryButton {
-    background-color: #3b82f6; color: white;
+    background-color: {accent}; color: white;
     border: none; border-radius: 8px;
     padding: 8px 18px; font-weight: 600;
 }
-QPushButton#PrimaryButton:hover { background-color: #2563eb; }
-QPushButton#PrimaryButton:pressed { background-color: #1d4ed8; }
-QPushButton#PrimaryButton:disabled { background-color: #93c5fd; }
+QPushButton#PrimaryButton:hover { background-color: {accent_hover}; }
+QPushButton#PrimaryButton:pressed { background-color: {accent_pressed}; }
+QPushButton#PrimaryButton:disabled { background-color: {accent_soft}; }
 
 QPushButton#GhostButton {
     background-color: transparent; color: #4b5563;
@@ -91,29 +91,29 @@ QLineEdit, QSpinBox, QComboBox, QTimeEdit {
     min-height: 22px;
 }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QTimeEdit:focus {
-    border-color: #3b82f6;
+    border-color: {accent};
 }
 QComboBox::drop-down { border: none; width: 20px; }
 QComboBox QAbstractItemView {
     background-color: white; border: 1px solid #d1d5db;
-    selection-background-color: #dbeafe;
+    selection-background-color: rgba({accent_rgb}, 0.18);
     color: #111827;
 }
 
 QCheckBox { color: #1f2937; spacing: 8px; }
 QCheckBox::indicator { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #d1d5db; background: white; }
-QCheckBox::indicator:checked { background-color: #3b82f6; border-color: #3b82f6; }
+QCheckBox::indicator:checked { background-color: {accent}; border-color: {accent}; }
 
 QRadioButton { color: #1f2937; spacing: 8px; }
 QRadioButton::indicator { width: 16px; height: 16px; border-radius: 8px; border: 1px solid #d1d5db; background: white; }
-QRadioButton::indicator:checked { background-color: #3b82f6; border: 4px solid #ffffff; outline: 1px solid #3b82f6; }
+QRadioButton::indicator:checked { background-color: {accent}; border: 4px solid #ffffff; outline: 1px solid {accent}; }
 
 QSlider::groove:horizontal { height: 4px; background: #e5e7eb; border-radius: 2px; }
 QSlider::handle:horizontal {
-    background: #3b82f6; width: 14px; height: 14px;
+    background: {accent}; width: 14px; height: 14px;
     margin: -5px 0; border-radius: 7px;
 }
-QSlider::sub-page:horizontal { background: #3b82f6; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: {accent}; border-radius: 2px; }
 
 /* ============ 日志 ============ */
 QTextEdit#LogView {
@@ -143,19 +143,25 @@ QTabBar::tab {
     padding: 6px 14px; margin-right: 4px;
     border-radius: 6px; background: transparent; color: #6b7280;
 }
-QTabBar::tab:selected { background: rgba(59, 130, 246, 0.16); color: #1d4ed8; font-weight: 600; }
+QTabBar::tab:selected { background: rgba({accent_rgb}, 0.16); color: {accent_deep}; font-weight: 600; }
 
 /* ============ 分组导航按钮 ============ */
 QPushButton#JumpChip {
-    background: rgba(59, 130, 246, 0.10);
-    color: #1d4ed8;
+    background: rgba({accent_rgb}, 0.10);
+    color: {accent_deep};
     border: none; border-radius: 14px;
     padding: 5px 14px; font-size: 12px;
 }
-QPushButton#JumpChip:hover { background: rgba(59, 130, 246, 0.22); }
+QPushButton#JumpChip:hover { background: rgba({accent_rgb}, 0.22); }
+QPushButton#JumpChip:checked {
+    background: rgba({accent_rgb}, 0.22);
+    color: {accent_deep};
+    font-weight: 600;
+}
+
 /* ============ Switch ============ */
 QAbstractButton#Switch {
-    qproperty-accent: #3b82f6;
+    qproperty-accent: {accent};
     qproperty-trackOff: #e5e7eb;
     qproperty-knobColor: #ffffff;
 }
@@ -179,7 +185,7 @@ QPushButton#SegmentItem:hover {
 }
 QPushButton#SegmentItem:checked {
     background: #ffffff;
-    color: #1d4ed8;
+    color: {accent_deep};
     font-weight: 600;
 }
 
@@ -195,7 +201,7 @@ QTableWidget {
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 10px;
     gridline-color: transparent;
-    selection-background-color: rgba(59, 130, 246, 0.14);
+    selection-background-color: rgba({accent_rgb}, 0.14);
     selection-color: #111827;
 }
 QHeaderView::section {
@@ -209,6 +215,7 @@ QTableWidget::item {
     padding: 4px 8px;
 }
 
+/* ============ 滚轮时间选择 ============ */
 QListWidget#WheelColumn {
     font-family: "Cascadia Mono", "Consolas", monospace;
     font-size: 14px;
@@ -223,8 +230,8 @@ QListWidget#WheelColumn:hover {
     background: rgba(0, 0, 0, 0.04);
 }
 QListWidget#WheelColumn:focus {
-    background: rgba(59, 130, 246, 0.08);
-    border: 1px solid rgba(59, 130, 246, 0.50);
+    background: rgba({accent_rgb}, 0.08);
+    border: 1px solid rgba({accent_rgb}, 0.50);
 }
 QLabel#WheelColon {
     color: #334155;

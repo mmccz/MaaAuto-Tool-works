@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QFrame, QWidget, QLabel, QHBoxLayout, QVBoxLayout,
                                QSizePolicy, QPushButton, QAbstractButton,
-                               QButtonGroup)
+                               QButtonGroup, QColorDialog)
 from PySide6.QtCore import (Qt, Property, QPropertyAnimation, QEasingCurve,
                             QAbstractAnimation, QRectF, Signal)
 from PySide6.QtGui import QColor, QPainter
@@ -327,3 +327,113 @@ class SegmentedControl(QWidget):
             return
         for btn, key in zip(self._buttons, self._keys):
             btn.setText(self._i18n.t(key))
+
+
+# =============================================================================
+# AccentColorPicker：强调色选择器（预设色块 + 自定义）
+# =============================================================================
+class AccentColorPicker(QWidget):
+    """
+    强调色选择器：
+      - 一排预设色块（互斥），点击后立即发出 colorChanged(str)
+      - 右侧一个「自定义」按钮，打开 QColorDialog
+    用法：
+        picker = AccentColorPicker(i18n=self.i18n)
+        picker.set_color(config.get("accent_color", "#3b82f6"))
+        picker.colorChanged.connect(...)
+    """
+    colorChanged = Signal(str)
+
+    PRESETS = [
+        "#3b82f6",  # 蓝（默认）
+        "#10b981",  # 绿
+        "#14b8a6",  # 青
+        "#f59e0b",  # 琥珀
+        "#f97316",  # 橙
+        "#ef4444",  # 红
+        "#ec4899",  # 粉
+        "#8b5cf6",  # 紫
+    ]
+
+    def __init__(self, i18n=None, parent=None):
+        super().__init__(parent)
+        self._i18n = i18n
+        self._color = self.PRESETS[0]
+        self._swatches = {}
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        for i, hexv in enumerate(self.PRESETS):
+            btn = QPushButton()
+            btn.setObjectName("AccentSwatch")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFixedSize(24, 24)
+            btn.setToolTip(hexv)
+            # 色块自身颜色是动态的，无法走全局 QSS，这里直接内联样式
+            btn.setStyleSheet(f"""
+                QPushButton#AccentSwatch {{
+                    background-color: {hexv};
+                    border: 2px solid transparent;
+                    border-radius: 12px;
+                }}
+                QPushButton#AccentSwatch:hover {{
+                    border: 2px solid rgba(148, 163, 184, 0.65);
+                }}
+                QPushButton#AccentSwatch:checked {{
+                    border: 2px solid #94a3b8;
+                }}
+            """)
+            self._group.addButton(btn, i)
+            self._swatches[hexv] = btn
+            lay.addWidget(btn)
+
+        self._group.idClicked.connect(self._on_swatch_clicked)
+
+        self.custom_btn = QPushButton(
+            self._i18n.t("settings.accent_color.custom") if self._i18n else "Custom"
+        )
+        self.custom_btn.setObjectName("GhostButton")
+        self.custom_btn.setCursor(Qt.PointingHandCursor)
+        self.custom_btn.clicked.connect(self._open_color_dialog)
+        lay.addWidget(self.custom_btn)
+
+        self.set_color(self._color, emit=False)
+
+    # ------------------------------------------------------------------
+    def _on_swatch_clicked(self, idx):
+        hexv = self.PRESETS[idx]
+        self._color = hexv
+        self.colorChanged.emit(hexv)
+
+    def _open_color_dialog(self):
+        initial = QColor(self._color)
+        title = self._i18n.t("settings.accent_color") if self._i18n else "Accent Color"
+        c = QColorDialog.getColor(initial, self, title)
+        if c.isValid():
+            self.set_color(c.name().lower(), emit=True)
+
+    # ------------------------------------------------------------------
+    def color(self) -> str:
+        return self._color
+
+    def set_color(self, hexv, emit=False):
+        hexv = str(hexv).strip().lower()
+        if not hexv.startswith("#"):
+            hexv = "#" + hexv
+        self._color = hexv
+
+        # 更新预设色块选中态（不触发 idClicked，因为那是用户点击专属信号）
+        for preset, btn in self._swatches.items():
+            btn.setChecked(preset == hexv)
+
+        if emit:
+            self.colorChanged.emit(hexv)
+
+    def retranslate(self):
+        if self._i18n:
+            self.custom_btn.setText(self._i18n.t("settings.accent_color.custom"))
