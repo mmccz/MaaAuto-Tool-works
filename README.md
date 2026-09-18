@@ -53,6 +53,11 @@
 > 关于界面：版本信息 + 打开目录 + 导出日志
 
 ---
+## 正在制作的功能
+- **1.支持更多分辨率以及不同系统比例**
+- **2.优化识别结构**
+- **3.优化安装方式**
+- **4.更多想法集结中...**
 
 ## 🚀 快速开始
 
@@ -63,7 +68,7 @@
 - **Python**：3.11 或更高版本
   - ⚠️ **不建议使用 Microsoft Store 版本**。其 `sys.executable` 指向一个转发器，会导致提权失败。推荐使用 [python.org](https://www.python.org/downloads/) 安装版。
 - **依赖软件**：自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 MaaEnd。
-=======
+  =======
 - **依赖软件**：请自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 [MaaEnd](https://github.com/MaaEnd/MaaEnd)。
 
 ### 2. 安装依赖或下载完整包
@@ -117,7 +122,6 @@ python main.py
 设置 → 常规：开机自启、关闭行为等。
 
 点击主界面 ▶️ 立即执行 可手动触发一次任务。
-
 
 ⚙️ 配置说明
 所有配置保存在 config/config.json，程序内修改即时生效。
