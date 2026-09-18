@@ -36,7 +36,7 @@
 - **操作系统**：Windows 10 / 11（仅支持 Windows）
 - **屏幕分辨率**：推荐 1080P，且系统缩放必须设置为 **100%**（否则图像识别会失败）（正在改善这一问题）
 - **Python**：3.11 或更高版本
-- **依赖软件**：请自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 MaaEnd。
+- **依赖软件**：请自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 [MaaEnd](https://github.com/MaaEnd/MaaEnd)。
 
 ### 2. 安装依赖
 
