@@ -4,192 +4,282 @@
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-green.svg)](https://pypi.org/project/PySide6/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-基于 PySide6 开发的 Windows 桌面自动化调度工具，用于统一管理 **MAA (MaaAssistantArknights)** 和 **MaaEnd**。支持定时启动、图像识别点击、可配置的前台处理策略、失败重试，以及 Server酱 / 通用 Webhook 双通道推送。
+基于 **PySide6** 开发的 Windows 桌面自动化调度工具，用于统一管理 **MAA (MaaAssistantArknights)** 和 **MaaEnd**。支持每日定时、图像识别点击、可配置的前台处理策略、失败重试、Server酱 / 通用 Webhook / 系统通知三通道推送，并提供浅色 / 深色 / 跟随系统三态主题与中英双语切换。
+
+---
 
 ## ✨ 核心功能
 
-- **每日定时启动**：自定义每日执行时间。**默认关闭**，需要你在设置里手动开启。开启后，只要当天还没执行过，即使错过了设定时间点（例如关机后重新打开），程序也会自动补执行一次。
-- **图像识别点击**：基于 `pyautogui` 和 `opencv`，自动识别并点击 MAA 的 “Link Start!” 和 MaaEnd 的 “开始任务” 按钮。
-- **灵活的前台处理策略**：启动前可选择 ——
-  1. **关闭所有前台程序**（较暴力，适合纯净挂机机）
-  2. **不做任何操作**（默认，最安全）
-  3. **仅关闭用户黑名单中的程序**（按进程名模糊匹配）
-- **重试与超时**：支持自定义重试次数、重试间隔、找图超时、游戏启动/关闭超时，任务卡死自动重试。
-- **进程保活与唤醒**：任务完成后自动将 MAA/MaaEnd 最小化到后台；下次执行时自动拉取到前台，**拒绝重复启动导致的多开冲突**。
-- **双通道推送**：
-  - **Server酱**：推送到微信，适合手机端接收。
-  - **通用 Webhook**：向自定义 URL POST JSON（`{title, content}`），可对接 Bark、Gotify、企业微信机器人、钉钉、飞书、自建服务等。
-- **分类日志存储**：自动在本地生成 `logs/年份/月份/日期/run_次数_时间/task.log`，按执行次数分类，绝不重复输出。
+### 自动化调度
+
+- **每日定时启动**：自定义每日执行时间（默认关闭）。开启后若当天未执行，即使错过设定时间点，也会在下次启动时自动补执行一次。
+- **图像识别点击**：基于 `pyautogui` + `opencv`，自动识别并点击 MAA 的「Link Start!」和 MaaEnd 的「开始任务」按钮。
+- **灵活的前台处理策略**：启动前可选择
+  1. **不做任何操作**（默认，最安全）
+  2. **关闭所有前台程序**（较暴力，适合纯净挂机机）
+  3. **仅关闭用户黑名单中的程序**（支持进程选择器可视化勾选）
+- **重试与超时**：自定义重试次数、重试间隔、找图超时、游戏启动 / 关闭超时。
+- **进程保活与唤醒**：任务完成后自动最小化 MAA / MaaEnd；下次执行时自动拉取到前台，拒绝多开。
+- **随时中止**：任务执行中可点击「结束任务」或托盘菜单中止，长循环内 1 秒内响应，不残留子进程。
+
+### 推送通知
+
+- **Server酱**：推送到微信，含完整任务日志。
+- **通用 Webhook**：向自定义 URL POST `{title, content}`，可对接 Bark / Gotify / 企业微信机器人 / 钉钉 / 飞书等。
+- **系统通知**：任务结束时弹出 Windows 托盘气泡（不含日志），可在设置页开关。
+
+### 界面与体验
+
+- **三页面结构**：首页（状态 + 日志） / 设置 / 关于，侧边栏导航 + 左右滑动切页动画。
+- **三态主题**：浅色 / 深色 / 跟随系统，独立 QSS，切换带截图遮罩淡出过渡。
+- **中英双语**：JSON 语言包动态加载，切换即时生效。
+- **背景图自定义**：支持透明度 / 模糊 / 4 种缩放模式（填充 / 适应 / 拉伸 / 平铺）。
+- **全自动保存**：设置页所有改动即时落盘，无需手动保存。
+- **窗口状态记忆**：窗口大小与位置自动持久化。
+- **分类日志存储**：本地生成 `logs/年/月/日/run_次数_时间/task.log`，按执行次数分类。
+- **日志上色**：ERROR 红 / WARNING 黄 / 成功绿 / 分隔线蓝，自动滚底，上限 2000 行。
+
+---
 
 ## 🖼️ 界面预览
 
+<<<<<<< HEAD
+> ![主界面](image/README/main.png)
+> 主界面：状态卡片 + 立即执行 / 结束任务 + 实时日志
+
+> ![设置界面](image/README/settings.png)
+> 设置界面：单页滚动 + 顶部 chips 跳转 + 分组卡片
+
+> ![关于界面](image/README/about.png)
+> 关于界面：版本信息 + 打开目录 + 导出日志
+
+---
+=======
 > ![1789651817624](image/README/1789651817624.png)
 > ![1789651840612](image/README/1789651840612.png)
 > 
 > 主界面（状态监控 + 日志输出）
 > 设置界面（路径、进程、前台处理、定时、推送分类管理）
+>>>>>>> 6d562bf53a6e7d48a50a848a5e5bd79cfe340c8a
 
 ## 🚀 快速开始
 
 ### 1. 环境要求
 
-- **操作系统**：Windows 10 / 11（仅支持 Windows）
-- **屏幕分辨率**：推荐 1080P，且系统缩放必须设置为 **100%**（否则图像识别会失败）（正在改善这一问题）
+- **操作系统**：Windows 10 / 11
+- **屏幕分辨率**：推荐 1080P，系统缩放 **100%**（否则图像识别会失败，正在改善）
 - **Python**：3.11 或更高版本
+<<<<<<< HEAD
+  - ⚠️ **不建议使用 Microsoft Store 版本**。其 `sys.executable` 指向一个转发器，会导致提权失败。推荐使用 [python.org](https://www.python.org/downloads/) 安装版。
+- **依赖软件**：自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 MaaEnd。
+=======
 - **依赖软件**：请自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 [MaaEnd](https://github.com/MaaEnd/MaaEnd)。
+>>>>>>> 6d562bf53a6e7d48a50a848a5e5bd79cfe340c8a
 
-### 2. 安装依赖
+### 2. 安装依赖或下载完整包
 
-```bash
-pip install -r requirements.txt
-```
+#### pip install -r requirements.txt
 
-`requirements.txt` 内容如下：
+#### 可以直接到[Releases](https://github.com/mmccz/MaaAuto-Tool-works/releases)
 
-```text
-PySide6
-pyautogui
-psutil
-opencv-python
-pywin32
-serverchan-sdk
-```
+### 3. 准备图像资源（重要）
 
-### 3. 准备图像资源（非常重要）
+在项目根目录创建 resources 文件夹，放入以下文件：
 
-程序依赖图像识别来点击按钮。请在项目根目录创建 `resources` 文件夹，并自行截图以下两张图片放入其中：
+文件	说明
+resources/icon.ico	应用图标（可选，缺失显示默认图标）
+resources/maa_start.png	MAA 界面右下角「Link Start!」按钮
+resources/maaend_start.png	MaaEnd 界面下方「开始任务」按钮
+截图建议：
 
-- `resources/maa_start.png`：MAA 界面右下角的 “Link Start!” 按钮。
-- `resources/maaend_start.png`：MaaEnd 界面下方的 “开始任务” 按钮。
+在 100% 缩放的 1080P 屏幕下截图。
 
-**截图建议**：
+尽量只截按钮文字部分，不带背景，识别成功率最高。
 
-- 在 100% 缩放的 1080P 屏幕下截图。
-- 尽量只截取按钮的文字部分，不要带太多背景，这样识别成功率最高。
-- 如果程序报错 “找图超时”，请重新截图并替换。
+如果程序报「找图超时」，请重新截图替换。
 
-### 4. 配置与运行
+### 4. 运行
 
-直接运行源码：
-
-```bash
+bash
 python main.py
-```
+首次运行会尝试提权（用于进程管理）。提权失败不会导致程序崩溃，会降级以普通权限继续运行。
 
-首次运行程序会自动请求管理员权限（用于进程管理）。启动后：
+启动后建议按以下顺序配置：
 
-1. 点击右上角 **⚙️ 设置** → **路径设置**，填入 MAA 路径、MaaEnd 路径（留空则跳过对应阶段）。
-2. 在 **进程与超时** 页填写模拟器进程名（默认 `MuMuPlayer.exe`）和 PC 端游戏进程名（默认 `Arknights.exe`），并按需调整超时/重试参数。
-3. 在 **前台处理** 页选择启动前的前台程序处理策略（默认“不做任何操作”）。如选择黑名单模式，请填入要关闭的进程名，多个用逗号分隔（例如 `chrome.exe,notepad.exe,qq`）。
-4. 在 **定时与推送** 页：
-   - 勾选“启用每日定时启动”并设定时间（默认关闭）。
-   - 填写 Server酱 SendKey（可选）。
-   - 填写通用 Webhook 地址（可选），可点击“测试 Webhook”验证。
-5. 保存配置。点击主界面 **▶️ 立即执行** 可手动触发一次任务。
+设置 → 路径设置：填入 MAA 路径、MaaEnd 路径（留空则跳过对应阶段）。
 
-## 📂 目录结构
+设置 → 进程与超时：填写模拟器进程名（默认 MuMuPlayer.exe）、PC 端游戏进程名（默认 Endfield.exe），按需调整超时 / 重试参数。
 
-```text
+设置 → 前台处理：选择前台处理策略；如选择黑名单模式，可点「从进程列表选择」可视化勾选。
+
+设置 → 定时与推送：
+
+勾选「启用每日定时启动」并设置时间。
+
+填写 Server酱 SendKey（可选）。
+
+填写通用 Webhook 地址（可选）。
+
+开关「启用系统通知」。
+
+设置 → 外观：选择主题、语言、背景图。
+
+设置 → 常规：开机自启、关闭行为等。
+
+点击主界面 ▶️ 立即执行 可手动触发一次任务。
+
+📂 目录结构
+text
 MaaAutoProject/
-├── main.py                 # 程序入口与界面逻辑
-├── config_manager.py       # 配置与日志管理
-├── automation.py           # 核心自动化流程
-├── process_utils.py        # 进程检测、清理与窗口控制
-├── notifier.py             # Server酱 / 通用 Webhook 推送模块
-├── settings_dialog.py      # 设置界面
-├── utils.py                # 本地工具函数（资源路径、进程清理等）
-├── requirements.txt        # 依赖清单
-├── resources/              # 图像资源目录（需自行提供截图）
+├── main.py                       # 程序入口
+├── app_info.py                   # 应用元信息（版本 / GitHub / 许可证）
+├── config_manager.py             # 配置读写 + UI 日志 Handler
+├── automation.py                 # 核心自动化流程（MAA / MaaEnd 阶段）
+├── process_utils.py              # 进程检测、清理、窗口控制、中断响应
+├── notifier.py                   # Server酱 / 通用 Webhook 推送
+├── utils.py                      # 通用工具函数
+├── requirements.txt              # 依赖清单
+├── README.md
+├── CHANGELOG.md
+│
+├── i18n/                         # 国际化
+│   ├── __init__.py               # I18n 类
+│   ├── zh_CN.json
+│   └── en_US.json
+│
+├── themes/                       # 主题
+│   ├── __init__.py               # ThemeManager
+│   ├── light.qss
+│   └── dark.qss
+│
+├── ui/                           # 界面层
+│   ├── main_window.py            # 主窗口 + Worker 线程
+│   ├── sidebar.py                # 侧边导航
+│   ├── sliding_stack.py          # 左右滑动页容器
+│   ├── animations.py             # fade_in / theme_transition
+│   ├── background.py             # 背景图绘制
+│   ├── components.py             # Card / Switch / SegmentedControl 等
+│   ├── no_wheel.py               # 屏蔽滚轮的输入控件
+│   ├── wheel_time_picker.py      # 单行滚轮时间选择器
+│   └── pages/
+│       ├── home_page.py          # 首页
+│       ├── settings_page.py      # 设置页
+│       ├── about_page.py         # 关于页
+│       └── process_picker.py     # 进程选择对话框
+│
+├── resources/                    # 图像资源（需自行提供）
 │   ├── icon.ico
 │   ├── maa_start.png
 │   └── maaend_start.png
-├── config/                 # 自动生成：配置文件夹
-└── logs/                   # 自动生成：日志文件夹
-```
+│
+├── config/                       # 自动生成
+└── logs/                         # 自动生成
+⚙️ 配置说明
+所有配置保存在 config/config.json，程序内修改即时生效。
 
-## ⚙️ 配置说明
+字段	说明	默认值
+maa_path	MAA 可执行文件路径，留空跳过 MAA 阶段	""
+maaend_path	MaaEnd 可执行文件路径，留空跳过 MaaEnd 阶段	""
+emulator_proc	模拟器进程名	MuMuPlayer.exe
+pc_game_proc	PC 端游戏进程名	Endfield.exe
+foreground_action	前台处理策略：none / kill_all / blacklist	none
+blacklist_apps	黑名单进程名，逗号分隔	""
+enable_schedule	是否启用每日定时启动	false
+execute_time	每日执行时间（HH:mm）	08:00
+serverchan_key	Server酱 SendKey	""
+webhook_url	通用 Webhook 地址	""
+enable_system_notify	任务结束时弹系统通知	true
+wait_timeout	找图超时（秒）	60
+game_start_timeout	等待游戏启动超时（秒）	120
+game_exit_timeout	等待游戏关闭超时（秒）	7200
+retry_times	失败重试次数	3
+retry_interval	重试间隔（秒）	30
+theme	主题：light / dark / system	system
+language	语言：zh_CN / en_US	zh_CN
+background_image	背景图路径	""
+background_opacity	背景图透明度（0~1）	0.3
+background_blur	背景模糊半径	0
+background_mode	缩放模式：cover / contain / stretch / tile	cover
+show_animation	启用页面切换动画	true
+auto_start	开机自启	false
+minimize_to_tray	关闭(X)时最小化到托盘	true
+kill_on_exit	退出程序时清理相关进程	true
+window_geometry	窗口位置大小（base64，自动保存）	""
 
-所有配置保存在 `config/config.json`，可在程序内修改，也可手动编辑。主要字段：
+### 🔔 推送说明
 
-| 字段                   | 说明                                                          | 默认值             |
-| ---------------------- | ------------------------------------------------------------- | ------------------ |
-| `maa_path`           | MAA 可执行文件路径，留空则跳过 MAA 阶段                       | `""`             |
-| `maaend_path`        | MaaEnd 可执行文件路径，留空则跳过 MaaEnd 阶段                 | `""`             |
-| `emulator_proc`      | 模拟器进程名（用于等待启动/关闭）                             | `MuMuPlayer.exe` |
-| `pc_game_proc`       | PC 端游戏进程名                                               | `Arknights.exe`  |
-| `foreground_action`  | 启动前的前台处理策略：`none` / `kill_all` / `blacklist` | `none`           |
-| `blacklist_apps`     | 黑名单进程名，逗号分隔（仅`blacklist` 模式生效）            | `""`             |
-| `enable_schedule`    | 是否启用每日定时启动                                          | `false`          |
-| `execute_time`       | 每日执行时间（HH:mm）                                         | `08:00`          |
-| `serverchan_key`     | Server酱 SendKey，留空则不推送                                | `""`             |
-| `webhook_url`        | 通用 Webhook 地址，留空则不推送                               | `""`             |
-| `wait_timeout`       | 找图超时（秒）                                                | `60`             |
-| `game_start_timeout` | 等待游戏启动超时（秒）                                        | `120`            |
-| `game_exit_timeout`  | 等待游戏关闭超时（秒）                                        | `7200`           |
-| `retry_times`        | 失败重试次数                                                  | `3`              |
-| `retry_interval`     | 重试间隔（秒）                                                | `30`             |
-| `auto_start`         | 开机自启                                                      | `false`          |
-| `minimize_to_tray`   | 点击关闭(X)时最小化到托盘                                     | `true`           |
-| `kill_on_exit`       | 退出程序时强制清理所有相关进程                                | `true`           |
+Server酱
+填写 SendKey 后，任务结束会推送带日志的微信消息。设置页点「测试」可验证。
 
-## 🔔 推送说明
+通用 Webhook
+向指定 URL POST：
 
-### Server酱
-
-填写 SendKey 后，任务结束会推送带日志的微信消息。可在设置页点击 **测试推送** 验证。
-
-### 通用 Webhook
-
-填写 Webhook 地址后，程序会向该地址发送 **POST** 请求：
-
-```http
+http
 Content-Type: application/json
+
 {
-  "title": "03-15 | MaaAuto自动成功",
-  "content": "任务开始时间：2026-03-15 08:00:00，任务结束时间：2026-03-15 10:23:45
-
-当前日志输出：
-...
-
-MaaAuto 敬上"
+  "title": "09-18 | MaaAuto自动成功",
+  "content": "任务开始时间：2026-09-18 08:00:00，任务结束时间：2026-09-18 10:23:45\n\n当前日志输出：\n...\n\nMaaAuto 敬上"
 }
-```
+系统通知
+任务结束时在 Windows 右下角弹出托盘气泡：
 
-可根据接收端格式自行转发/转换（例如企业微信机器人、钉钉、飞书等通常需要包一层壳，可在自建服务中做适配）。
+成功 → 任务执行成功
 
-## ⚠️ 关于“关闭所有前台程序”
+失败 → 任务执行失败，请查看日志
 
-**仅当你主动选择“关闭所有前台程序”策略时才会触发此行为。**
+中止 → 任务已被中止
 
-该模式下，程序在启动任务前会强制关闭所有**可见窗口**的前台程序（系统进程、模拟器、MAA、MaaEnd 等白名单除外）：
+可在「设置 → 定时与推送 → 启用系统通知」中关闭。
 
-- 如果有未保存的 Word、Excel、记事本或浏览器页面，**数据将会丢失**！
-- 建议在**专门用于挂机游戏的纯净电脑**上使用该模式。
+### ⚠️ 关于「关闭所有前台程序」
 
-默认策略为 **“不做任何操作”**，如果你担心误删数据，请保持默认，或使用“黑名单”模式精确指定要关闭的程序。
+仅当你主动选择该策略时才会触发。
 
-因使用本软件导致的数据丢失、系统崩溃、游戏账号封禁等任何后果，**作者不承担任何责任**。
+该模式下，程序启动任务前会强制关闭所有可见窗口的前台程序（系统进程、模拟器、MAA、MaaEnd 等白名单除外）：
 
-## 🛠️ 常见问题
+如果有未保存的 Word / Excel / 记事本 / 浏览器页面，数据将会丢失！
 
-**Q：图像识别总是失败怎么办？**
-A：确认系统缩放为 **100%**、分辨率为 1080P，并重新截图 `resources/` 中的按钮图片（尽量只截文字部分）。
+建议仅在专门用于挂机游戏的纯净电脑上使用。
 
-**Q：定时任务过了时间才打开软件，会执行吗？**
-A：会。程序每 10 秒检查一次，只要当天还没执行过，超过设定时间后也会触发一次。
+默认策略为 「不做任何操作」。因使用本软件导致的数据丢失、系统崩溃、游戏账号封禁等任何后果，作者不承担任何责任。
 
-**Q：为什么任务完成没有推送？**
-A：请检查 SendKey / Webhook 是否填写正确，并分别在设置页点击“测试推送”/“测试 Webhook”验证。
+### 🛠️ 常见问题
 
-**Q：MAA / MaaEnd 已经在运行，会重复启动吗？**
-A：不会。程序会检测到已运行的进程并把它拉取到前台，避免多开。
+Q1：图像识别总是失败？
+确认系统缩放为 100%、分辨率 1080P，并重新截图 resources/ 中的按钮图片。
+
+Q2：定时任务过了时间才打开软件，会执行吗？
+会。程序每 10 秒检查一次，只要当天未执行，超过设定时间后也会触发。
+
+Q3：为什么任务完成没有推送？
+分别检查 SendKey / Webhook 是否正确，并在设置页点击「测试」验证。
+
+Q4：MAA / MaaEnd 已经在运行，会重复启动吗？
+不会。程序会检测到已运行的进程并拉取到前台，避免多开。
+
+Q5：界面出来了但按钮点不动？
+可能是任务正在执行中。查看首页按钮是否显示「■ 结束任务」。如需中止，点击它或使用托盘菜单「结束任务」。
+
+Q6：如何完全退出程序？
+点击窗口右上角 X 是最小化到托盘。完全退出请右键托盘图标 → 退出 MaaAuto。
+
+Q7：使用 Microsoft Store 版 Python 启动后没有界面？
+商店版 Python 的提权机制有问题。解决方法：
+
+换用 python.org 安装版 Python；
+
+或用命令行 python main.py --no-admin 跳过提权启动。
 
 ## ⚠️ 免责声明
 
-- 本项目仅供学习 Python 自动化、GUI 开发和进程管理技术使用。
-- 本项目为第三方调度工具，与 MAA、MaaEnd 官方无任何关联。
-- 请勿将本软件用于商业用途。
-- 使用本软件产生的任何直接或间接后果（包括但不限于游戏账号封禁、数据丢失、系统异常），由使用者自行承担。
+本项目仅供学习 Python 自动化、GUI 开发、进程管理技术使用。
+
+本项目为第三方调度工具，与 MAA、MaaEnd 官方无任何关联。
+
+请勿将本软件用于商业用途。
+
+使用本软件产生的任何直接或间接后果（包括但不限于游戏账号封禁、数据丢失、系统异常），由使用者自行承担。
 
 ## 📄 开源协议
 

@@ -3,7 +3,6 @@ import os
 import logging
 from PySide6.QtCore import QObject, Signal
 
-# 自动创建目录
 CONFIG_DIR = "config"
 LOG_DIR = "logs"
 os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -12,12 +11,13 @@ os.makedirs(LOG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 DEFAULT_CONFIG = {
+    # ---- 原有键 ----
     "maa_path": "",
     "maaend_path": "",
     "serverchan_key": "",
-    "webhook_url": "",                      # 新增：通用 Webhook
+    "webhook_url": "",
     "execute_time": "08:00",
-    "enable_schedule": False,               # 修改：默认关闭定时启动
+    "enable_schedule": False,
     "wait_timeout": 60,
     "game_start_timeout": 120,
     "game_exit_timeout": 7200,
@@ -26,43 +26,61 @@ DEFAULT_CONFIG = {
     "auto_start": False,
     "minimize_to_tray": True,
     "kill_on_exit": True,
-    "foreground_action": "none",            # 新增：none / kill_all / blacklist
-    "blacklist_apps": "",                   # 新增：逗号分隔的进程名
+    "foreground_action": "none",
+    "blacklist_apps": "",
     "last_trigger_date": "",
-    "run_count": 0
+    "run_count": 0,
+    # ---- 新增键 ----
+    "emulator_proc": "MuMuPlayer.exe",
+    "pc_game_proc": "Endfield.exe",
+    "enable_system_notify": True,
+    "theme": "system",              # light / dark / system
+    "language": "zh_CN",
+    "background_image": "",
+    "background_opacity": 0.3,
+    "background_blur": 0,
+    "background_mode": "cover",     # cover / contain / stretch / tile
+    "show_animation": True,
+    "last_run_time": "",
+    "window_geometry": "",   # base64 编码的 Qt 窗口几何
 }
+
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return {**DEFAULT_CONFIG, **json.load(f)}
-        except:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {**DEFAULT_CONFIG, **data}
+        except Exception:
             return DEFAULT_CONFIG.copy()
     return DEFAULT_CONFIG.copy()
 
+
 def save_config(config):
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
+
 
 class LogHandler(logging.Handler, QObject):
     log_signal = Signal(str)
-    
+
     def __init__(self):
         logging.Handler.__init__(self)
         QObject.__init__(self)
-        
+
     def emit(self, record):
-        msg = self.format(record)
-        self.log_signal.emit(msg)
+        try:
+            self.log_signal.emit(self.format(record))
+        except Exception:
+            pass
+
 
 def setup_logger():
     logger = logging.getLogger("MaaAuto")
     logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    
-    ui_handler = LogHandler()
-    ui_handler.setFormatter(formatter)
-    logger.addHandler(ui_handler)
-    
-    return logger, ui_handler
+    fmt = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    ui = LogHandler()
+    ui.setFormatter(fmt)
+    logger.addHandler(ui)
+    return logger, ui

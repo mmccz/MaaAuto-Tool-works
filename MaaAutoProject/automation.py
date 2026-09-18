@@ -7,12 +7,14 @@ import pyautogui
 import logging
 from utils import resource_path
 from process_utils import (kill_foreground_apps, kill_blacklist_apps,
-                           is_process_running, 
+                           is_process_running,
                            wait_for_process_exit, wait_for_process_start,
-                           minimize_process_windows, bring_process_to_front)
+                           minimize_process_windows, bring_process_to_front,
+                           TaskInterrupted, _check_interrupt as check_interrupt)
 from notifier import send_task_report  # <--- 引入独立的推送模块
 
 logger = logging.getLogger("MaaAuto")
+
 
 def find_and_click(image_name, timeout=60):
     """寻找目标图像并点击"""
@@ -20,10 +22,11 @@ def find_and_click(image_name, timeout=60):
     if not os.path.exists(image_path):
         logger.error(f"【严重错误】找不到图像文件: {image_path}！")
         return False
-        
+
     logger.info(f"开始寻找目标按钮: {image_name} (超时 {timeout} 秒)")
     start_time = time.time()
     while time.time() - start_time < timeout:
+        check_interrupt()          # ← 中断检查
         try:
             location = pyautogui.locateCenterOnScreen(image_path, confidence=0.75, grayscale=True)
             if location:
@@ -33,15 +36,16 @@ def find_and_click(image_name, timeout=60):
         except pyautogui.ImageNotFoundException:
             pass
         time.sleep(2)
-        
+
     raise TimeoutError(f"找图超时，未能找到: {image_name}")
+
 
 def run_maa_phase(config, logger):
     maa_path = config.get("maa_path", "").strip()
     if not maa_path:
         logger.info("未配置 MAA 启动地址，跳过 MAA 阶段。")
         return False
-        
+
     emulator_proc = config.get("emulator_proc", "MuMuPlayer.exe")
     maa_procs = ["maa.exe", "maa-cli.exe"]
 
@@ -60,14 +64,15 @@ def run_maa_phase(config, logger):
     find_and_click("maa_start.png", config.get("wait_timeout", 60))
 
     wait_for_process_start([emulator_proc], config.get("game_start_timeout", 120))
-    
+
     logger.info("MAA 正在运行，等待模拟器关闭...")
     wait_for_process_exit([emulator_proc], config.get("game_exit_timeout", 7200), check_interval=15)
-    
+
     logger.info("模拟器已关闭，正在将 MAA 最小化到后台备用...")
     minimize_process_windows(maa_procs)
     time.sleep(3)
     return True
+
 
 def run_maaend_phase(config, logger):
     maaend_path = config.get("maaend_path", "").strip()
@@ -96,11 +101,12 @@ def run_maaend_phase(config, logger):
 
     logger.info("PC端游戏已启动，等待游戏关闭...")
     wait_for_process_exit([pc_game_proc], config.get("game_exit_timeout", 7200), check_interval=15)
-    
+
     logger.info("PC端游戏已关闭，正在将 MaaEnd 最小化到后台备用...")
     minimize_process_windows(maaend_procs)
     time.sleep(3)
     return True
+
 
 def _handle_foreground_action(config, logger):
     """根据配置决定启动前的前台程序处理方式"""
@@ -125,15 +131,17 @@ def _handle_foreground_action(config, logger):
     else:
         logger.info("前台处理策略：【不做任何操作】，跳过清理前台程序。")
 
+
 def execute_workflow(config, logger):
     start_time = datetime.datetime.now()
-    
+
     # ================= 1. 动态捕获本次任务的日志 =================
     task_logs = []
+
     class CaptureHandler(logging.Handler):
         def emit(self, record):
             task_logs.append(self.format(record))
-            
+
     capture_handler = CaptureHandler()
     capture_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(capture_handler)
@@ -156,6 +164,8 @@ def execute_workflow(config, logger):
                     logger.info(f"========== 开始 MAA 阶段 (尝试 {attempt}/{retry_times}) ==========")
                     run_maa_phase(config, logger)
                     break
+                except TaskInterrupted:
+                    raise
                 except Exception as e:
                     logger.error(f"MAA 阶段发生异常: {e}")
                     if attempt < retry_times:
@@ -177,6 +187,8 @@ def execute_workflow(config, logger):
                     logger.info(f"========== 开始 MaaEnd 阶段 (尝试 {attempt}/{retry_times}) ==========")
                     run_maaend_phase(config, logger)
                     break
+                except TaskInterrupted:
+                    raise
                 except Exception as e:
                     logger.error(f"MaaEnd 阶段发生异常: {e}")
                     if attempt < retry_times:
@@ -190,6 +202,9 @@ def execute_workflow(config, logger):
         else:
             logger.info("未配置 MaaEnd 启动地址，跳过 MaaEnd 阶段。")
 
+    except TaskInterrupted:
+        logger.info("=== 任务被用户中止 ===")
+        overall_status = "中止"
     except Exception as global_e:
         logger.error(f"执行过程中发生未知严重错误: {global_e}")
         overall_status = "报错"
@@ -199,5 +214,10 @@ def execute_workflow(config, logger):
     # ================= 2. 调用独立的推送模块 =================
     end_time = datetime.datetime.now()
     send_task_report(send_key, start_time, end_time, overall_status, task_logs, webhook_url)
-    
+
     logger.info("整个自动化流程结束！")
+    return overall_status          # ← 返回状态
+
+
+# 兼容旧调用（如果你在主程序里用 main.py 调这个名字）
+# 也可以直接在外层用 `from automation import execute_workflow as run_workflow`

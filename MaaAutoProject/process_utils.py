@@ -5,8 +5,26 @@ import win32gui
 import win32process
 import logging
 import win32con
+from PySide6.QtCore import QThread
 
 logger = logging.getLogger("MaaAuto")
+
+
+class TaskInterrupted(Exception):
+    """用户主动中止任务。"""
+    pass
+
+
+def check_interrupt():
+    """在长循环中定期调用，被要求中断时抛出 TaskInterrupted。"""
+    t = QThread.currentThread()
+    if t is not None and t.isInterruptionRequested():
+        raise TaskInterrupted("用户中止")
+
+
+# 兼容旧调用（automation.py 里仍写成 _check_interrupt as check_interrupt）
+_check_interrupt = check_interrupt
+
 
 WHITE_LIST = [
     "explorer.exe", "winlogon.exe", "csrss.exe", "smss.exe", "svchost.exe",
@@ -18,21 +36,24 @@ WHITE_LIST = [
     "python.exe", "pythonw.exe", "maa_auto.exe"
 ]
 
+
 def kill_foreground_apps():
     logger.info("开始执行方案A：清理前台程序...")
     pids_to_kill = set()
+
     def enum_windows_callback(hwnd, _):
         if win32gui.IsWindowVisible(hwnd):
             _, pid = win32process.GetWindowThreadProcessId(hwnd)
             pids_to_kill.add(pid)
         return True
-    
+
     win32gui.EnumWindows(enum_windows_callback, None)
     current_pid = os.getpid()
     killed_count = 0
-    
+
     for pid in pids_to_kill:
-        if pid == current_pid: continue
+        if pid == current_pid:
+            continue
         try:
             proc = psutil.Process(pid)
             name = proc.name().lower()
@@ -44,6 +65,7 @@ def kill_foreground_apps():
             pass
     logger.info(f"前台程序清理完成，共关闭 {killed_count} 个程序。")
 
+
 def is_process_running(process_names):
     """
     判断进程是否在运行。
@@ -54,23 +76,33 @@ def is_process_running(process_names):
         try:
             proc_name = proc.info['name'].lower()
             for target_name in process_names:
-                if target_name in proc_name:  # 改为包含匹配
+                if target_name in proc_name:  # 包含匹配
                     return True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
     return False
+
 
 def wait_for_process_start(process_names, timeout=120, check_interval=3):
     """等待进程启动。超时抛出 TimeoutError。"""
     start_time = time.time()
     process_names = [p.lower() for p in process_names]
     logger.info(f"等待进程启动: {process_names} (超时 {timeout} 秒)")
+
     while time.time() - start_time < timeout:
+        check_interrupt()
+
         if is_process_running(process_names):
             logger.info(f"检测到目标进程已成功启动: {process_names}")
             return True
-        time.sleep(check_interval)
+
+        # 分段 sleep，1 秒响应中断
+        for _ in range(check_interval):
+            check_interrupt()
+            time.sleep(1)
+
     raise TimeoutError(f"等待进程启动超时 ({timeout}秒): {process_names}")
+
 
 def wait_for_process_exit(process_names, timeout=7200, check_interval=15):
     """等待进程退出。超时抛出 TimeoutError。长等待时输出心跳日志。"""
@@ -80,6 +112,8 @@ def wait_for_process_exit(process_names, timeout=7200, check_interval=15):
     logger.info(f"等待进程关闭: {process_names} (超时 {timeout} 秒)")
 
     while time.time() - start_time < timeout:
+        check_interrupt()
+
         if not is_process_running(process_names):
             logger.info(f"目标进程已退出: {process_names}")
             return True
@@ -90,9 +124,13 @@ def wait_for_process_exit(process_names, timeout=7200, check_interval=15):
             logger.info(f"持续等待进程关闭中... 已等待 {elapsed // 60} 分钟")
             last_log_time = time.time()
 
-        time.sleep(check_interval)
+        # 分段 sleep，1 秒响应中断
+        for _ in range(check_interval):
+            check_interrupt()
+            time.sleep(1)
 
     raise TimeoutError(f"等待进程关闭超时 ({timeout}秒): {process_names}")
+
 
 def kill_process_by_name(process_names):
     process_names = [p.lower() for p in process_names]
@@ -107,6 +145,7 @@ def kill_process_by_name(process_names):
             pass
     return killed
 
+
 def kill_all_related_processes():
     """退出程序时清理"""
     targets = ["maa.exe", "maa-cli.exe", "maaend.exe", "mumuplayer.exe", "nemuplayer.exe", "dnplayer.exe"]
@@ -118,6 +157,7 @@ def kill_all_related_processes():
                 proc.kill()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
+
 
 def minimize_process_windows(process_names):
     """将指定进程的窗口最小化（支持模糊匹配）"""
@@ -149,6 +189,7 @@ def minimize_process_windows(process_names):
     if minimized_count == 0:
         logger.info(f"未找到可最小化的窗口: {process_names}")
 
+
 def bring_process_to_front(process_names):
     """将指定进程的窗口还原并置于最前面（支持模糊匹配）"""
     process_names = [p.lower() for p in process_names]
@@ -168,10 +209,20 @@ def bring_process_to_front(process_names):
                     if target_name in proc_name:  # 模糊匹配
                         # 还原窗口并强行置顶
                         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0, win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
+                        win32gui.SetWindowPos(
+                            hwnd,
+                            win32con.HWND_TOPMOST,
+                            0, 0, 0, 0,
+                            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE
+                        )
                         win32gui.SetForegroundWindow(hwnd)
                         time.sleep(1)  # 给窗口一点时间渲染
-                        win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0, win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
+                        win32gui.SetWindowPos(
+                            hwnd,
+                            win32con.HWND_NOTOPMOST,
+                            0, 0, 0, 0,
+                            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE
+                        )
 
                         logger.info(f"已将进程 {proc.name()} 拉取到前台")
                         brought_count += 1
@@ -184,6 +235,7 @@ def bring_process_to_front(process_names):
     win32gui.EnumWindows(enum_windows_callback, None)
     if brought_count == 0:
         logger.info(f"未找到可置顶的窗口: {process_names}")
+
 
 def kill_blacklist_apps(blacklist_names):
     """
