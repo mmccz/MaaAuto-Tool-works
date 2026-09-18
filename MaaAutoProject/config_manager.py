@@ -15,8 +15,9 @@ DEFAULT_CONFIG = {
     "maa_path": "",
     "maaend_path": "",
     "serverchan_key": "",
+    "webhook_url": "",                      # 新增：通用 Webhook
     "execute_time": "08:00",
-    "enable_schedule": True,       # 注意这里有逗号
+    "enable_schedule": False,               # 修改：默认关闭定时启动
     "wait_timeout": 60,
     "game_start_timeout": 120,
     "game_exit_timeout": 7200,
@@ -25,8 +26,10 @@ DEFAULT_CONFIG = {
     "auto_start": False,
     "minimize_to_tray": True,
     "kill_on_exit": True,
+    "foreground_action": "none",            # 新增：none / kill_all / blacklist
+    "blacklist_apps": "",                   # 新增：逗号分隔的进程名
     "last_trigger_date": "",
-    "run_count": 0                 # 最后一行没有逗号，紧跟下面的花括号
+    "run_count": 0
 }
 
 def load_config():
@@ -58,7 +61,6 @@ def setup_logger():
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     
-    # UI 全局日志（仅用于主界面实时显示）
     ui_handler = LogHandler()
     ui_handler.setFormatter(formatter)
     logger.addHandler(ui_handler)

@@ -6,7 +6,8 @@ import datetime
 import pyautogui
 import logging
 from utils import resource_path
-from process_utils import (kill_foreground_apps, is_process_running, 
+from process_utils import (kill_foreground_apps, kill_blacklist_apps,
+                           is_process_running, 
                            wait_for_process_exit, wait_for_process_start,
                            minimize_process_windows, bring_process_to_front)
 from notifier import send_task_report  # <--- 引入独立的推送模块
@@ -36,7 +37,6 @@ def find_and_click(image_name, timeout=60):
     raise TimeoutError(f"找图超时，未能找到: {image_name}")
 
 def run_maa_phase(config, logger):
-    """执行 MAA 阶段（如果未填写路径则跳过）"""
     maa_path = config.get("maa_path", "").strip()
     if not maa_path:
         logger.info("未配置 MAA 启动地址，跳过 MAA 阶段。")
@@ -70,7 +70,6 @@ def run_maa_phase(config, logger):
     return True
 
 def run_maaend_phase(config, logger):
-    """执行 MaaEnd 阶段（如果未填写路径则跳过）"""
     maaend_path = config.get("maaend_path", "").strip()
     if not maaend_path:
         logger.info("未配置 MaaEnd 启动地址，跳过 MaaEnd 阶段。")
@@ -103,6 +102,29 @@ def run_maaend_phase(config, logger):
     time.sleep(3)
     return True
 
+def _handle_foreground_action(config, logger):
+    """根据配置决定启动前的前台程序处理方式"""
+    action = config.get("foreground_action", "none")
+
+    if action == "kill_all":
+        logger.info("前台处理策略：【关闭所有前台程序】")
+        kill_foreground_apps()
+
+    elif action == "blacklist":
+        blacklist_str = config.get("blacklist_apps", "")
+        # 同时兼容中文逗号、英文逗号、换行、分号
+        blacklist = [n.strip() for n in
+                     blacklist_str.replace("，", ",").replace("；", ",").replace(";", ",")
+                     .replace("\n", ",").split(",") if n.strip()]
+        if blacklist:
+            logger.info(f"前台处理策略：【用户黑名单】 -> {blacklist}")
+            kill_blacklist_apps(blacklist)
+        else:
+            logger.info("前台处理策略：【用户黑名单】，但黑名单为空，跳过清理。")
+
+    else:
+        logger.info("前台处理策略：【不做任何操作】，跳过清理前台程序。")
+
 def execute_workflow(config, logger):
     start_time = datetime.datetime.now()
     
@@ -118,12 +140,13 @@ def execute_workflow(config, logger):
 
     overall_status = "成功"
     send_key = config.get("serverchan_key", "")
+    webhook_url = config.get("webhook_url", "")
     retry_times = config.get("retry_times", 3)
     retry_interval = config.get("retry_interval", 30)
 
     try:
-        logger.info("开始清理前台程序...")
-        kill_foreground_apps()
+        # ================= 启动前的前台处理（按配置） =================
+        _handle_foreground_action(config, logger)
 
         # ================= MAA 阶段 =================
         maa_path = config.get("maa_path", "").strip()
@@ -171,11 +194,10 @@ def execute_workflow(config, logger):
         logger.error(f"执行过程中发生未知严重错误: {global_e}")
         overall_status = "报错"
     finally:
-        logger.removeHandler(capture_handler) # 移除捕获器
+        logger.removeHandler(capture_handler)
 
     # ================= 2. 调用独立的推送模块 =================
     end_time = datetime.datetime.now()
-    # 只有在配置了 send_key 时才发送，notifier 内部也会做二次校验
-    send_task_report(send_key, start_time, end_time, overall_status, task_logs)
+    send_task_report(send_key, start_time, end_time, overall_status, task_logs, webhook_url)
     
     logger.info("整个自动化流程结束！")

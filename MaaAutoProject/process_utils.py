@@ -184,3 +184,45 @@ def bring_process_to_front(process_names):
     win32gui.EnumWindows(enum_windows_callback, None)
     if brought_count == 0:
         logger.info(f"未找到可置顶的窗口: {process_names}")
+
+def kill_blacklist_apps(blacklist_names):
+    """
+    按用户黑名单关闭前台程序（模糊匹配，例如 "chrome" 可以匹配 "chrome.exe"）。
+    """
+    if not blacklist_names:
+        logger.info("黑名单为空，无需处理。")
+        return
+    blacklist_lower = [n.strip().lower() for n in blacklist_names if n and n.strip()]
+    if not blacklist_lower:
+        logger.info("黑名单为空，无需处理。")
+        return
+
+    logger.info(f"开始按黑名单清理前台程序: {blacklist_lower}")
+    pids_to_kill = set()
+
+    def enum_windows_callback(hwnd, _):
+        if win32gui.IsWindowVisible(hwnd):
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            pids_to_kill.add(pid)
+        return True
+
+    win32gui.EnumWindows(enum_windows_callback, None)
+    current_pid = os.getpid()
+    killed_count = 0
+
+    for pid in pids_to_kill:
+        if pid == current_pid:
+            continue
+        try:
+            proc = psutil.Process(pid)
+            name = proc.name().lower()
+            for target in blacklist_lower:
+                if target in name:
+                    logger.info(f"关闭黑名单程序: {proc.name()} (PID: {pid})")
+                    proc.kill()
+                    killed_count += 1
+                    break
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    logger.info(f"黑名单程序清理完成，共关闭 {killed_count} 个程序。")

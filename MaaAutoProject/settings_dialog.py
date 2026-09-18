@@ -1,15 +1,17 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QTabWidget, QWidget, 
                                QFormLayout, QLineEdit, QPushButton, QFileDialog,
-                               QSpinBox, QTimeEdit, QCheckBox, QHBoxLayout, QMessageBox)
+                               QSpinBox, QTimeEdit, QCheckBox, QHBoxLayout,
+                               QMessageBox, QRadioButton, QButtonGroup)
 from PySide6.QtCore import QTime
 from serverchan_sdk import sc_send
+from notifier import send_webhook
 
 class SettingsDialog(QDialog):
     def __init__(self, config, parent=None):
         super().__init__(parent)
-        self.config = config.copy() # 操作副本，取消时不影响原配置
+        self.config = config.copy()
         self.setWindowTitle("设置")
-        self.resize(500, 400)
+        self.resize(560, 460)
         self.setup_ui()
 
     def setup_ui(self):
@@ -44,12 +46,10 @@ class SettingsDialog(QDialog):
         self.game_start_spin.setValue(self.config.get("game_start_timeout", 120))
         form_proc.addRow("游戏启动等待(秒):", self.game_start_spin)
         
-        # 新增：等待游戏关闭超时
         self.game_exit_spin = QSpinBox(); self.game_exit_spin.setRange(300, 14400)
         self.game_exit_spin.setValue(self.config.get("game_exit_timeout", 7200))
         form_proc.addRow("游戏关闭等待(秒):", self.game_exit_spin)
         
-        # 新增：重试次数与间隔
         self.retry_times_spin = QSpinBox(); self.retry_times_spin.setRange(1, 10)
         self.retry_times_spin.setValue(self.config.get("retry_times", 3))
         form_proc.addRow("失败重试次数:", self.retry_times_spin)
@@ -59,11 +59,40 @@ class SettingsDialog(QDialog):
         form_proc.addRow("重试间隔(秒):", self.retry_interval_spin)
         tabs.addTab(tab_proc, "进程与超时")
         
-        # --- Tab 3: 定时与推送 ---
+        # --- Tab 3: 前台处理（新增） ---
+        tab_fg = QWidget()
+        form_fg = QFormLayout(tab_fg)
+        
+        self.fg_group = QButtonGroup(self)
+        self.fg_radio_all = QRadioButton("关闭所有前台程序（较暴力）")
+        self.fg_radio_none = QRadioButton("不做任何操作（默认，推荐）")
+        self.fg_radio_blacklist = QRadioButton("仅关闭用户黑名单中的程序")
+        self.fg_group.addButton(self.fg_radio_all, 0)
+        self.fg_group.addButton(self.fg_radio_none, 1)
+        self.fg_group.addButton(self.fg_radio_blacklist, 2)
+        
+        # 读取当前配置
+        action = self.config.get("foreground_action", "none")
+        if action == "kill_all":
+            self.fg_radio_all.setChecked(True)
+        elif action == "blacklist":
+            self.fg_radio_blacklist.setChecked(True)
+        else:
+            self.fg_radio_none.setChecked(True)
+        
+        form_fg.addRow("启动前的前台处理:", self.fg_radio_none)
+        form_fg.addRow("", self.fg_radio_all)
+        form_fg.addRow("", self.fg_radio_blacklist)
+        
+        self.blacklist_edit = QLineEdit(self.config.get("blacklist_apps", ""))
+        self.blacklist_edit.setPlaceholderText("多个进程名用逗号分隔，例如: chrome.exe,notepad.exe,qq")
+        form_fg.addRow("黑名单进程名:", self.blacklist_edit)
+        tabs.addTab(tab_fg, "前台处理")
+        
+        # --- Tab 4: 定时与推送 ---
         tab_sched = QWidget()
         form_sched = QFormLayout(tab_sched)
         
-        # 新增：定时开关
         self.enable_schedule_cb = QCheckBox("启用每日定时启动")
         self.enable_schedule_cb.setChecked(self.config.get("enable_schedule", False))
         form_sched.addRow(self.enable_schedule_cb)
@@ -77,9 +106,15 @@ class SettingsDialog(QDialog):
         btn_sc = QPushButton("测试推送"); btn_sc.clicked.connect(self.test_serverchan)
         h3 = QHBoxLayout(); h3.addWidget(self.sc_edit); h3.addWidget(btn_sc)
         form_sched.addRow("Server酱 SendKey:", h3)
+        
+        self.webhook_edit = QLineEdit(self.config.get("webhook_url", ""))
+        self.webhook_edit.setPlaceholderText("可选，向该 URL POST JSON: {title, content}")
+        btn_wh = QPushButton("测试 Webhook"); btn_wh.clicked.connect(self.test_webhook)
+        h4 = QHBoxLayout(); h4.addWidget(self.webhook_edit); h4.addWidget(btn_wh)
+        form_sched.addRow("通用 Webhook:", h4)
         tabs.addTab(tab_sched, "定时与推送")
         
-        # --- Tab 4: 常规设置 ---
+        # --- Tab 5: 常规设置 ---
         tab_general = QWidget()
         form_general = QFormLayout(tab_general)
         self.auto_start_cb = QCheckBox("开机自启")
@@ -97,7 +132,6 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(tabs)
         
-        # 底部按钮
         btn_box = QHBoxLayout()
         btn_save = QPushButton("保存并关闭")
         btn_save.clicked.connect(self.accept)
@@ -120,6 +154,17 @@ class SettingsDialog(QDialog):
         else:
             QMessageBox.warning(self, "警告", "请先填写 SendKey")
 
+    def test_webhook(self):
+        url = self.webhook_edit.text().strip()
+        if not url:
+            QMessageBox.warning(self, "警告", "请先填写 Webhook 地址")
+            return
+        try:
+            send_webhook(url, "MaaAuto 测试", "这是一条通用 Webhook 测试消息")
+            QMessageBox.information(self, "测试结果", "已发送，请到接收端确认。")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"发送失败: {e}")
+
     def get_config(self):
         self.config["maa_path"] = self.maa_edit.text()
         self.config["maaend_path"] = self.maaend_edit.text()
@@ -128,6 +173,7 @@ class SettingsDialog(QDialog):
         self.config["execute_time"] = self.time_edit.time().toString("HH:mm")
         self.config["wait_timeout"] = self.timeout_spin.value()
         self.config["serverchan_key"] = self.sc_edit.text()
+        self.config["webhook_url"] = self.webhook_edit.text().strip()
         self.config["auto_start"] = self.auto_start_cb.isChecked()
         self.config["minimize_to_tray"] = self.minimize_tray_cb.isChecked()
         self.config["kill_on_exit"] = self.kill_on_exit_cb.isChecked()
@@ -135,6 +181,14 @@ class SettingsDialog(QDialog):
         self.config["game_exit_timeout"] = self.game_exit_spin.value()
         self.config["retry_times"] = self.retry_times_spin.value()
         self.config["retry_interval"] = self.retry_interval_spin.value()
-        self.config["execute_time"] = self.time_edit.time().toString("HH:mm")
-        self.config["enable_schedule"] = self.enable_schedule_cb.isChecked() 
+        self.config["enable_schedule"] = self.enable_schedule_cb.isChecked()
+        self.config["blacklist_apps"] = self.blacklist_edit.text()
+
+        # 前台处理方式
+        if self.fg_radio_all.isChecked():
+            self.config["foreground_action"] = "kill_all"
+        elif self.fg_radio_blacklist.isChecked():
+            self.config["foreground_action"] = "blacklist"
+        else:
+            self.config["foreground_action"] = "none"
         return self.config
