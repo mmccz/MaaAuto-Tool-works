@@ -61,12 +61,10 @@
 - **操作系统**：Windows 10 / 11
 - **屏幕分辨率**：推荐 1080P，系统缩放 **100%**（否则图像识别会失败，正在改善）
 - **Python**：3.11 或更高版本
-<<<<<<< HEAD
   - ⚠️ **不建议使用 Microsoft Store 版本**。其 `sys.executable` 指向一个转发器，会导致提权失败。推荐使用 [python.org](https://www.python.org/downloads/) 安装版。
 - **依赖软件**：自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 MaaEnd。
 =======
 - **依赖软件**：请自行下载并安装 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 和 [MaaEnd](https://github.com/MaaEnd/MaaEnd)。
->>>>>>> 6d562bf53a6e7d48a50a848a5e5bd79cfe340c8a
 
 ### 2. 安装依赖或下载完整包
 
@@ -120,52 +118,7 @@ python main.py
 
 点击主界面 ▶️ 立即执行 可手动触发一次任务。
 
-📂 目录结构
-text
-MaaAutoProject/
-├── main.py                       # 程序入口
-├── app_info.py                   # 应用元信息（版本 / GitHub / 许可证）
-├── config_manager.py             # 配置读写 + UI 日志 Handler
-├── automation.py                 # 核心自动化流程（MAA / MaaEnd 阶段）
-├── process_utils.py              # 进程检测、清理、窗口控制、中断响应
-├── notifier.py                   # Server酱 / 通用 Webhook 推送
-├── utils.py                      # 通用工具函数
-├── requirements.txt              # 依赖清单
-├── README.md
-├── CHANGELOG.md
-│
-├── i18n/                         # 国际化
-│   ├── __init__.py               # I18n 类
-│   ├── zh_CN.json
-│   └── en_US.json
-│
-├── themes/                       # 主题
-│   ├── __init__.py               # ThemeManager
-│   ├── light.qss
-│   └── dark.qss
-│
-├── ui/                           # 界面层
-│   ├── main_window.py            # 主窗口 + Worker 线程
-│   ├── sidebar.py                # 侧边导航
-│   ├── sliding_stack.py          # 左右滑动页容器
-│   ├── animations.py             # fade_in / theme_transition
-│   ├── background.py             # 背景图绘制
-│   ├── components.py             # Card / Switch / SegmentedControl 等
-│   ├── no_wheel.py               # 屏蔽滚轮的输入控件
-│   ├── wheel_time_picker.py      # 单行滚轮时间选择器
-│   └── pages/
-│       ├── home_page.py          # 首页
-│       ├── settings_page.py      # 设置页
-│       ├── about_page.py         # 关于页
-│       └── process_picker.py     # 进程选择对话框
-│
-├── resources/                    # 图像资源（需自行提供）
-│   ├── icon.ico
-│   ├── maa_start.png
-│   └── maaend_start.png
-│
-├── config/                       # 自动生成
-└── logs/                         # 自动生成
+
 ⚙️ 配置说明
 所有配置保存在 config/config.json，程序内修改即时生效。
 
