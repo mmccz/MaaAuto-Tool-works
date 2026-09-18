@@ -1,17 +1,121 @@
-# 运行生成的配置和日志（绝对不要上传）
-config/
-logs/
-*.log
+# ============================================================
+# MaaAuto .gitignore
+# ============================================================
 
-# Python 缓存
+# ---------------- Python ----------------
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# 打包生成的文件
+# ---------------- 虚拟环境 ----------------
+.venv/
+venv/
+ENV/
+env/
+.python-version
+Pipfile.lock
+
+# ---------------- 测试 / 覆盖率 ----------------
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.hypothesis/
+htmlcov/
+*.cover
+nosetests.xml
+coverage.xml
+*.mo
+*.pot
+
+# ---------------- 打包（PyInstaller）----------------
+*.spec
 build/
 dist/
-*.spec
+# 打包产物
+MaaAuto.exe
+MaaAuto_*.zip
 
-# 环境文件
+# ---------------- 运行时生成 ----------------
+# 用户配置与日志（不应提交）
+config/
+logs/
+# 但保留目录占位（如需要）
+!config/.gitkeep
+!logs/.gitkeep
+
+# ---------------- 图像资源（可选）----------------
+# 如果你的截图不打算开源，取消下面注释
+# resources/maa_start.png
+# resources/maaend_start.png
+# 图标一般建议提交
+!resources/icon.ico
+
+# ---------------- IDE / 编辑器 ----------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# ---------------- 操作系统 ----------------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+# Linux
+*~
+.directory
+.Trash-*
+
+# ---------------- 其它 ----------------
+# 临时文件
+*.bak
+*.tmp
+*.log
+!logs/.gitkeep
+
+# 环境变量 / 密钥
 .env
-venv/
+.env.*
+*.key
+secrets.json
+
+# 调试
+debug/
+*.pdb
