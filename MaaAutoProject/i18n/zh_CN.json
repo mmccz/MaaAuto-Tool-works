@@ -87,6 +87,9 @@
     "settings.auto_start": "开机自启",
     "settings.minimize_to_tray": "关闭(X)时最小化到托盘",
     "settings.kill_on_exit": "退出程序时清理所有相关进程",
+    "settings.auto_check_update": "启动时自动检查更新",
+    "settings.auto_download_update": "自动下载并升级（静默）",
+    "settings.auto_download_update.desc": "检测到新版本后自动升级并重启，任务运行中会等任务结束后再升级",
 
     "about.title": "关于",
     "about.version": "软件版本",
@@ -102,6 +105,13 @@
     "about.open_logs": "打开日志目录",
     "about.export_logs": "导出日志 (ZIP)",
     "about.copyright": "Copyright © 2024 MaaAuto. All rights reserved.",
+    "about.check_update": "检查更新",
+    "about.check_update.checking": "正在检查...",
+    "about.check_update.latest": "已是最新版本",
+    "about.check_update.failed": "检查更新失败，请检查网络",
+    "about.check_update.available": "发现新版本 {version}",
+    "about.check_update.confirm": "是否现在升级？\n\n升级将关闭主程序，完成后自动重启。",
+    "about.check_update.no_upgrade_exe": "未找到 upgrade.exe，请重新下载完整安装包。",
 
     "dialog.export.title": "导出日志",
     "dialog.export.success": "已成功导出到：\n{path}",
@@ -120,7 +130,7 @@
     "settings.accent_color": "强调色",
     "settings.accent_color.desc": "影响按钮、开关、滑块、选中项的主题色",
     "settings.accent_color.custom": "自定义…",
-    
+
     "common.ok": "确定",
     "common.cancel": "取消",
     "common.save": "保存",
@@ -162,5 +172,8 @@
 
     "serverchan.test.success": "推送成功",
     "serverchan.test.failed": "推送失败",
-    "serverchan.test.empty_key": "请先填写 SendKey"
+    "serverchan.test.empty_key": "请先填写 SendKey",
+
+    "upgrade.pending_after_task": "检测到新版本 {version}，将在任务结束后自动升级",
+    "upgrade.available": "发现新版本 {version}，可在「关于」页升级"
 }

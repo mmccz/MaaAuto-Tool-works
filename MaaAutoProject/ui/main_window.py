@@ -6,13 +6,14 @@ import winreg
 import atexit
 import base64
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QSystemTrayIcon, QMenu, QApplication
+from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout,
+                               QSystemTrayIcon, QMenu, QApplication)
 from PySide6.QtCore import Qt, QTimer, QThread, Signal, QTime, QDate
 from PySide6.QtGui import QIcon, QAction
 
-from config_manager import load_config, save_config, LOG_DIR
+from config_manager import load_config, save_config, LOG_DIR, CONFIG_DIR
 from automation import execute_workflow
-from utils import resource_path, kill_all_related_processes
+from utils import resource_path, kill_all_related_processes, AsyncWorker
 from ui.background import BackgroundWidget
 from ui.sidebar import Sidebar
 from ui.sliding_stack import SlidingStack
@@ -37,11 +38,9 @@ class Worker(QThread):
             logger.removeHandler(h)
 
         file_handler = logging.FileHandler(
-            os.path.join(self.run_log_dir, "task.log"), encoding="utf-8"
-        )
+            os.path.join(self.run_log_dir, "task.log"), encoding="utf-8")
         file_handler.setFormatter(
-            logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        )
+            logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         logger.addHandler(file_handler)
 
         class SignalHandler(logging.Handler):
@@ -70,8 +69,7 @@ class Worker(QThread):
             from config_manager import LogHandler
             base = LogHandler()
             base.setFormatter(
-                logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-            )
+                logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
             logger.addHandler(base)
 
 
@@ -89,11 +87,9 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(self.i18n.t("app.title"))
         self.resize(1080, 720)
-        # ---- 恢复窗口几何 ----
         self._restore_geometry()
         self.setWindowIcon(QIcon(resource_path("resources/icon.ico")))
 
-        # 中央容器
         self.bg_root = BackgroundWidget()
         self.setCentralWidget(self.bg_root)
 
@@ -105,12 +101,10 @@ class MainWindow(QMainWindow):
         self.sidebar.page_changed.connect(self._on_page_changed)
         root_layout.addWidget(self.sidebar)
 
-        # ---- 用 SlidingStack 替代 QStackedWidget ----
         self.stack = SlidingStack()
         self.stack.set_animation_enabled(self.config.get("show_animation", True))
         root_layout.addWidget(self.stack, 1)
 
-        # 页面
         self.home_page = HomePage(self.i18n)
         self.settings_page = SettingsPage(self.config, self.i18n, self.theme_manager)
         self.about_page = AboutPage(self.i18n)
@@ -119,20 +113,18 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.about_page)
         self.stack.setCurrentIndex(0)
 
-        # 信号
         self.home_page.run_clicked.connect(self.manual_run)
         self.home_page.stop_clicked.connect(self.stop_task)
         self.home_page.clear_log_clicked.connect(self.home_page.clear_log)
         self.settings_page.config_changed.connect(self._on_config_changed)
         self.settings_page.theme_changed.connect(self._on_theme_changed)
         self.settings_page.language_changed.connect(self._on_language_changed)
-        self.settings_page.accent_changed.connect(self._on_accent_changed)   # ← 新增
+        self.settings_page.accent_changed.connect(self._on_accent_changed)
         self.i18n.language_changed.connect(self._retranslate_all)
 
         self._apply_background()
         self._setup_tray()
 
-        # 定时器
         self.schedule_timer = QTimer(self)
         self.schedule_timer.timeout.connect(self._check_schedule)
         self.schedule_timer.start(10_000)
@@ -145,6 +137,19 @@ class MainWindow(QMainWindow):
         self._update_next_run()
 
         atexit.register(self.cleanup_on_exit)
+
+        self._upgrading_check_timer = QTimer(self)
+        self._upgrading_check_timer.timeout.connect(self._check_upgrading_flag)
+        self._upgrading_check_timer.start(1000)
+
+        self._pending_upgrade_silent = False
+        self._pending_upgrade_info = None
+
+        # 更新检查线程句柄
+        self._update_check_worker = None
+
+        if self.config.get("auto_check_update", True):
+            QTimer.singleShot(5000, self._auto_check_update)
 
     # ==================================================================
     # 背景
@@ -179,8 +184,7 @@ class MainWindow(QMainWindow):
         menu.addAction(self.act_quit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(
-            lambda r: self.show_normal() if r == QSystemTrayIcon.DoubleClick else None
-        )
+            lambda r: self.show_normal() if r == QSystemTrayIcon.DoubleClick else None)
         self.tray.show()
 
     def _tray_show(self):
@@ -218,20 +222,16 @@ class MainWindow(QMainWindow):
         self._apply_background()
         self._refresh_home_stats()
         self._update_next_run()
-        # 应用动画开关
         self.stack.set_animation_enabled(self.config.get("show_animation", True))
 
     def _on_theme_changed(self, theme):
         self.config["theme"] = theme
         save_config(self.config)
-
-        # 主题切换时把当前强调色一起传进去（避免内部缓存丢失）
         accent = self.config.get("accent_color", "#3b82f6")
 
         def do_switch():
             self.theme_manager.apply_theme(
-                theme, QApplication.instance(), accent_color=accent
-            )
+                theme, QApplication.instance(), accent_color=accent)
 
         theme_transition(self, do_switch, duration=260)
 
@@ -241,7 +241,6 @@ class MainWindow(QMainWindow):
         self.i18n.load_language(code)
 
     def _on_accent_changed(self, hexv):
-        """强调色变化：保存 + 立即重刷样式表（不做淡入淡出，避免闪烁）。"""
         self.config["accent_color"] = hexv
         save_config(self.config)
         try:
@@ -255,12 +254,10 @@ class MainWindow(QMainWindow):
         self.home_page.retranslate()
         self.settings_page.retranslate()
         self.about_page.retranslate()
-
         self.act_show.setText(self.i18n.t("tray.show"))
         self.act_settings.setText(self.i18n.t("tray.settings"))
         self.act_stop.setText(self.i18n.t("tray.stop"))
         self.act_quit.setText(self.i18n.t("tray.quit"))
-
         self._update_next_run()
         self.home_page.set_running(self._is_running())
 
@@ -279,36 +276,29 @@ class MainWindow(QMainWindow):
         if not self.config.get("enable_schedule", False):
             self.home_page.set_next_run("")
             return
-
         time_str = self.config.get("execute_time", "08:00")
         target = QTime.fromString(time_str, "HH:mm")
         if not target.isValid():
             self.home_page.set_next_run("")
             return
-
         now = QTime.currentTime()
         now_sec = now.hour() * 3600 + now.minute() * 60 + now.second()
         tgt_sec = target.hour() * 3600 + target.minute() * 60
-
         if tgt_sec <= now_sec:
             diff = 24 * 3600 - now_sec + tgt_sec
             is_tomorrow = True
         else:
             diff = tgt_sec - now_sec
             is_tomorrow = False
-
         hours = diff // 3600
         minutes = (diff % 3600) // 60
-
         if hours == 0 and minutes == 0:
             text = self.i18n.t("home.next_run.now")
         else:
             text = self.i18n.t("home.next_run.in",
                                hours=hours, minutes=minutes, time=time_str)
-
         if is_tomorrow and hours >= 12:
             text = self.i18n.t("home.next_run.tomorrow", time=time_str)
-
         self.home_page.set_next_run(text)
 
     # ==================================================================
@@ -322,8 +312,7 @@ class MainWindow(QMainWindow):
         today = QDate.currentDate().toString("yyyy-MM-dd")
         if now >= target and self.config.get("last_trigger_date") != today:
             self.logger.info(
-                f"定时触发：当前 {now.toString('HH:mm')} >= 设定 {target.toString('HH:mm')}"
-            )
+                f"定时触发：当前 {now.toString('HH:mm')} >= 设定 {target.toString('HH:mm')}")
             self.config["last_trigger_date"] = today
             save_config(self.config)
             self._update_next_run()
@@ -336,26 +325,20 @@ class MainWindow(QMainWindow):
         if self._is_running():
             self.logger.info("任务正在执行中，请勿重复启动。")
             return
-
         self.config["run_count"] = self.config.get("run_count", 0) + 1
         self.config["last_run_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_config(self.config)
         self._refresh_home_stats()
-
         run_id = self.config["run_count"]
         now = datetime.datetime.now()
         run_dir = os.path.join(
             LOG_DIR,
             now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"),
-            f"run_{run_id}_{now.strftime('%H%M%S')}",
-        )
+            f"run_{run_id}_{now.strftime('%H%M%S')}")
         os.makedirs(run_dir, exist_ok=True)
-
         self.logger.info(f"========== 开始第 {run_id} 次执行 ==========")
         self.logger.info(f"本次任务日志: {run_dir}")
-
         self.home_page.set_running(True)
-
         self.worker = Worker(self.config, run_dir)
         self.worker.log_signal.connect(self.home_page.append_log)
         self.worker.task_finished.connect(self._on_task_finished)
@@ -370,7 +353,6 @@ class MainWindow(QMainWindow):
         self.worker.requestInterruption()
 
     def _on_task_finished(self, status):
-        """任务结束时按状态弹出系统托盘通知。"""
         if not self.config.get("enable_system_notify", True):
             return
         if status == "成功":
@@ -389,6 +371,80 @@ class MainWindow(QMainWindow):
         self.logger.info("任务执行结束。\n")
         self._refresh_home_stats()
         self._update_next_run()
+        if self._pending_upgrade_silent and self._pending_upgrade_info:
+            info = self._pending_upgrade_info
+            self._pending_upgrade_silent = False
+            self._pending_upgrade_info = None
+            self.logger.info("任务已结束，开始挂起的自动升级。")
+            QTimer.singleShot(2000, lambda: self._trigger_upgrade(info, silent=True))
+
+    # ==================================================================
+    # 升级
+    # ==================================================================
+    def _check_upgrading_flag(self):
+        flag = os.path.join(CONFIG_DIR, ".upgrading")
+        if not os.path.exists(flag):
+            return
+        self.logger.info("检测到升级标志 config/.upgrading，准备退出...")
+        self._upgrading_check_timer.stop()
+        self.is_quitting = True
+        try:
+            self._save_geometry()
+        except Exception:
+            pass
+        self.cleanup_on_exit()
+        QApplication.quit()
+
+    def _auto_check_update(self):
+        """
+        启动 5 秒后检查更新 —— 后台线程执行，绝不阻塞 UI。
+        无论成功/失败/无更新，都通过信号回主线程处理。
+        """
+        try:
+            from update_checker import check_update
+        except Exception as e:
+            self.logger.warning(f"无法导入 update_checker: {e}")
+            return
+
+        # 后台线程执行网络请求
+        self._update_check_worker = AsyncWorker(check_update)
+        self._update_check_worker.finished.connect(self._on_update_checked)
+        self._update_check_worker.error.connect(
+            lambda err: self.logger.warning(f"检查更新失败: {err}"))
+        self._update_check_worker.start()
+
+    def _on_update_checked(self, info):
+        if not info or not info.get("has_update"):
+            return
+        self.logger.info(f"检测到新版本: {info['latest']}（当前 {info['current']}）")
+        if self.config.get("auto_download_update", False):
+            if self._is_running():
+                self._pending_upgrade_silent = True
+                self._pending_upgrade_info = info
+                self.tray.showMessage(
+                    "MaaAuto",
+                    self.i18n.t("upgrade.pending_after_task", version=info["latest"]),
+                    QSystemTrayIcon.Information, 5000)
+                self.logger.info("任务运行中，自动升级已挂起，任务结束后执行。")
+                return
+            self._trigger_upgrade(info, silent=True)
+        else:
+            self.tray.showMessage(
+                "MaaAuto",
+                self.i18n.t("upgrade.available", version=info["latest"]),
+                QSystemTrayIcon.Information, 5000)
+
+    def _trigger_upgrade(self, info, silent=False):
+        from update_checker import apply_update
+        self.logger.info(f"触发升级: silent={silent} → {info.get('latest')}")
+        if apply_update(self, silent=silent):
+            self.is_quitting = True
+            try:
+                self._save_geometry()
+            except Exception:
+                pass
+            self.cleanup_on_exit()
+            QApplication.quit()
 
     # ==================================================================
     # 自启 / 退出
@@ -419,12 +475,6 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def _shutdown_worker(self, timeout_ms=3000):
-        """
-        优雅关闭后台任务线程：
-          1. 请求中断（automation 内部的 check_interrupt 会感知并退出）
-          2. 等待至多 timeout_ms 毫秒
-          3. 超时后强制 terminate 兜底，再等 1 秒
-        """
         if not (self.worker and self.worker.isRunning()):
             return
         self.logger.info("正在请求任务线程退出...")
@@ -435,7 +485,6 @@ class MainWindow(QMainWindow):
             self.worker.wait(1000)
 
     def cleanup_on_exit(self):
-        # 先停线程（它可能还在操作系统进程），再清理残留
         self._shutdown_worker()
         if self.config.get("kill_on_exit", True):
             kill_all_related_processes()

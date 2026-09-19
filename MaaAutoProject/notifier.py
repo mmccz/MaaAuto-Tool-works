@@ -1,9 +1,19 @@
 import logging
 import json
 import urllib.request
-from serverchan_sdk import sc_send
+
+# serverchan_sdk 是项目本地文件（serverchan_sdk.py），
+# 打包时由 build.py 的 HIDDEN_IMPORTS 保证进 exe。
+# 如果缺失，只禁用 Server 酱推送，不影响主程序启动。
+try:
+    from serverchan_sdk import sc_send
+    HAS_SERVERCHAN = True
+except ImportError:
+    sc_send = None
+    HAS_SERVERCHAN = False
 
 logger = logging.getLogger("MaaAuto")
+
 
 def send_webhook(webhook_url, title, content):
     """发送通用 Webhook（POST JSON: {title, content}）"""
@@ -23,13 +33,14 @@ def send_webhook(webhook_url, title, content):
     except Exception as e:
         logger.error(f"Webhook 推送失败: {e}")
 
+
 def send_task_report(send_key, start_time, end_time, status, logs, webhook_url=""):
     """
     发送任务报告
     :param send_key: Server酱 SendKey（为空则跳过）
     :param start_time: 任务开始时间 (datetime)
     :param end_time: 任务结束时间 (datetime)
-    :param status: 状态字符串 ("成功" 或 "报错")
+    :param status: 状态字符串 ("成功" / "中止" / "报错")
     :param logs: 日志列表 (list) 或 字符串 (str)
     :param webhook_url: 通用 Webhook 地址（为空则跳过）
     """
@@ -46,12 +57,15 @@ def send_task_report(send_key, start_time, end_time, status, logs, webhook_url="
 
     # Server酱推送
     if send_key:
-        try:
-            logger.info(f"正在发送 Server酱 推送，标题: {title}...")
-            res = sc_send(send_key, title, desp, {"tags": "游戏"})
-            logger.info(f"推送发送结果: {res}")
-        except Exception as e:
-            logger.error(f"推送发送失败: {e}")
+        if not HAS_SERVERCHAN:
+            logger.warning("未加载 serverchan_sdk，跳过 Server 酱推送。")
+        else:
+            try:
+                logger.info(f"正在发送 Server酱 推送，标题: {title}...")
+                res = sc_send(send_key, title, desp, {"tags": "游戏"})
+                logger.info(f"推送发送结果: {res}")
+            except Exception as e:
+                logger.error(f"推送发送失败: {e}")
 
     # 通用 Webhook 推送
     if webhook_url:

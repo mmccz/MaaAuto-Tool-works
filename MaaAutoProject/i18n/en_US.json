@@ -87,6 +87,9 @@
     "settings.auto_start": "Run at Startup",
     "settings.minimize_to_tray": "Minimize to tray on close (X)",
     "settings.kill_on_exit": "Clean related processes on exit",
+    "settings.auto_check_update": "Check for updates on startup",
+    "settings.auto_download_update": "Auto download and upgrade (silent)",
+    "settings.auto_download_update.desc": "Automatically upgrade and restart when a new version is found. If a task is running, it will wait until it finishes.",
 
     "about.title": "About",
     "about.version": "Version",
@@ -102,6 +105,13 @@
     "about.open_logs": "Open Logs Folder",
     "about.export_logs": "Export Logs (ZIP)",
     "about.copyright": "Copyright © 2024 MaaAuto. All rights reserved.",
+    "about.check_update": "Check for Updates",
+    "about.check_update.checking": "Checking...",
+    "about.check_update.latest": "You're up to date",
+    "about.check_update.failed": "Failed to check for updates",
+    "about.check_update.available": "New version {version} available",
+    "about.check_update.confirm": "Upgrade now?\n\nThe app will close and restart after the upgrade.",
+    "about.check_update.no_upgrade_exe": "upgrade.exe not found. Please reinstall the full package.",
 
     "dialog.export.title": "Export Logs",
     "dialog.export.success": "Exported successfully to:\n{path}",
@@ -111,18 +121,17 @@
     "home.btn.stop": "■ Stop Task",
     "home.btn.stopping": "Stopping...",
 
-
     "tray.stop": "Stop Task",
     "tray.quit": "Quit MaaAuto",
     "tray.stopped": "Task stopped.",
-    "tray.no_task": "No task is currently running.",    
+    "tray.no_task": "No task is currently running.",
     "tray.settings": "Settings",
     "tray.minimized": "Minimized to tray, running in background.",
 
     "settings.accent_color": "Accent Color",
     "settings.accent_color.desc": "Used by buttons, switches, sliders and selections",
     "settings.accent_color.custom": "Custom…",
-    
+
     "common.ok": "OK",
     "common.cancel": "Cancel",
     "common.save": "Save",
@@ -164,5 +173,8 @@
 
     "serverchan.test.success": "Push succeeded",
     "serverchan.test.failed": "Push failed",
-    "serverchan.test.empty_key": "Please enter your SendKey first"
+    "serverchan.test.empty_key": "Please enter your SendKey first",
+
+    "upgrade.pending_after_task": "New version {version} detected, will upgrade after the task finishes",
+    "upgrade.available": "New version {version} available. Check About page."
 }

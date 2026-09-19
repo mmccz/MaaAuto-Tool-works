@@ -26,9 +26,6 @@ def interruptible_sleep(seconds, chunk=0.5):
     """
     分段睡眠，每 chunk 秒检查一次中断。
     用于替代裸 time.sleep()，让用户中止能得到及时响应。
-
-    :param seconds: 总睡眠时长（秒），支持小数
-    :param chunk:   单片时长（秒），默认 0.5 秒。越小响应越快，但轮询越频繁。
     """
     remaining = float(seconds)
     while remaining > 0:
@@ -45,7 +42,9 @@ WHITE_LIST = [
     "mumupalyer.exe", "mumuplayer.exe", "nemuplayer.exe", "dnplayer.exe",
     "maa.exe", "maacore.exe", "maa-cli.exe",
     "maaend.exe", "maaend v2.29.0-beta.1",  # 保留旧版，兼容新版
-    "python.exe", "pythonw.exe", "maa_auto.exe"
+    "python.exe", "pythonw.exe", "maa_auto.exe",
+    # ---- 升级/卸载（与 MaaAutoInstaller 对齐，2026-09 冻结）----
+    "upgrade.exe", "uninstall.exe",
 ]
 
 
@@ -175,7 +174,7 @@ def minimize_process_windows(process_names):
     """将指定进程的窗口最小化（支持模糊匹配）"""
     process_names = [p.lower() for p in process_names]
     minimized_count = 0
-    processed_pids = set()  # 防止重复处理同一个进程
+    processed_pids = set()
 
     def enum_windows_callback(hwnd, _):
         nonlocal minimized_count
@@ -206,7 +205,7 @@ def bring_process_to_front(process_names):
     """将指定进程的窗口还原并置于最前面（支持模糊匹配）"""
     process_names = [p.lower() for p in process_names]
     brought_count = 0
-    processed_pids = set()  # 防止重复处理同一个进程
+    processed_pids = set()
 
     def enum_windows_callback(hwnd, _):
         nonlocal brought_count
@@ -219,7 +218,6 @@ def bring_process_to_front(process_names):
                 proc_name = proc.name().lower()
                 for target_name in process_names:
                     if target_name in proc_name:  # 模糊匹配
-                        # 还原窗口并强行置顶
                         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                         win32gui.SetWindowPos(
                             hwnd,
@@ -228,7 +226,7 @@ def bring_process_to_front(process_names):
                             win32con.SWP_NOMOVE | win32con.SWP_NOSIZE
                         )
                         win32gui.SetForegroundWindow(hwnd)
-                        time.sleep(1)  # 给窗口一点时间渲染（短，无需中断）
+                        time.sleep(1)
                         win32gui.SetWindowPos(
                             hwnd,
                             win32con.HWND_NOTOPMOST,

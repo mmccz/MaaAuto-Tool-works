@@ -69,6 +69,7 @@ HIDDEN_IMPORTS = [
     "win32process",
     "win32con",
     "winreg",
+    "serverchan_sdk",   # ← 本地文件 serverchan_sdk.py，确保进 exe
 ]
 
 # 体积优化：明确排除这些包
