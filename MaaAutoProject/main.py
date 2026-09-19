@@ -127,33 +127,28 @@ def _write_launch_args(logger):
 
 # --------------------------------------------------------------------------- #
 # 权限
+#
+# 自 v2.1.0 起，安装器在安装时会为 MaaAuto.exe 写入 RUNASADMIN 兼容标志：
+#     HKCU\Software\Microsoft\Windows\CurrentVersion\AppCompatFlags\Layers
+# 因此主程序每次启动都会弹 UAC，且 is_admin() 恒为 True。
+#
+# 主程序**不再自我提权**（原 elevate_if_needed() 已移除，2026-09-20）：
+#   - 若 RUNASADMIN 标志 + ShellExecuteW("runas") 同时生效 → 二次 UAC 弹窗
+#   - 由安装器统一负责提权，是更清晰的方案
+#   - 原 --no-admin / --elevated 参数随之废弃，不再有实际作用
+#
+# 保留 is_admin() 供内部诊断 / 未来扩展使用。
 # --------------------------------------------------------------------------- #
 def is_admin() -> bool:
+    """当前进程是否以管理员身份运行。
+
+    注意：安装器为 MaaAuto.exe 设置了 RUNASADMIN 兼容标志后，
+    本函数在正常安装环境下**恒返回 True**。
+    """
     try:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:
         return False
-
-
-def elevate_if_needed() -> bool:
-    if is_admin():
-        return False
-    if "--no-admin" in sys.argv:
-        return False
-    if "--elevated" in sys.argv:
-        return False
-    args = [a for a in sys.argv[1:] if a != "--elevated"]
-    args.append("--elevated")
-    params = " ".join(f'"{a}"' if " " in a else a for a in args)
-    try:
-        ret = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, params, None, 1
-        )
-        if ret > 32:
-            return True
-    except Exception:
-        pass
-    return False
 
 
 # --------------------------------------------------------------------------- #
