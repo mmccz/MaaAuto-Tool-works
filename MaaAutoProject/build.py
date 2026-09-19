@@ -54,7 +54,7 @@ EXTRA_DIST_FILES = [
     "_version_info.txt",   # 由本脚本生成
 ]
 
-# pyautogui / Pillow / psutil 等常被 PyInstaller 漏掉的隐式导入
+# pyautogui / Pillow / psutil / cv2 等常被 PyInstaller 漏掉的隐式导入
 HIDDEN_IMPORTS = [
     "pyscreeze",
     "pygetwindow",
@@ -70,6 +70,7 @@ HIDDEN_IMPORTS = [
     "win32con",
     "winreg",
     "serverchan_sdk",   # ← 本地文件 serverchan_sdk.py，确保进 exe
+    "cv2",              # ← pyautogui confidence 参数依赖（opencv-python-headless）
 ]
 
 # 体积优化：明确排除这些包
@@ -330,6 +331,18 @@ def main():
 
     if not ensure_pyinstaller():
         sys.exit(1)
+
+    # 检查 cv2 是否可用（否则打出来的包找图会失败）
+    try:
+        import cv2  # noqa: F401
+        print(f"[info] OpenCV 已安装（找图 confidence 参数可用）")
+    except ImportError:
+        print()
+        print("=" * 60)
+        print("[warn] 未检测到 OpenCV，打出的包将无法使用 confidence 找图。")
+        print("       建议先安装：pip install opencv-python-headless")
+        print("=" * 60)
+        print()
 
     info = read_app_info()
     print(f"[info] 应用名     : {info['APP_DISPLAY_NAME']}")

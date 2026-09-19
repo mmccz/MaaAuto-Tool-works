@@ -198,6 +198,7 @@ def check_dependencies():
         "psutil": "psutil",
         "pyautogui": "pyautogui",
         "pillow": "Pillow",
+        "opencv": "opencv-python-headless",   # ← pyautogui confidence 参数依赖
         "packaging": "packaging",
         "pywin32": "pywin32",
     }

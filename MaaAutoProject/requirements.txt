@@ -1,12 +1,20 @@
-# MaaAuto 主程序依赖
-# 注：pyinstaller 只用于打包，运行时不需要，但保留方便开发者一键安装
+# ---- 核心 UI ----
+PySide6>=6.5.0
 
-PySide6>=6.6.0
-pyautogui>=0.9.54
+# ---- 打包 ----
+pyinstaller>=6.0
+
+# ---- 进程 / 窗口 ----
 psutil>=5.9.0
 pywin32>=306
-Pillow>=10.0.0
-packaging>=23.0
 
-# 打包工具（build.py / publish.py 用）
-pyinstaller>=6.0.0
+# ---- 自动化找图 ----
+pyautogui>=0.9.54
+Pillow>=10.0.0
+
+# ---- 图像识别（pyautogui confidence 参数依赖）----
+# 用 headless 版：无 GUI 依赖，体积比 opencv-python 小
+opencv-python-headless>=4.8.0
+
+# ---- 版本比较（update_checker）----
+packaging>=23.0

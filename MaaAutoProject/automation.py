@@ -3,8 +3,8 @@ import subprocess
 import os
 import sys
 import datetime
-import pyautogui
 import logging
+import pyautogui
 from utils import resource_path
 from process_utils import (kill_foreground_apps, kill_blacklist_apps,
                            is_process_running,
@@ -17,6 +17,28 @@ from notifier import send_task_report  # <--- 引入独立的推送模块
 logger = logging.getLogger("MaaAuto")
 
 
+# --------------------------------------------------------------------------- #
+# OpenCV 探测
+#
+# pyautogui.locateCenterOnScreen(..., confidence=0.75) 的 confidence 参数
+# 只有在安装了 OpenCV（cv2）时才可用。缺失时会抛：
+#   The confidence keyword argument is only available if OpenCV is installed.
+#
+# 解决：
+#   1) requirements.txt 里声明 opencv-python-headless（推荐，无 GUI 依赖，体积小）
+#   2) 这里探测 cv2；缺失则降级为不带 confidence 的精确匹配（精度下降但仍可用）
+# --------------------------------------------------------------------------- #
+try:
+    import cv2 as _cv2  # noqa: F401
+    HAS_OPENCV = True
+except ImportError:
+    HAS_OPENCV = False
+    logger.warning(
+        "未检测到 OpenCV，找图将使用精确像素匹配（无 confidence 容差）。"
+        "如需更稳的找图，请安装：pip install opencv-python-headless"
+    )
+
+
 def find_and_click(image_name, timeout=60):
     """寻找目标图像并点击"""
     image_path = resource_path(os.path.join("resources", image_name))
@@ -24,12 +46,18 @@ def find_and_click(image_name, timeout=60):
         logger.error(f"【严重错误】找不到图像文件: {image_path}！")
         return False
 
-    logger.info(f"开始寻找目标按钮: {image_name} (超时 {timeout} 秒)")
+    logger.info(f"开始寻找目标按钮: {image_name} (超时 {timeout} 秒)"
+                f"{'' if HAS_OPENCV else ' [无 OpenCV，精确匹配]'}")
     start_time = time.time()
     while time.time() - start_time < timeout:
         check_interrupt()          # ← 中断检查
         try:
-            location = pyautogui.locateCenterOnScreen(image_path, confidence=0.75, grayscale=True)
+            if HAS_OPENCV:
+                location = pyautogui.locateCenterOnScreen(
+                    image_path, confidence=0.75, grayscale=True)
+            else:
+                location = pyautogui.locateCenterOnScreen(
+                    image_path, grayscale=True)
             if location:
                 logger.info(f"找到目标按钮，执行点击... (图片: {image_name})")
                 pyautogui.click(location)
