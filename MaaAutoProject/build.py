@@ -1,26 +1,24 @@
 """
-MaaAuto 一键打包脚本（PyInstaller）
+MaaAuto 一键打包脚本（PyInstaller）。
 
 用法：
-    python build.py                 # 默认：onedir + 无控制台 + 写版本信息
-    python build.py --debug         # 保留控制台窗口（方便看崩溃日志）
-    python build.py --onefile       # 单文件模式（启动慢，不推荐，pyautogui 资源解压慢）
-    python build.py --keep-build    # 不自动清理 build/ 和 dist/
-    python build.py --no-version    # 不生成 version_info.txt（exe 无属性信息）
-    python build.py --no-clean      # 跳过 pyinstaller --clean（增量更快）
-    python build.py --no-pycache-clean  # 不清理项目里的 __pycache__ 目录
-    python build.py --clean-pycache-only  # 只清理 __pycache__ 然后退出
+    python build.py                 # 默认：onedir + 无控制台
+    python build.py --debug         # 保留控制台窗口
+    python build.py --onefile       # 单文件模式（不推荐，启动慢）
+    python build.py --keep-build    # 不清理 build/ 和 dist/
+    python build.py --no-clean      # 跳过 pyinstaller --clean
+
+产物：
+    dist/MaaAuto/MaaAuto.exe
+    dist/MaaAuto/_internal/...
+    dist/MaaAuto/requirements.txt   （附带文件）
+    dist/MaaAuto/README.md
+    dist/MaaAuto/LICENSE
+    dist/MaaAuto/CHANGELOG.md
+    dist/MaaAuto/_version_info.txt
 
 前置：
     pip install pyinstaller
-
-产物：
-    dist/MaaAuto/MaaAuto.exe         （onedir 模式，推荐直接拷整个 dist/MaaAuto 文件夹）
-    dist/MaaAuto.exe                 （onefile 模式）
-
-注意：
-    config/ 和 logs/ 不打进包里。程序首次运行时会在 exe 同级目录自动创建，
-    所以要保证 exe 所在目录可写（避免装在 C:\\Program Files）。
 """
 
 import os
@@ -32,7 +30,7 @@ import subprocess
 from pathlib import Path
 
 # --------------------------------------------------------------------------- #
-# 常量
+# 路径
 # --------------------------------------------------------------------------- #
 ROOT = Path(__file__).resolve().parent
 DIST_DIR = ROOT / "dist"
@@ -40,11 +38,20 @@ BUILD_DIR = ROOT / "build"
 SPEC_FILE = ROOT / "MaaAuto.spec"
 VERSION_FILE = ROOT / "_version_info.txt"
 
-# 需要打进包里的资源目录（源路径 → 包内相对路径）
+# 打进包里的资源目录（源路径 → 包内相对路径）
 DATA_DIRS = [
     ("resources", "resources"),
     ("themes",    "themes"),
     ("i18n",      "i18n"),
+]
+
+# ★ 额外要拷到 dist/MaaAuto/ 顶层的文件（不通过 PyInstaller add-data）
+EXTRA_DIST_FILES = [
+    "requirements.txt",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "_version_info.txt",   # 由本脚本生成
 ]
 
 # pyautogui / Pillow / psutil 等常被 PyInstaller 漏掉的隐式导入
@@ -64,7 +71,7 @@ HIDDEN_IMPORTS = [
     "winreg",
 ]
 
-# 体积优化：明确排除这些包（如误伤请从列表移除）
+# 体积优化：明确排除这些包
 EXCLUDES = [
     "matplotlib",
     "numpy",
@@ -80,22 +87,20 @@ EXCLUDES = [
     # "tkinter",   # 若 pyautogui 弹窗报错，取消这行注释
 ]
 
-# 清理 __pycache__ 时跳过这些目录名（不区分大小写）
 PYCACHE_SKIP_DIRS = {
     ".git", ".hg", ".svn",
     ".idea", ".vscode",
     "venv", ".venv", "env", ".env",
     "node_modules",
-    "__pycache__",       # 会被专门处理，遍历时不再深入
-    "dist", "build",     # 打包产物目录无需清理
+    "__pycache__",
+    "dist", "build",
 }
 
 
 # --------------------------------------------------------------------------- #
-# 元信息读取
+# 元信息
 # --------------------------------------------------------------------------- #
 def read_app_info():
-    """从 app_info.py 里读取版本号 / 应用名，不 import（避免引入依赖）。"""
     info = {
         "APP_NAME": "MaaAuto",
         "APP_DISPLAY_NAME": "MaaAuto",
@@ -117,7 +122,6 @@ def read_app_info():
 
 
 def version_tuple(ver_str):
-    """把 '2.0.0-Beta1' → (2, 0, 0, 0)，供 exe 属性使用。"""
     m = re.match(r"(\d+)\.(\d+)\.(\d+)", ver_str or "")
     if not m:
         return (0, 0, 0, 0)
@@ -125,7 +129,7 @@ def version_tuple(ver_str):
 
 
 # --------------------------------------------------------------------------- #
-# version_info.txt 生成（PyInstaller 的 exe 属性格式）
+# version_info.txt 生成
 # --------------------------------------------------------------------------- #
 def write_version_file(info):
     ver = version_tuple(info["APP_VERSION"])
@@ -156,7 +160,7 @@ VSVersionInfo(
   kids=[
     StringFileInfo([
       StringTable(
-        u'080404B0',   # 0804 = 简体中文，04B0 = Unicode
+        u'080404B0',
         [StringStruct(u'CompanyName',      u'{company}'),
          StringStruct(u'FileDescription',  u'{name}'),
          StringStruct(u'FileVersion',      u'{info["APP_VERSION"]}'),
@@ -194,58 +198,20 @@ def clean_artifacts():
 
 
 def clean_pycache(root: Path = ROOT):
-    """
-    递归删除项目内所有 __pycache__ 目录。
-    - 跳过 PYCACHE_SKIP_DIRS 中列出的目录（.git / venv / node_modules 等）
-    - 同时删除散落的 .pyc / .pyo 文件
-    """
-    if not root.exists():
-        return 0
-
-    removed_dirs = 0
-    removed_files = 0
-
-    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
-        cur = Path(dirpath)
-
-        # 就地过滤掉不想深入的目录
-        dirnames[:] = [
-            d for d in dirnames
-            if d.lower() not in PYCACHE_SKIP_DIRS
-        ]
-
-        # 删除当前层的 __pycache__
+    removed = 0
+    for dirpath, dirnames, _files in os.walk(root, topdown=True):
+        dirnames[:] = [d for d in dirnames if d.lower() not in PYCACHE_SKIP_DIRS]
         if "__pycache__" in dirnames:
-            pyc_dir = cur / "__pycache__"
-            try:
-                shutil.rmtree(pyc_dir, ignore_errors=True)
-                print(f"[pycache] 删除 {pyc_dir.relative_to(root)}")
-                removed_dirs += 1
-            except Exception as e:
-                print(f"[pycache] 删除失败 {pyc_dir}: {e}")
-            # 从遍历队列里移除，避免继续深入
+            p = Path(dirpath) / "__pycache__"
+            shutil.rmtree(p, ignore_errors=True)
+            removed += 1
             dirnames.remove("__pycache__")
-
-        # 删除散落的 .pyc / .pyo（少数情况下会出现在非 __pycache__ 位置）
-        for fn in filenames:
-            if fn.endswith((".pyc", ".pyo")):
-                fp = cur / fn
-                try:
-                    fp.unlink()
-                    removed_files += 1
-                except Exception:
-                    pass
-
-    if removed_dirs == 0 and removed_files == 0:
-        print("[pycache] 未发现需要清理的 __pycache__ / .pyc")
-    else:
-        print(f"[pycache] 共删除 {removed_dirs} 个 __pycache__ 目录，"
-              f"{removed_files} 个 .pyc/.pyo 文件")
-    return removed_dirs + removed_files
+    if removed:
+        print(f"[pycache] 清理 {removed} 个 __pycache__")
 
 
 # --------------------------------------------------------------------------- #
-# 检查环境
+# 环境检查
 # --------------------------------------------------------------------------- #
 def ensure_pyinstaller():
     try:
@@ -277,17 +243,9 @@ def build_command(args, info, version_file):
     else:
         print(f"[warn] 找不到图标 {icon}，将使用默认图标。")
 
-    # 入口
     cmd.append(str(ROOT / "main.py"))
-
-    # onedir / onefile
     cmd.append("--onefile" if args.onefile else "--onedir")
-
-    # 控制台
-    if args.debug:
-        cmd.append("--console")
-    else:
-        cmd.append("--windowed")
+    cmd.append("--console" if args.debug else "--windowed")
 
     # 资源目录
     sep = os.pathsep
@@ -314,6 +272,33 @@ def build_command(args, info, version_file):
 
 
 # --------------------------------------------------------------------------- #
+# 拷贝额外文件到 dist 顶层
+# --------------------------------------------------------------------------- #
+def copy_extra_dist_files(target_dir: Path):
+    """
+    PyInstaller 只打 exe/_internal，我们要把 requirements.txt、README.md
+    等文件放在 dist/MaaAuto/ 顶层（和 exe 同级），让用户看到跟以前一样的结构。
+    """
+    target_dir = Path(target_dir)
+    copied = 0
+    for name in EXTRA_DIST_FILES:
+        src = ROOT / name
+        if not src.exists():
+            print(f"[warn] 附带文件不存在，跳过: {name}")
+            continue
+        dst = target_dir / name
+        try:
+            if dst.exists():
+                dst.unlink()
+            shutil.copy2(src, dst)
+            print(f"[dist] + {name}")
+            copied += 1
+        except Exception as e:
+            print(f"[warn] 复制 {name} 失败: {e}")
+    return copied
+
+
+# --------------------------------------------------------------------------- #
 # 主流程
 # --------------------------------------------------------------------------- #
 def main():
@@ -322,19 +307,15 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--debug", action="store_true",
-                        help="保留控制台窗口（默认 windowed 无控制台）")
+                        help="保留控制台窗口")
     parser.add_argument("--onefile", action="store_true",
                         help="单文件模式（启动慢，不推荐）")
     parser.add_argument("--keep-build", action="store_true",
                         help="不自动清理 build/ 和 dist/")
     parser.add_argument("--no-clean", action="store_true",
-                        help="跳过 pyinstaller --clean（增量构建更快）")
+                        help="跳过 pyinstaller --clean")
     parser.add_argument("--no-version", action="store_true",
                         help="不生成 exe 版本信息")
-    parser.add_argument("--no-pycache-clean", action="store_true",
-                        help="不清理项目里的 __pycache__ 目录")
-    parser.add_argument("--clean-pycache-only", action="store_true",
-                        help="只清理 __pycache__ 后退出（不打包）")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -346,13 +327,6 @@ def main():
           f" / {'console' if args.debug else 'windowed'}")
     print("=" * 60)
 
-    # -------- 只清 pycache --------
-    if args.clean_pycache_only:
-        print("[mode] 仅清理 __pycache__")
-        clean_pycache(ROOT)
-        print("完成。")
-        return
-
     if not ensure_pyinstaller():
         sys.exit(1)
 
@@ -361,12 +335,9 @@ def main():
     print(f"[info] 版本号     : {info['APP_VERSION']}")
     print(f"[info] 版本元组   : {version_tuple(info['APP_VERSION'])}")
 
-    # -------- 打包前清理 --------
     if not args.keep_build:
         clean_artifacts()
-    if not args.no_pycache_clean:
-        print("[stage] 打包前清理 __pycache__ ...")
-        clean_pycache(ROOT)
+    clean_pycache(ROOT)
 
     # 版本文件
     version_file = None
@@ -377,9 +348,7 @@ def main():
     # 组装命令
     cmd = build_command(args, info, version_file)
     print("\n[cmd] 执行命令：")
-    print("      " + " ".join(
-        f'"{x}"' if " " in x else x for x in cmd
-    ))
+    print("      " + " ".join(f'"{x}"' if " " in x else x for x in cmd))
     print()
 
     # 执行
@@ -390,14 +359,20 @@ def main():
         print("=" * 60)
         sys.exit(ret)
 
-    # -------- 打包后清理（build 过程会在项目内散落 .pyc） --------
-    if not args.no_pycache_clean:
-        print("\n[stage] 打包后清理 __pycache__ ...")
+    # 拷贝额外文件到 dist 顶层
+    if args.onefile:
+        # onefile 模式没有顶层目录，跳过多文件拷贝
+        print("[dist] onefile 模式跳过附带文件拷贝")
+    else:
+        out_dir = DIST_DIR / info["APP_NAME"]
+        copy_extra_dist_files(out_dir)
+
+    if not args.keep_build:
         clean_pycache(ROOT)
 
     # 收尾
     print("\n" + "=" * 60)
-    print("打包成功 ✅")
+    print("[OK] 打包成功")
     print("=" * 60)
 
     if args.onefile:
@@ -408,21 +383,12 @@ def main():
     if exe.exists():
         size_mb = exe.stat().st_size / (1024 * 1024)
         print(f"产物：{exe}")
-        print(f"大小：{size_mb:.1f} MB")
+        print(f"主程序：{size_mb:.1f} MB")
         if not args.onefile:
             total = sum(f.stat().st_size for f in exe.parent.rglob("*") if f.is_file())
             print(f"整包：{total / (1024 * 1024):.1f} MB（含依赖）")
-            print()
-            print("提示：分发时请拷贝整个文件夹：")
-            print(f"      {exe.parent}")
     else:
         print("[warn] 未找到预期的 exe，请检查 dist/ 目录。")
-
-    print()
-    print("运行前请确认：")
-    print("  1. exe 所在目录可写（config/ 和 logs/ 会在同级创建）")
-    print("  2. 若程序闪退，用 `python build.py --debug` 重新打包查看报错")
-    print("=" * 60)
 
 
 if __name__ == "__main__":

@@ -119,3 +119,9 @@ secrets.json
 # 调试
 debug/
 *.pdb
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec
+_version_info.txt
