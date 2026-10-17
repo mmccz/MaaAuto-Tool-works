@@ -9,10 +9,15 @@ logger = logging.getLogger("MaaAuto")
 
 
 def resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
+    """返回资源的绝对路径。
+
+    打包态（PyInstaller）从 ``sys._MEIPASS`` 取；
+    开发态从**本文件所在目录**取，而不是 CWD —— 否则从别处启动、
+    或走开机自启（Run 键没有工作目录）时会找不到 resources/themes/i18n。
+    """
+    base_path = getattr(sys, "_MEIPASS", None)
+    if not base_path:
+        base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
 

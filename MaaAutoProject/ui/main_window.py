@@ -24,7 +24,6 @@ from ui.animations import theme_transition
 
 
 class Worker(QThread):
-    log_signal = Signal(str)
     task_finished = Signal(str)
 
     def __init__(self, config, run_log_dir):
@@ -34,26 +33,22 @@ class Worker(QThread):
 
     def run(self):
         logger = logging.getLogger("MaaAuto")
-        for h in logger.handlers[:]:
-            logger.removeHandler(h)
 
+        # 只挂/摘自己的文件 handler，绝不 removeHandler 掉全局 handler。
+        #
+        # 旧的实现会在开头摘掉 logger 的所有 handler（包括 main.py 里
+        # setup_logger() 创建、并已 connect 到首页日志的那个），结束时再补
+        # 一个**没有接信号**的 LogHandler。后果：
+        #   - 从第 2 次执行起，主线程日志不再出现在首页；
+        #   - 每次运行多挂一个空 handler。
+        #
+        # 现在界面日志统一走 main.py 的那个 LogHandler：它是 QObject，
+        # 从 worker 线程 emit 会被 Qt 排队到主线程，安全且不会重复。
         file_handler = logging.FileHandler(
             os.path.join(self.run_log_dir, "task.log"), encoding="utf-8")
         file_handler.setFormatter(
             logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         logger.addHandler(file_handler)
-
-        class SignalHandler(logging.Handler):
-            def __init__(self, signal):
-                super().__init__()
-                self.signal = signal
-
-            def emit(self, record):
-                self.signal.emit(self.format(record))
-
-        sh = SignalHandler(self.log_signal)
-        sh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        logger.addHandler(sh)
 
         try:
             status = execute_workflow(self.config, logger) or "成功"
@@ -62,15 +57,8 @@ class Worker(QThread):
             logger.error(f"执行错误: {e}")
             self.task_finished.emit("报错")
         finally:
-            logger.removeHandler(sh)
             logger.removeHandler(file_handler)
             file_handler.close()
-
-            from config_manager import LogHandler
-            base = LogHandler()
-            base.setFormatter(
-                logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-            logger.addHandler(base)
 
 
 class MainWindow(QMainWindow):
@@ -145,6 +133,9 @@ class MainWindow(QMainWindow):
         self._pending_upgrade_silent = False
         self._pending_upgrade_info = None
 
+        # 定时撞上运行中任务时，记下"已提示过顺延"的日期，避免每 10s 刷日志
+        self._schedule_deferred_date = ""
+
         # 更新检查线程句柄
         self._update_check_worker = None
 
@@ -217,12 +208,17 @@ class MainWindow(QMainWindow):
     # 配置 / 主题 / 语言 / 强调色
     # ==================================================================
     def _on_config_changed(self, cfg):
+        auto_start_before = self.config.get("auto_start", False)
         self.config.update(cfg)
         save_config(self.config)
         self._apply_background()
         self._refresh_home_stats()
         self._update_next_run()
         self.stack.set_animation_enabled(self.config.get("show_animation", True))
+
+        # 开机自启是注册表状态，不能只等退出时才写：用户拨开关就该生效。
+        if bool(self.config.get("auto_start", False)) != bool(auto_start_before):
+            self.set_auto_start()
 
     def _on_theme_changed(self, theme):
         self.config["theme"] = theme
@@ -310,13 +306,24 @@ class MainWindow(QMainWindow):
         now = QTime.currentTime()
         target = QTime.fromString(self.config.get("execute_time", "08:00"), "HH:mm")
         today = QDate.currentDate().toString("yyyy-MM-dd")
-        if now >= target and self.config.get("last_trigger_date") != today:
-            self.logger.info(
-                f"定时触发：当前 {now.toString('HH:mm')} >= 设定 {target.toString('HH:mm')}")
-            self.config["last_trigger_date"] = today
-            save_config(self.config)
-            self._update_next_run()
-            self.manual_run()
+        if not (now >= target and self.config.get("last_trigger_date") != today):
+            return
+
+        # 任务还在跑：**不要**写 last_trigger_date，等它结束后当天的下一次
+        # 10s 检查再补跑。旧实现先写日期再调 manual_run()，而 manual_run()
+        # 发现已有任务在跑只打一行日志就返回 —— 结果当天永远不补跑。
+        if self._is_running():
+            if self._schedule_deferred_date != today:
+                self._schedule_deferred_date = today
+                self.logger.info("定时时间已到，但任务仍在执行；结束后会自动补跑一次。")
+            return
+
+        self.logger.info(
+            f"定时触发：当前 {now.toString('HH:mm')} >= 设定 {target.toString('HH:mm')}")
+        self.config["last_trigger_date"] = today
+        save_config(self.config)
+        self._update_next_run()
+        self.manual_run()
 
     # ==================================================================
     # 执行
@@ -340,7 +347,6 @@ class MainWindow(QMainWindow):
         self.logger.info(f"本次任务日志: {run_dir}")
         self.home_page.set_running(True)
         self.worker = Worker(self.config, run_dir)
-        self.worker.log_signal.connect(self.home_page.append_log)
         self.worker.task_finished.connect(self._on_task_finished)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.start()
@@ -452,15 +458,21 @@ class MainWindow(QMainWindow):
     def set_auto_start(self):
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
         app_name = "MaaAuto"
-        exe_path = os.path.abspath(sys.argv[0])
-        if exe_path.endswith(".py"):
-            exe_path = f'python "{exe_path}"'
+
+        # Run 键的值必须是**单个可执行文件**（可带参数）。
+        # 旧实现在开发态拼成 `"python "C:\...\main.py"" --autostart`，
+        # 双引号嵌套，注册表值是坏的。这里改用 sys.executable。
+        if getattr(sys, "frozen", False):
+            command = f'"{sys.executable}" --autostart'
+        else:
+            script = os.path.abspath(sys.argv[0])
+            command = f'"{sys.executable}" "{script}" --autostart'
+
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
                                  winreg.KEY_SET_VALUE)
             if self.config.get("auto_start"):
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ,
-                                  f'"{exe_path}" --autostart')
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, command)
             else:
                 try:
                     winreg.DeleteValue(key, app_name)

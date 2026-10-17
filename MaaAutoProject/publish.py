@@ -66,6 +66,13 @@ EXCLUDE_FILES = {
 # 任意层级都排除的后缀
 EXCLUDE_SUFFIXES = (".pyc", ".pyo", ".log")
 
+# 发布约定：只使用「主程序 packaging」与「升级器自研解析器」都能接受的
+# PEP 440 子集。与 docs/INSTALLER_INTEGRATION.md §4.2 保持一致。
+# 允许：2.1.0 / v2.1.0（tag 前缀 v 由发布方决定，APP_VERSION 不带 v）
+#       2.1.0b1 / 2.1.0rc2 / 2.1.0.post1
+# 不允许：2.1.0-beta / 2.1.0.dev1 / 2.1.0+local
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?(?:\.post\d+)?$")
+
 
 # --------------------------------------------------------------------------- #
 # 工具
@@ -80,6 +87,27 @@ def read_app_info():
             if m:
                 info[key] = m.group(1)
     return info
+
+
+def check_version_format(version: str) -> bool:
+    """校验 APP_VERSION 落在双方约定的版本语法子集内。
+
+    升级器使用自研解析器，不接受 .devN / +local / -beta；主程序用
+    packaging，接受范围更宽。只有子集内的版本才能在两边行为一致。
+    """
+    if VERSION_RE.match(version or ""):
+        print(f"[publish] 版本语法检查通过: {version}")
+        return True
+
+    print()
+    print("=" * 60)
+    print(f"[warn] APP_VERSION = {version!r} 不符合发布约定")
+    print("       允许: X.Y.Z / X.Y.ZaN / X.Y.ZbN / X.Y.ZrcN / X.Y.Z.postN")
+    print("       不允许: -beta / .devN / +local / 其他非 PEP 440 写法")
+    print("       详见 docs/INSTALLER_INTEGRATION.md §4.2")
+    print("=" * 60)
+    print()
+    return False
 
 
 def sha256_of_file(path: Path) -> str:
@@ -256,6 +284,11 @@ def main():
 
     info = read_app_info()
     version = info["APP_VERSION"]
+    # 版本语法是跨仓库协议：升级器用自研解析器，只认约定子集。
+    # 这里必须阻断，否则会打出一个「主程序说有新版、升级器不认」的 Source.zip。
+    if not check_version_format(version):
+        print("[publish] 已中止：请先把 app_info.py 的 APP_VERSION 改成允许的格式。")
+        sys.exit(2)
 
     print("=" * 60)
     print(f"MaaAuto 发布脚本 —— v{version}")

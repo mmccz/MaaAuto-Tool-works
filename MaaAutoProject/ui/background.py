@@ -12,8 +12,22 @@ class BackgroundWidget(QWidget):
         self.setObjectName("BackgroundRoot")
         self._pixmap = None
         self._mode = "cover"
+        # 上次真正渲染用的参数；用于跳过重复解码
+        self._params = None
 
     def set_background(self, image_path, opacity=0.3, blur=0, mode="cover"):
+        # 参数没变就不要再解码：主窗口每次配置变更都会调到这里，
+        # 而 PIL 解码 + 高斯模糊对大图很贵（表现为设置页输入卡顿）。
+        # mtime 参与比较，保证"同一路径换了图片"仍然刷新。
+        try:
+            mtime = os.path.getmtime(image_path) if image_path else None
+        except OSError:
+            mtime = None
+        params = (image_path or "", float(opacity or 0), int(blur or 0), mode, mtime)
+        if params == self._params:
+            return
+        self._params = params
+
         self._mode = mode
         if not image_path or not os.path.exists(image_path):
             self._pixmap = None

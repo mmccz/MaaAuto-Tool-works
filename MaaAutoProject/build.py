@@ -74,9 +74,12 @@ HIDDEN_IMPORTS = [
 ]
 
 # 体积优化：明确排除这些包
+#
+# ★ 不要排除 numpy：requirements.txt 里的 opencv-python-headless（cv2）依赖它。
+#   历史上这里排过 numpy，结果打包版 `import cv2` 直接失败 → 找图静默降级为
+#   精确像素匹配，而且只在安装版复现，极易被误判成「模板没截好」。
 EXCLUDES = [
     "matplotlib",
-    "numpy",
     "scipy",
     "pandas",
     "IPython",
@@ -336,6 +339,15 @@ def main():
     try:
         import cv2  # noqa: F401
         print(f"[info] OpenCV 已安装（找图 confidence 参数可用）")
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            print()
+            print("=" * 60)
+            print("[warn] 找到 cv2 但没有 numpy —— cv2 无法工作！")
+            print("       打包版会退化为精确像素匹配。请先安装：pip install numpy")
+            print("=" * 60)
+            print()
     except ImportError:
         print()
         print("=" * 60)

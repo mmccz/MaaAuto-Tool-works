@@ -13,6 +13,7 @@ from PySide6.QtCore import QTimer
 from utils import resource_path
 from config_manager import (load_config, save_config, setup_logger,
                             CONFIG_DIR, LOG_DIR)
+from upgrade_guard import resolve_upgrade_flag
 from i18n import init_i18n
 from themes import ThemeManager
 from ui.main_window import MainWindow
@@ -86,7 +87,7 @@ def _check_upgrade_failure():
     logger.info(f"发现升级失败标志: {data}")
 
     msg = (
-        f"上次自动升级失败\n\n"
+        f"上次升级未能完成\n\n"
         f"从 {data.get('from_version', '?')} → {data.get('to_version', '?')}\n"
         f"原因：{data.get('reason', '未知')}\n"
         f"日志：{data.get('log_path', '未知')}\n\n"
@@ -129,7 +130,7 @@ def _write_launch_args(logger):
 # 权限
 #
 # 自 v2.1.0 起，安装器在安装时会为 MaaAuto.exe 写入 RUNASADMIN 兼容标志：
-#     HKCU\Software\Microsoft\Windows\CurrentVersion\AppCompatFlags\Layers
+#     HKCU\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers
 # 因此主程序每次启动都会弹 UAC，且 is_admin() 恒为 True。
 #
 # 主程序**不再自我提权**（原 elevate_if_needed() 已移除，2026-09-20）：
@@ -200,11 +201,15 @@ def main():
         _handle_upgrading_mode()
 
     # 1) config/.upgrading 兜底
+    #
+    #    正常情况：升级器写好标志 → 主程序退出。
+    #    异常情况：升级器崩溃 / 被任务管理器结束 / 停不掉主程序就返回，
+    #    标志会残留，用户此后双击主程序“毫无反应”。由 upgrade_guard 判定
+    #    “超时且无升级器进程”后删除标志并继续启动；判定规则见该模块。
     upgrading_flag = os.path.join(CONFIG_DIR, ".upgrading")
-    if os.path.exists(upgrading_flag):
-        logging.getLogger("MaaAuto").info(
-            f"检测到 {upgrading_flag}，直接退出。"
-        )
+    if not resolve_upgrade_flag(
+            upgrading_flag,
+            log_path=os.path.join(LOG_DIR, "upgrading.log")):
         sys.exit(0)
 
     # 2) DPI
@@ -247,6 +252,9 @@ def main():
     window = MainWindow(i18n, theme_manager)
 
     # 8) 日志信号 → 首页
+    #
+    # ★ 这是界面日志的**唯一**通路：Worker 只挂自己的文件 handler，
+    #   不再接管全局 handler。删掉这行会让任务日志在界面上消失。
     ui_handler.log_signal.connect(window.home_page.append_log)
 
     # 9) 写启动参数（内部 debug 级别，不刷主界面）
