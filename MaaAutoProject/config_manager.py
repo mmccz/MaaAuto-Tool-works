@@ -82,9 +82,19 @@ def load_config():
 
 
 def save_config(config):
-    """写 config.json（不带 BOM，UTF-8 无 BOM）。"""
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+    """写 config.json（UTF-8 无 BOM）。
+
+    先写同目录临时文件、再 os.replace 原子替换。主程序是「改完即存」，
+    而升级/退出/任务管理器结束都可能落在写入中间；直接覆盖原文件时
+    一旦被打断就是半截 JSON，下次启动 load_config() 会静默回退全默认值，
+    用户会感觉「配置全丢了」。
+    """
+    tmp_file = CONFIG_FILE + ".tmp"
+    with open(tmp_file, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_file, CONFIG_FILE)
 
 
 class LogHandler(logging.Handler, QObject):

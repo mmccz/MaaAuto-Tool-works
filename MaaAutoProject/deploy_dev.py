@@ -20,7 +20,6 @@
     python deploy_dev.py E:\\MaaAuto-Test    # 指定目录
 """
 
-import os
 import sys
 import shutil
 import argparse

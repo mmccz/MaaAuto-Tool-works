@@ -1,7 +1,6 @@
 import time
 import subprocess
 import os
-import sys
 import datetime
 import logging
 import pyautogui
@@ -37,6 +36,21 @@ except ImportError:
         "未检测到 OpenCV，找图将使用精确像素匹配（无 confidence 容差）。"
         "如需更稳的找图，请安装：pip install opencv-python-headless"
     )
+
+
+def _launch_program(exe_path, logger):
+    """启动外部程序（MAA / MaaEnd）。
+
+    配置项通常是 .exe 的绝对路径，可能带空格（如 Program Files）。
+    旧的写法 `Popen(path, shell=True)` 会在第一个空格处截断，启动失败；
+    这里优先用单元素列表（不经 shell），只有在路径本身不存在、用户实际
+    填的是「exe + 参数」整串命令时，才回退到 shell 保持兼容。
+    """
+    if os.path.exists(exe_path):
+        return subprocess.Popen([exe_path])
+    logger.warning(
+        "启动路径不是已存在的文件，按整串命令行交给 shell 处理: %s", exe_path)
+    return subprocess.Popen(exe_path, shell=True)
 
 
 def find_and_click(image_name, timeout=60):
@@ -86,7 +100,7 @@ def run_maa_phase(config, logger):
         if not os.path.exists(maa_path):
             raise FileNotFoundError(f"MAA 路径无效: {maa_path}")
         logger.info(f"MAA 未运行，正在启动新进程: {maa_path}")
-        subprocess.Popen(maa_path, shell=True)
+        _launch_program(maa_path, logger)
         interruptible_sleep(5)
 
     logger.info("正在尝试点击 MAA 的【Link Start!】按钮...")
@@ -120,7 +134,7 @@ def run_maaend_phase(config, logger):
         if not os.path.exists(maaend_path):
             raise FileNotFoundError(f"MaaEnd 路径无效: {maaend_path}")
         logger.info(f"MaaEnd 未运行，正在启动新进程: {maaend_path}")
-        subprocess.Popen(maaend_path, shell=True)
+        _launch_program(maaend_path, logger)
         interruptible_sleep(10)
 
     logger.info("正在尝试点击 MaaEnd 的【开始任务】按钮...")
@@ -222,8 +236,8 @@ def execute_workflow(config, logger):
                     logger.error(f"MaaEnd 阶段发生异常: {e}")
                     if attempt < retry_times:
                         logger.info(f"将在 {retry_interval} 秒后重试 MaaEnd 阶段...")
-                        if is_process_running(["maaend.exe"]):
-                            bring_process_to_front(["maaend.exe"])
+                        if is_process_running(["maaend"]):
+                            bring_process_to_front(["maaend"])
                         interruptible_sleep(retry_interval)   # ← 可中断
                     else:
                         logger.error("MaaEnd 阶段重试次数已达上限。")

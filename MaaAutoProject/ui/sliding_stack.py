@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import (Qt, QPropertyAnimation, QParallelAnimationGroup,
+from PySide6.QtCore import (QPropertyAnimation, QParallelAnimationGroup,
                             QEasingCurve, QPoint, Signal)
 
 

@@ -3,11 +3,10 @@ import sys
 import zipfile
 import datetime
 import platform
-import subprocess
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QFileDialog, QMessageBox, QFrame)
-from PySide6.QtCore import Qt, QUrl, QTimer
-from PySide6.QtGui import QIcon, QDesktopServices
+                               QPushButton, QFileDialog, QMessageBox)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtCore import qVersion
 from ui.components import Card
 from utils import resource_path, AsyncWorker

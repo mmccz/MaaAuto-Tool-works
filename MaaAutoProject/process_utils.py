@@ -41,7 +41,7 @@ WHITE_LIST = [
     "system", "registry", "idle", "searchindexer.exe", "securityhealthsystray.exe",
     "mumupalyer.exe", "mumuplayer.exe", "nemuplayer.exe", "dnplayer.exe",
     "maa.exe", "maacore.exe", "maa-cli.exe",
-    "maaend.exe", "maaend v2.29.0-beta.1",  # 保留旧版，兼容新版
+    "maaend.exe",          # 进程匹配是「包含」比较，"maaend" 已能覆盖带版本号的名字
     "python.exe", "pythonw.exe", "maa_auto.exe",
     # ---- 升级/卸载（与 MaaAutoInstaller 对齐，2026-09 冻结）----
     "upgrade.exe", "uninstall.exe",

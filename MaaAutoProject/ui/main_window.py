@@ -6,14 +6,15 @@ import winreg
 import atexit
 import base64
 
-from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout,
+from PySide6.QtWidgets import (QMainWindow, QHBoxLayout,
                                QSystemTrayIcon, QMenu, QApplication)
-from PySide6.QtCore import Qt, QTimer, QThread, Signal, QTime, QDate
+from PySide6.QtCore import QTimer, QThread, Signal, QTime, QDate
 from PySide6.QtGui import QIcon, QAction
 
 from config_manager import load_config, save_config, LOG_DIR, CONFIG_DIR
 from automation import execute_workflow
-from utils import resource_path, kill_all_related_processes, AsyncWorker
+from utils import resource_path, AsyncWorker
+from process_utils import kill_all_related_processes
 from ui.background import BackgroundWidget
 from ui.sidebar import Sidebar
 from ui.sliding_stack import SlidingStack

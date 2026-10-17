@@ -252,6 +252,11 @@ def build_command(args, info, version_file):
     cmd.append("--onefile" if args.onefile else "--onedir")
     cmd.append("--console" if args.debug else "--windowed")
 
+    # 关闭 UPX：杀软对 UPX 壳误报率高，UPX 也常压坏 Qt 的 DLL。
+    # （安装器侧原来只设了 PYI_DISABLE_UPX 环境变量，PyInstaller 不认，等于没生效；
+    #  这里显式传 --noupx，两边一致。）
+    cmd.append("--noupx")
+
     # 资源目录
     sep = os.pathsep
     for src, dst in DATA_DIRS:

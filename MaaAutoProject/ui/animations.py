@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QGraphicsOpacityEffect, QApplication)
 from PySide6.QtCore import (Qt, QPropertyAnimation, QEasingCurve,
                             QAbstractAnimation, QTimer)
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtGui import QPainter
 
 
 def fade_in(widget, duration=220):

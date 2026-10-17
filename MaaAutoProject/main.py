@@ -48,7 +48,7 @@ def _handle_upgrading_mode():
         logger.error(f"保存配置失败: {e}")
 
     try:
-        from utils import kill_all_related_processes
+        from process_utils import kill_all_related_processes
         kill_all_related_processes()
         logger.info("子进程清理完成")
     except Exception as e:

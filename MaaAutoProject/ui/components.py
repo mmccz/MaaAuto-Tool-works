@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QFrame, QWidget, QLabel, QHBoxLayout, QVBoxLayout
                                QSizePolicy, QPushButton, QAbstractButton,
                                QButtonGroup, QColorDialog)
 from PySide6.QtCore import (Qt, Property, QPropertyAnimation, QEasingCurve,
-                            QAbstractAnimation, QRectF, Signal)
+                            QRectF, Signal)
 from PySide6.QtGui import QColor, QPainter
 
 
