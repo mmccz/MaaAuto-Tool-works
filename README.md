@@ -251,6 +251,20 @@ Content-Type: application/json
 
 ---
 
+## 🔌 与安装器的约定
+
+安装版由 [MaaAuto-Installer](https://github.com/mmccz/MaaAuto-Installer) 负责安装、升级与卸载。两边只通过三个文件握手：
+
+| 文件 | 写入方 | 读取方 | 含义 |
+| --- | --- | --- | --- |
+| `config/.upgrading` | 升级器 | 主程序（启动 + 每秒轮询） | 存在即退出；正常路径由升级器删除，残留 5 分钟后由主程序自动清理 |
+| `config/upgrade_failed.flag` | 升级器 | 主程序（启动 300ms 后） | JSON；弹窗提示后由主程序删除 |
+| `config/last_launch_args.json` | 主程序 | 升级器 | 重启时恢复 `--autostart` 等参数 |
+
+`app_info.py` 里的 `APP_UPDATE_API`、`APP_SOURCE_ASSET`、`APP_MIN_INSTALLER_VERSION` 与安装器 `installer/contract.py` 是**冻结契约**：改任一值等于协议变更，必须两仓库同时发版（`extra` 只在安装时写入，升级不刷新，改了对老用户不生效）。
+
+---
+
 ## 📄 许可证与相关仓库
 
 本项目采用 **MIT License**，见 [LICENSE](LICENSE)。
@@ -259,5 +273,4 @@ Content-Type: application/json
 | --- | --- |
 | [MaaAuto-Tool-works](https://github.com/mmccz/MaaAuto-Tool-works) | 主程序（本仓库） |
 | [MaaAuto-Installer](https://github.com/mmccz/MaaAuto-Installer) | 安装器 / 升级器 / 卸载器 |
-| [安装器对接契约](docs/INSTALLER_INTEGRATION.md) | 两个仓库之间的协议与冻结约定 |
 | [更新日志](CHANGELOG.md) | 按版本记录变更 |

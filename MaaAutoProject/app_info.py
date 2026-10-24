@@ -1,8 +1,7 @@
 """应用元信息
 
-注意：MaaAutoInstaller 会用「行首正则」解析本文件（见
-docs/INSTALLER_INTEGRATION.md §4.1）。修改常量时请保持
-单行、普通字符串字面量，不要改成类型注解、拼接或多行写法。
+注意：MaaAutoInstaller 会用「行首正则」解析本文件取版本与常量。
+修改时请保持单行、普通字符串字面量，不要改成类型注解、拼接或多行写法。
 """
 
 APP_NAME = "MaaAuto"
@@ -19,9 +18,9 @@ APP_LICENSE = "MIT"
 APP_DESCRIPTION_KEY = "app.description"  # 走 i18n
 
 # ---- 升级相关（与 MaaAutoInstaller 对齐，2026-09 冻结）----
-# 这三个常量与安装器 manifest 的 extra.* 重复。改动属于「协议变更」：
-# 需同步安装器并更新 docs/INSTALLER_INTEGRATION.md，否则已安装用户
-# 的 upgrade.exe 仍会使用旧地址 / 旧 asset 名。
+# 这三个常量与安装器 installer/contract.py 里的 manifest.extra.* 重复。
+# 改动属于「协议变更」：需同步安装器并发版，否则已安装用户的 upgrade.exe
+# 仍会使用旧地址 / 旧 asset 名（extra 只在安装时写入，升级不刷新）。
 APP_UPDATE_API = "https://api.github.com/repos/mmccz/MaaAuto-Tool-works/releases/latest"
 APP_MIN_INSTALLER_VERSION = "1.0.0"       # 升级器低于该版本时提示用户重新下载完整安装包
 APP_SOURCE_ASSET = "MaaAuto_Source.zip"   # Release 里源码包的固定 asset 名

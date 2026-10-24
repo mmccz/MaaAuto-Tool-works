@@ -33,7 +33,7 @@
 
 - README 重写（新增 logo，移除界面截图）。
 - 新增本文件。
-- 新增安装器对接说明 `docs/INSTALLER_INTEGRATION.md` 与答复记录 `docs/INSTALLER_REPLY.md`。
+- 跨仓库协议要点并入 README「与安装器的约定」，不再维护单独的对接文档。
 
 ---
 

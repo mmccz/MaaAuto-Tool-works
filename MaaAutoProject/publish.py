@@ -67,7 +67,7 @@ EXCLUDE_FILES = {
 EXCLUDE_SUFFIXES = (".pyc", ".pyo", ".log")
 
 # 发布约定：只使用「主程序 packaging」与「升级器自研解析器」都能接受的
-# PEP 440 子集。与 docs/INSTALLER_INTEGRATION.md §4.2 保持一致。
+# PEP 440 子集；安装器构建期会做同样的校验，两边必须一致。
 # 允许：2.1.0 / v2.1.0（tag 前缀 v 由发布方决定，APP_VERSION 不带 v）
 #       2.1.0b1 / 2.1.0rc2 / 2.1.0.post1
 # 不允许：2.1.0-beta / 2.1.0.dev1 / 2.1.0+local
@@ -104,7 +104,7 @@ def check_version_format(version: str) -> bool:
     print(f"[warn] APP_VERSION = {version!r} 不符合发布约定")
     print("       允许: X.Y.Z / X.Y.ZaN / X.Y.ZbN / X.Y.ZrcN / X.Y.Z.postN")
     print("       不允许: -beta / .devN / +local / 其他非 PEP 440 写法")
-    print("       详见 docs/INSTALLER_INTEGRATION.md §4.2")
+    print("       版本规范见 README「升级与版本」一节")
     print("=" * 60)
     print()
     return False
