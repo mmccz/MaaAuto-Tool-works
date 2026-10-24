@@ -1,6 +1,6 @@
 # MaaAuto ↔ MaaAutoInstaller 对接说明
 
-> **版本基线**：MaaAuto `v2.1.0`（仓库 `main` @ `14634d6`）
+> **版本基线**：MaaAuto `v2.1.1`
 >
 > **读者**：MaaAutoInstaller（安装器 / `upgrade.exe` / `uninstall.exe`）的维护者
 >
@@ -323,7 +323,7 @@ subprocess.Popen(args, cwd=install_dir)
 
 ### 4.1 版本号唯一来源
 
-- 主程序显示 / 比较的版本：`app_info.py` 的 `APP_VERSION`（当前 `2.1.0`）；
+- 主程序显示 / 比较的版本：`app_info.py` 的 `APP_VERSION`（当前 `2.1.1`）；
 - `build.py` 用它生成 exe 的 `FileVersion / ProductVersion` 与 `_version_info.txt`；
 - 安装器展示版本、`Source.zip` 内 `app_info.py` 的 `APP_VERSION`、exe 元数据、Release tag **四者必须一致**，否则升级判断会错乱。
 

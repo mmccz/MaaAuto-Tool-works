@@ -294,6 +294,11 @@ def copy_extra_dist_files(target_dir: Path):
     for name in EXTRA_DIST_FILES:
         src = ROOT / name
         if not src.exists():
+            # CHANGELOG.md 放在仓库根（GitHub 约定），这里回退一层找
+            alt = ROOT.parent / name
+            if alt.exists():
+                src = alt
+        if not src.exists():
             print(f"[warn] 附带文件不存在，跳过: {name}")
             continue
         dst = target_dir / name
