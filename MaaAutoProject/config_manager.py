@@ -63,6 +63,7 @@ DEFAULT_CONFIG = {
     # ---- 升级相关 ----
     "auto_check_update": True,
     "auto_download_update": False,
+    "update_channel": "stable",   # stable / beta（beta 会包含 prerelease）
 }
 
 

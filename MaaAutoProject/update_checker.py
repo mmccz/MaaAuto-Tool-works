@@ -1,11 +1,11 @@
 """
 版本检查（GitHub Release API）。
 
-与 MaaAutoInstaller 的对齐约定（2026-09 冻结）：
+约定：
   - 只做「检查 + 展示」，不做「下载 + 替换」
-  - 用户确认升级 → 调起 <install>/upgrade.exe（方案 B）
+  - 用户确认升级 → 调起 <install>/upgrade.exe
   - 版本比较用 packaging.version，非法版本号 → 视为检查失败
-  - 挑 asset 优先 MaaAuto_Source.zip，其次 win+.zip，再次任意 .zip
+  - 频道：stable 只看 releases/latest；beta 看 releases 列表（含 prerelease）
 """
 import os
 import sys
@@ -16,20 +16,24 @@ import urllib.request
 
 from packaging.version import Version, InvalidVersion
 
-from app_info import (APP_VERSION, APP_UPDATE_API, APP_SOURCE_ASSET,
-                      APP_PAYLOAD_ASSET_PREFIX)
+from app_info import APP_VERSION, APP_UPDATE_API, APP_PAYLOAD_ASSET_PREFIX
 
 logger = logging.getLogger("MaaAuto")
 
 _UA = "MaaAuto-UpdateChecker/1.0"
 
+# /releases/latest → /releases（用于 beta 频道）
+RELEASES_LIST_API = APP_UPDATE_API.rstrip("/")
+if RELEASES_LIST_API.endswith("/latest"):
+    RELEASES_LIST_API = RELEASES_LIST_API[: -len("/latest")]
+
 
 # --------------------------------------------------------------------------- #
 # GitHub API
 # --------------------------------------------------------------------------- #
-def _fetch_latest_release(timeout=15):
+def _fetch_json(url, timeout=15):
     req = urllib.request.Request(
-        APP_UPDATE_API,
+        url,
         headers={
             "Accept": "application/vnd.github+json",
             "User-Agent": _UA,
@@ -37,6 +41,26 @@ def _fetch_latest_release(timeout=15):
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _fetch_latest_release(channel="stable", timeout=15):
+    if channel != "beta":
+        return _fetch_json(APP_UPDATE_API, timeout)
+
+    releases = _fetch_json(RELEASES_LIST_API, timeout)
+    if not isinstance(releases, list):
+        return {}
+    candidates = []
+    for rel in releases:
+        if rel.get("draft"):
+            continue
+        version = _parse_version(rel.get("tag_name", ""))
+        if version is not None:
+            candidates.append((version, rel))
+    if not candidates:
+        return {}
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
 
 
 def _parse_version(tag):
@@ -75,10 +99,6 @@ def _pick_asset(release, latest_version=""):
                 return a
 
     for a in assets:
-        if a.get("name") == APP_SOURCE_ASSET:
-            return a
-
-    for a in assets:
         name = (a.get("name") or "").lower()
         if "win" in name and name.endswith(".zip"):
             return a
@@ -93,22 +113,25 @@ def _pick_asset(release, latest_version=""):
 # --------------------------------------------------------------------------- #
 # 对外
 # --------------------------------------------------------------------------- #
-def check_update():
+def check_update(channel="stable"):
     """
     返回 dict 或 None：
       {
         "has_update": bool,
-        "current":    "2.0.1",
-        "latest":     "2.1.0",
-        "tag":        "v2.1.0",
+        "current":    "1.0.0",
+        "latest":     "1.0.1",
+        "tag":        "v1.0.1",
         "asset":      {...} | None,
         "notes":      "release body",
         "html_url":   "https://...",
+        "channel":    "stable" | "beta",
       }
+
+    ``beta`` 频道会看 Release 列表并包含 prerelease；``stable`` 只看 latest。
     任何网络/解析失败 → None。
     """
     try:
-        release = _fetch_latest_release()
+        release = _fetch_latest_release(channel)
     except Exception as e:
         logger.warning(f"检查更新失败（网络）: {e}")
         return None
@@ -127,15 +150,17 @@ def check_update():
         "asset": _pick_asset(release, str(latest)),
         "notes": release.get("body", "") or "",
         "html_url": release.get("html_url", "") or "",
+        "channel": channel,
     }
 
 
-def apply_update(parent=None, silent=False):
+def apply_update(parent=None, silent=False, channel="stable"):
     """
-    方案 B + 变更 2：调起 upgrade.exe，主程序随后退出。
+    调起 upgrade.exe，主程序随后退出。
       --from-main  必须
-      --restart    默认带（用户要求升级完必重启主程序）
+      --restart    默认带（升级完重启主程序）
       --silent     自动升级路径传 True
+      --channel    stable / beta（beta 会看 prerelease）
     返回 True 表示已成功 Popen upgrade.exe。
     """
     from PySide6.QtWidgets import QMessageBox
@@ -156,6 +181,8 @@ def apply_update(parent=None, silent=False):
     args = [upgrade_exe, "--from-main", "--restart"]
     if silent:
         args.append("--silent")
+    if channel and channel != "stable":
+        args += ["--channel", channel]
 
     try:
         subprocess.Popen(args, cwd=install_dir)

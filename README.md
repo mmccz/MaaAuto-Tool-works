@@ -6,7 +6,7 @@
 
 **MAA & MaaEnd 的定时自动化调度台**
 
-[![Version](https://img.shields.io/badge/version-3.0.0-2f81f7.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-2f81f7.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#环境要求)
@@ -103,8 +103,8 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 
 | 文件 | 说明 |
 | --- | --- |
-| `MaaAuto_Setup_v3.0.0-Windows-x64.exe` | **完整包（约 100 MB）**，内嵌预构建程序，断网也能装 |
-| `MaaAuto_Online_v3.0.0-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
+| `MaaAuto_Setup_v1.0.0-Windows-x64.exe` | **完整包（约 94 MB）**，内嵌预构建程序，断网也能装 |
+| `MaaAuto_Online_v1.0.0-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
 
 双击后 30 秒左右装完，**不需要 Python、不联网、不需要管理员权限**：默认装到 `%LOCALAPPDATA%\Programs\MaaAuto`；向导里也可以选「为所有用户安装」，装到 `Program Files`（这一步会弹 UAC）。
 
@@ -204,17 +204,22 @@ Content-Type: application/json
 
 ## 🔄 升级与版本
 
-当前版本 **3.0.0**，变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 **1.0.0**，变更见 [CHANGELOG.md](CHANGELOG.md)。
 
-| 你的版本 | 升级方式 |
-| --- | --- |
-| **3.0.0 及以上** | 程序内一键升级：下载 `MaaAuto_payload_v*.zip` 替换程序文件，十几秒完成，失败自动回滚 |
-| **2.1.x** | 仍能自动升级：旧升级器会下载 `MaaAuto_Source.zip` 并**重新编译一次**（慢但可用），升到 3.0.0 后自动切到 payload 模式 |
-| **2.0.1 及更早** | 内置升级器为旧版占位实现，请下载完整安装包**覆盖安装**；`config/`、`logs/` 会保留 |
+任何已安装的 1.x 都可以在程序内一键升级：下载 `MaaAuto_payload_v{版本}.zip` 替换程序文件，十几秒完成，失败自动回滚。
 
 升级只替换程序文件，`config/`、`logs/`、`.maaauto.json` 一律保留。失败会回滚并写入 `config/upgrade_failed.flag`，下次启动弹窗提示。
 
-> 预发布版本（`-beta` / `b1` / `rc`）不会被 `releases/latest` 返回，程序内看不到；测试版只能手动下载完整包。
+### 更新渠道
+
+「设置 → 常规 → 更新渠道」：
+
+| 渠道 | 行为 |
+| --- | --- |
+| **稳定版**（默认） | 只看 GitHub `releases/latest`，也就是正式版 |
+| **测试版** | 会读取 Release 列表并包含预发布（`1.0.1b1` / `1.0.1rc1`），适合尝鲜 |
+
+> 测试版只影响「能检测到哪些版本」，升级方式与稳定版完全一样；想回退到正式版，等正式版号更高，或下载完整安装包覆盖安装。
 
 ---
 
@@ -271,16 +276,16 @@ Content-Type: application/json
 | `config/upgrade_failed.flag` | 升级器 | 主程序（启动 300ms 后） | JSON；弹窗提示后由主程序删除 |
 | `config/last_launch_args.json` | 主程序 | 升级器 | 重启时恢复 `--autostart` 等参数 |
 
-Release 资产（3.0.0 起）：
+Release 资产：
 
 | 资产 | 用途 |
 | --- | --- |
 | `MaaAuto_Setup_v*.exe` | 完整安装包 |
 | `MaaAuto_Online_v*.exe` | 在线引导包 |
 | `MaaAuto_payload_v*.zip` | 升级器下载的预构建程序包 |
-| `MaaAuto_Source.zip` | 2.x 过渡期保留，供旧升级器重编译 |
+| `SHA256SUMS.txt` | 三个资产的校验和 |
 
-`app_info.py` 里的 `APP_UPDATE_API`、`APP_SOURCE_ASSET`、`APP_MIN_INSTALLER_VERSION`、`APP_PAYLOAD_ASSET_PREFIX` 与安装器 `installer/contract.py` 是**冻结契约**：改任一值等于协议变更，必须两仓库同时发版（`extra` 只在安装时写入，升级不刷新，改了对老用户不生效）。
+`app_info.py` 里的 `APP_UPDATE_API`、`APP_MIN_INSTALLER_VERSION`、`APP_PAYLOAD_ASSET_PREFIX` 与安装器 `installer/contract.py` 是**冻结契约**：改任一值等于协议变更，必须两仓库同时发版（`extra` 只在安装时写入，升级不刷新，改了对老用户不生效）。
 
 ---
 

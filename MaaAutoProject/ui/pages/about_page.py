@@ -10,7 +10,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import qVersion
 from ui.components import Card
 from utils import resource_path, AsyncWorker
-from config_manager import LOG_DIR, CONFIG_DIR
+from config_manager import LOG_DIR, CONFIG_DIR, load_config
 import app_info
 
 
@@ -199,13 +199,20 @@ class AboutPage(QWidget):
     # ==================================================================
     # 检查更新 —— 后台线程执行，绝不阻塞 UI
     # ==================================================================
+    def _channel(self):
+        """当前更新频道（stable / beta），读配置；失败按 stable。"""
+        try:
+            return load_config().get("update_channel", "stable")
+        except Exception:
+            return "stable"
+
     def check_for_update(self):
         from update_checker import check_update
 
         self.btn_check_update.setEnabled(False)
         self.btn_check_update.setText(self.i18n.t("about.check_update.checking"))
 
-        self._update_check_worker = AsyncWorker(check_update)
+        self._update_check_worker = AsyncWorker(check_update, self._channel())
         self._update_check_worker.finished.connect(self._on_check_done)
         self._update_check_worker.error.connect(self._on_check_error)
         self._update_check_worker.start()
@@ -240,7 +247,7 @@ class AboutPage(QWidget):
             return
 
         from update_checker import apply_update
-        if apply_update(self, silent=False):
+        if apply_update(self, silent=False, channel=self._channel()):
             from PySide6.QtWidgets import QApplication
             win = self.window()
             if hasattr(win, "is_quitting"):

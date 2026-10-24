@@ -1,0 +1,76 @@
+name: release
+
+# 触发：推送 v* tag，或手动指定 tag。
+# 注意：workflow 必须在「tag 所在的仓库」里 —— Release 与 tag 都在主程序仓库，
+# 所以这里构建两个仓库的产物并上传到本仓库的 Release。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要构建的 tag（例如 v1.0.0）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Checkout main app
+        uses: actions/checkout@v4
+
+      - name: Checkout installer
+        uses: actions/checkout@v4
+        with:
+          repository: mmccz/MaaAuto-Installer
+          ref: main
+          path: installer
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r MaaAutoProject/requirements.txt
+          pip install pyinstaller
+          pip install -r installer/MaaAutoInstaller/requirements.txt
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build release assets
+        run: |
+          python installer/MaaAutoInstaller/build_release.py `
+            --source-dir MaaAutoProject `
+            --iscc "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+
+      - name: Collect assets
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Copy-Item installer/dist/MaaAuto_Setup_*.exe out/
+          Copy-Item installer/dist/MaaAuto_Online_*.exe out/
+          Copy-Item installer/dist/MaaAuto_payload_*.zip out/
+          Copy-Item installer/dist/SHA256SUMS.txt out/
+          Get-ChildItem out | Format-Table Name, Length
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: MaaAuto ${{ env.TAG }}
+          # 预发布 tag（含 b / rc / beta）自动标记为 prerelease，供 beta 渠道拉取
+          prerelease: ${{ contains(env.TAG, 'b') || contains(env.TAG, 'rc') || contains(env.TAG, 'beta') }}
+          draft: true
+          generate_release_notes: false
+          files: out/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

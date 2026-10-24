@@ -371,6 +371,18 @@ class SettingsPage(QWidget):
             g, "settings.auto_download_update",
             "settings.auto_download_update.desc", "auto_download_update", False)
 
+        self._channel_values = ("stable", "beta")
+        self.channel_combo = NoWheelComboBox()
+        for val in self._channel_values:
+            self.channel_combo.addItem(
+                self.i18n.t(f"settings.update_channel.{val}"), val)
+        idx = self.channel_combo.findData(self.config.get("update_channel", "stable"))
+        if idx >= 0:
+            self.channel_combo.setCurrentIndex(idx)
+        self.channel_combo.setMinimumWidth(160)
+        self._add_item(g, "settings.update_channel",
+                       "settings.update_channel.desc", self.channel_combo)
+
     # ==================================================================
     # 自动保存
     # ==================================================================
@@ -388,6 +400,7 @@ class SettingsPage(QWidget):
         for sw, _key in self._switches:
             sw.toggled.connect(emit_config)
         self.time_edit.timeChanged.connect(emit_config)
+        self.channel_combo.currentIndexChanged.connect(emit_config)
         self.fg_seg.selection_changed.connect(emit_config)
         self.bg_opacity_slider.valueChanged.connect(emit_config)
         self.bg_mode_combo.currentIndexChanged.connect(emit_config)
@@ -542,6 +555,7 @@ class SettingsPage(QWidget):
         c["background_mode"] = self.bg_mode_combo.currentData() or "cover"
         c["theme"] = (self.theme_combo.currentData() or "settings.theme.system").split(".")[-1]
         c["language"] = self.lang_combo.currentData() or "zh_CN"
+        c["update_channel"] = self.channel_combo.currentData() or "stable"
         c["accent_color"] = self.accent_picker.color()
         for sw, key in self._switches:
             c[key] = sw.isChecked()
@@ -573,6 +587,13 @@ class SettingsPage(QWidget):
             if i < self.bg_mode_combo.count():
                 self.bg_mode_combo.setItemText(i, self.i18n.t(key))
         self.bg_mode_combo.blockSignals(False)
+
+        self.channel_combo.blockSignals(True)
+        for i, val in enumerate(self._channel_values):
+            if i < self.channel_combo.count():
+                self.channel_combo.setItemText(
+                    i, self.i18n.t(f"settings.update_channel.{val}"))
+        self.channel_combo.blockSignals(False)
 
         self.lang_combo.blockSignals(True)
         for i, (_code, name) in enumerate(self.i18n.available_languages()):

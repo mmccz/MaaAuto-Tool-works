@@ -90,6 +90,10 @@
     "settings.auto_check_update": "启动时自动检查更新",
     "settings.auto_download_update": "自动下载并升级（静默）",
     "settings.auto_download_update.desc": "检测到新版本后自动升级并重启，任务运行中会等任务结束后再升级",
+    "settings.update_channel": "更新渠道",
+    "settings.update_channel.desc": "稳定版只接收正式版；测试版会同时接收预发布（beta / rc）",
+    "settings.update_channel.stable": "稳定版",
+    "settings.update_channel.beta": "测试版",
 
     "about.title": "关于",
     "about.version": "软件版本",

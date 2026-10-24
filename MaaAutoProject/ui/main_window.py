@@ -414,7 +414,8 @@ class MainWindow(QMainWindow):
             return
 
         # 后台线程执行网络请求
-        self._update_check_worker = AsyncWorker(check_update)
+        channel = self.config.get("update_channel", "stable")
+        self._update_check_worker = AsyncWorker(check_update, channel)
         self._update_check_worker.finished.connect(self._on_update_checked)
         self._update_check_worker.error.connect(
             lambda err: self.logger.warning(f"检查更新失败: {err}"))
@@ -443,8 +444,9 @@ class MainWindow(QMainWindow):
 
     def _trigger_upgrade(self, info, silent=False):
         from update_checker import apply_update
-        self.logger.info(f"触发升级: silent={silent} → {info.get('latest')}")
-        if apply_update(self, silent=silent):
+        channel = self.config.get("update_channel", "stable")
+        self.logger.info(f"触发升级: silent={silent}, channel={channel} → {info.get('latest')}")
+        if apply_update(self, silent=silent, channel=channel):
             self.is_quitting = True
             try:
                 self._save_geometry()

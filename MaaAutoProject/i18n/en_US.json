@@ -90,6 +90,10 @@
     "settings.auto_check_update": "Check for updates on startup",
     "settings.auto_download_update": "Auto download and upgrade (silent)",
     "settings.auto_download_update.desc": "Automatically upgrade and restart when a new version is found. If a task is running, it will wait until it finishes.",
+    "settings.update_channel": "Update channel",
+    "settings.update_channel.desc": "Stable receives official releases only; Beta also receives pre-releases (beta / rc).",
+    "settings.update_channel.stable": "Stable",
+    "settings.update_channel.beta": "Beta",
 
     "about.title": "About",
     "about.version": "Version",
