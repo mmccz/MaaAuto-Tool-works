@@ -1,0 +1,24 @@
+[build] 契约校验通过: 1.0.0 / payload 前缀 MaaAuto_payload_v
+[build] 使用 ISCC: C:\ProgramData\Chocolatey\bin\ISCC.EXE
+[build] 打包主程序（build.py）...
+[build] 执行 主程序: C:\hostedtoolcache\windows\Python\3.11.9\x64\python.exe build.py
+  | ============================================================
+  | Traceback (most recent call last):
+  |   File "D:\a\MaaAuto-Tool-works\MaaAuto-Tool-works\MaaAutoProject\build.py", line 435, in <module>
+  |     main()
+  |   File "D:\a\MaaAuto-Tool-works\MaaAuto-Tool-works\MaaAutoProject\build.py", line 341, in main
+  |     print("MaaAuto \u6253\u5305\u811a\u672c")
+  |   File "C:\hostedtoolcache\windows\Python\3.11.9\x64\Lib\encodings\cp1252.py", line 19, in encode
+  |     return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | UnicodeEncodeError: 'charmap' codec can't encode characters in position 8-11: character maps to <undefined>
+[build][ERROR] 命令失败（exit 1）: C:\hostedtoolcache\windows\Python\3.11.9\x64\python.exe
+Traceback (most recent call last):
+  File "D:\a\MaaAuto-Tool-works\MaaAuto-Tool-works\installer\MaaAutoInstaller\build_release.py", line 344, in main
+    main_dist = build_main(source_dir)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\a\MaaAuto-Tool-works\MaaAuto-Tool-works\installer\MaaAutoInstaller\build_release.py", line 167, in build_main
+    run([sys.executable, "build.py"], cwd=source_dir, tag="主程序")
+  File "D:\a\MaaAuto-Tool-works\MaaAuto-Tool-works\installer\MaaAutoInstaller\build_release.py", line 159, in run
+    raise RuntimeError(f"命令失败（exit {proc.returncode}）: {cmd[0]}")
+RuntimeError: 命令失败（exit 1）: C:\hostedtoolcache\windows\Python\3.11.9\x64\python.exe
