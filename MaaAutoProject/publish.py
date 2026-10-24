@@ -33,6 +33,13 @@ import argparse
 import subprocess
 from pathlib import Path
 
+# 同 build.py：英文系统 / CI 下 stdout 是 cp1252，中文输出会崩。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 
 ROOT = Path(__file__).resolve().parent
 DIST_DIR = ROOT / "dist"

@@ -29,6 +29,13 @@ import argparse
 import subprocess
 from pathlib import Path
 
+# CI / 英文系统下 stdout 是 cp1252，打印中文会 UnicodeEncodeError —— 强制 UTF-8。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # --------------------------------------------------------------------------- #
 # 路径
 # --------------------------------------------------------------------------- #
