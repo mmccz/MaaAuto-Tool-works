@@ -101,9 +101,10 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           name: MaaAuto ${{ env.TAG }}
-          # 预发布 tag（含 b / rc / beta）自动标记为 prerelease，供 beta 渠道拉取
+          # 预发布（tag 含 b / rc / beta）：自动发布为 prerelease，beta 渠道才能拉到；
+          # 正式版仍保持草稿，人工检查后再发布。
           prerelease: ${{ contains(env.TAG, 'b') || contains(env.TAG, 'rc') || contains(env.TAG, 'beta') }}
-          draft: true
+          draft: ${{ !(contains(env.TAG, 'b') || contains(env.TAG, 'rc') || contains(env.TAG, 'beta')) }}
           generate_release_notes: false
           files: out/*
         env:
