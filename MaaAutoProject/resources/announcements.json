@@ -3,16 +3,16 @@
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
         {
-            "id": "v1.0.7",
+            "id": "v1.1.0",
             "date": "2026-10-24",
             "tag": "版本更新",
             "title": {
-                "zh_CN": "1.0.7：公告支持在线更新、背景模糊改滑杆、教程不再重复弹",
-                "en_US": "1.0.7: online announcements, blur slider, tutorial no longer repeats"
+                "zh_CN": "1.1.0 正式发布：找图点击重做、界面缩放、自动升级、新手教程",
+                "en_US": "1.1.0 is out: reworked vision & clicking, UI scaling, auto-update, tutorial"
             },
             "body": {
-                "zh_CN": "**公告现在从 GitHub 在线拉取了**：以后改公告只要编辑仓库里的 `MaaAutoProject/resources/announcements.json` 并 push，客户端下次启动就会看到，不需要发新版本；断网或拉取失败时用上次缓存/安装包内置内容。\n\n本版其它改动：\n\n- 新手教程**不再每次启动都弹**（之前改任意设置会把\"已看过\"状态冲掉）；\n- 设置 → 外观 → **背景模糊改成滑杆**，拖动即时预览数值；\n- 有公告更新时会**重新显示红点并自动弹一次**公告。",
-                "en_US": "**Announcements are now fetched from GitHub**: to update them, just edit `MaaAutoProject/resources/announcements.json` and push — clients see it on the next launch, no new release needed. Offline or on failure the cached/bundled copy is used.\n\nOther changes:\n\n- The beginner tutorial **no longer shows up on every launch** (changing any setting used to reset the seen flag);\n- Settings → Appearance → **background blur is now a slider**;\n- When announcements change, the unread badge reappears and the dialog pops up once."
+                "zh_CN": "**1.1.0 是首个正式版**，把找图点击、界面缩放、自动升级、新手引导都补齐了。\n\n**第一次用请先改这两处**（不然自动化收不了尾）：\n\n1. MAA → 设置 → 启动设置 → 勾选「完成后退出模拟器」；\n2. MaaEnd → 任务列表 → **最后**添加「关闭程序」或「关闭模拟器」。\n\n详细步骤见首页「新手教程」。\n\n其它变化：\n\n- 找图改成多尺度模板匹配，只在目标窗口内搜索；点击前激活窗口、点击后校验像素并自动补点；\n- 界面缩放 100% / 125% / 150% **即时生效**，设置页和托盘都有「重启程序」；\n- 升级窗口重做：版本对比 + 排版好的发布说明；重启/升级不再关掉 MAA / 模拟器；\n- 背景模糊改成滑杆；深色模式可读性、卸载残留等问题修好。\n\n**公告现在从 GitHub 在线拉取**：以后改公告只要编辑仓库里的 `announcements.json` 并 push，客户端下次启动就能看到，不需要发新版本。",
+                "en_US": "**1.1.0 is the first stable release**, rounding out vision & clicking, UI scaling, auto-update and the beginner tutorial.\n\n**Change these two settings first** (otherwise automation cannot finish cleanly):\n\n1. MAA → Settings → Startup → enable “Quit emulator when finished”;\n2. MaaEnd → Task list → add “Close program” or “Close emulator” as the **last** task.\n\nSee the beginner tutorial on Home for details.\n\nOther changes:\n\n- Vision now uses multi-scale template matching inside the target window only; clicks activate the window first, verify pixels afterwards and retry automatically;\n- Interface scale 100% / 125% / 150% applies instantly, with a Restart button in Settings and the tray menu;\n- New update dialog (version comparison + formatted release notes); restart/update no longer closes your MAA/emulator;\n- Background blur is a slider now; dark-mode readability and uninstall leftovers are fixed.\n\n**Announcements are fetched from GitHub**: edit `announcements.json` in the repo and push — clients see it on the next launch, no new release needed."
             }
         },
         {
