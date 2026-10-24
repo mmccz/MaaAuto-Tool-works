@@ -47,11 +47,31 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
-      - name: Build release assets
+      - name: Verify build tools
+        shell: pwsh
         run: |
-          python installer/MaaAutoInstaller/build_release.py `
-            --source-dir MaaAutoProject `
-            --iscc "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          python --version
+          python -c "import PyInstaller, PySide6, psutil; print('deps ok')"
+          'ISCC 候选路径：' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          @(
+            'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+            'C:\Program Files\Inno Setup 6\ISCC.exe',
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          ) | ForEach-Object {
+            "{0} => {1}" -f $_, (Test-Path $_) | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+          }
+
+      # 不传 --iscc：choco / winget 的安装位置不一样，交给脚本自动探测。
+      - name: Build release assets
+        shell: pwsh
+        run: |
+          python installer/MaaAutoInstaller/build_release.py --source-dir MaaAutoProject 2>&1 |
+            Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            "## 构建失败，最后 60 行日志" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            Get-Content build.log -Tail 60 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            exit 1
+          }
 
       - name: Collect assets
         run: |
