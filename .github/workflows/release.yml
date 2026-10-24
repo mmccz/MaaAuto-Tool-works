@@ -73,24 +73,19 @@ jobs:
             exit 1
           }
 
-      # 失败时把日志提交到 ci-logs/<run_id>.log，便于在外部（公开 API）读取。
-      # 排查完可以删掉这个步骤和 ci-logs/ 目录。
+      # 失败时把构建日志推到独立分支 ci-logs（不污染 main），便于排查。
       - name: Publish failure log
         if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const log = fs.existsSync('build.log')
-              ? fs.readFileSync('build.log', 'utf8')
-              : 'no build.log (step failed before running the build)';
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: `ci-logs/${context.runId}.log`,
-              message: `ci log ${context.runId}`,
-              content: Buffer.from(log, 'utf8').toString('base64'),
-            });
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build.log)) { 'no build.log' | Out-File build.log -Encoding utf8 }
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout -B ci-logs
+          Copy-Item build.log ci-last.log -Force
+          git add -f ci-last.log
+          git commit -m "ci log ${{ github.run_id }}"
+          git push --force origin ci-logs
 
       - name: Collect assets
         run: |
