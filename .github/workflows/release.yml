@@ -87,8 +87,8 @@ jobs:
             await github.rest.repos.createOrUpdateFileContents({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              path: `ci-logs/${context.run_id}.log`,
-              message: `ci log ${context.run_id}`,
+              path: `ci-logs/${context.runId}.log`,
+              message: `ci log ${context.runId}`,
               content: Buffer.from(log, 'utf8').toString('base64'),
             });
 
