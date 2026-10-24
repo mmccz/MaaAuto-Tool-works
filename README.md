@@ -337,7 +337,10 @@ Release 资产：
 | `MaaAuto_Setup_v*.exe` | 完整安装包 |
 | `MaaAuto_Online_v*.exe` | 在线引导包 |
 | `MaaAuto_payload_v*.zip` | 升级器下载的预构建程序包 |
-| `SHA256SUMS.txt` | 三个资产的校验和 |
+| `SHA256SUMS.txt` | 上述三个构建产物的校验和（自身也是 Release 资产之一） |
+
+> 发版：push 两个仓库后打 `v*` tag，CI 会构建上述 4 个资产并用仓库里的
+> `RELEASE_NOTES.md` 作正文**直接发布** Release（预发布 tag 自动标 prerelease）。
 
 `app_info.py` 里的 `APP_UPDATE_API`、`APP_MIN_INSTALLER_VERSION`、`APP_PAYLOAD_ASSET_PREFIX` 与安装器 `installer/contract.py` 是**冻结契约**：改任一值等于协议变更，必须两仓库同时发版（`extra` 只在安装时写入，升级不刷新，改了对老用户不生效）。
 
