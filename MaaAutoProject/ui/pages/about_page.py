@@ -5,7 +5,7 @@ import datetime
 import platform
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFileDialog, QMessageBox)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import qVersion
 from ui.components import Card
@@ -15,6 +15,8 @@ import app_info
 
 
 class AboutPage(QWidget):
+    announcements_clicked = Signal()
+
     def __init__(self, i18n, parent=None):
         super().__init__(parent)
         self.i18n = i18n
@@ -52,17 +54,11 @@ class AboutPage(QWidget):
 
         ver_row = QHBoxLayout()
         ver_row.setSpacing(8)
-        ver_tag = QLabel(app_info.APP_VERSION)
-        ver_tag.setObjectName("JumpChip")
-        ver_tag.setStyleSheet(
-            "background: rgba(59,130,246,0.15); color:#1d4ed8;"
-            "border-radius:10px; padding:2px 10px; font-size:12px;")
-        ver_row.addWidget(ver_tag)
+        self.ver_tag = QLabel(app_info.APP_VERSION)
+        self.ver_tag.setObjectName("VersionTag")
+        ver_row.addWidget(self.ver_tag)
         self.license_tag = QLabel(app_info.APP_LICENSE)
-        self.license_tag.setObjectName("JumpChip")
-        self.license_tag.setStyleSheet(
-            "background: rgba(16,185,129,0.15); color:#047857;"
-            "border-radius:10px; padding:2px 10px; font-size:12px;")
+        self.license_tag.setObjectName("LicenseTag")
         ver_row.addWidget(self.license_tag)
         ver_row.addStretch()
         info.addLayout(ver_row)
@@ -98,7 +94,7 @@ class AboutPage(QWidget):
         self.gh_key = QLabel(self.i18n.t("about.github"))
         self.gh_key.setObjectName("SettingDesc")
         self.gh_key.setFixedWidth(120)
-        self.gh_val = QLabel(f'<a href="{app_info.APP_GITHUB}">{app_info.APP_GITHUB}</a>')
+        self.gh_val = QLabel()
         self.gh_val.setOpenExternalLinks(True)
         gh_row.addWidget(self.gh_key)
         gh_row.addWidget(self.gh_val, 1)
@@ -107,11 +103,12 @@ class AboutPage(QWidget):
         self.em_key = QLabel(self.i18n.t("about.email"))
         self.em_key.setObjectName("SettingDesc")
         self.em_key.setFixedWidth(120)
-        self.em_val = QLabel(f'<a href="mailto:{app_info.APP_EMAIL}">{app_info.APP_EMAIL}</a>')
+        self.em_val = QLabel()
         self.em_val.setOpenExternalLinks(True)
         em_row.addWidget(self.em_key)
         em_row.addWidget(self.em_val, 1)
         link_layout.addLayout(em_row)
+        self._refresh_link_labels()
         root.addWidget(self.link_group)
 
         self.action_group = Card()
@@ -134,6 +131,11 @@ class AboutPage(QWidget):
         self.btn_check_update.setCursor(Qt.PointingHandCursor)
         self.btn_check_update.clicked.connect(self.check_for_update)
 
+        self.btn_announcements = QPushButton(self.i18n.t("announce.title"))
+        self.btn_announcements.setObjectName("GhostButton")
+        self.btn_announcements.setCursor(Qt.PointingHandCursor)
+        self.btn_announcements.clicked.connect(self.announcements_clicked)
+
         self.btn_export = QPushButton(self.i18n.t("about.export_logs"))
         self.btn_export.setObjectName("PrimaryButton")
         self.btn_export.setCursor(Qt.PointingHandCursor)
@@ -142,6 +144,7 @@ class AboutPage(QWidget):
         action_layout.addWidget(self.btn_open_config)
         action_layout.addWidget(self.btn_open_logs)
         action_layout.addWidget(self.btn_check_update)
+        action_layout.addWidget(self.btn_announcements)
         action_layout.addStretch()
         action_layout.addWidget(self.btn_export)
         root.addWidget(self.action_group)
@@ -153,6 +156,28 @@ class AboutPage(QWidget):
         root.addWidget(self.copyright_label)
 
         self._refresh_env_info()
+
+    def _refresh_link_labels(self):
+        """富文本链接颜色跟着主题走。
+
+        QLabel 里的 ``<a>`` 用的是 Qt 默认纯蓝 #0000ff，深色主题下贴在
+        #0f1115 背景上几乎看不见（1.0.5 实测反馈）。QSS 管不到标签内部的
+        锚点，只能把颜色写进 span。
+        """
+        from themes import link_color
+        color = link_color()
+        self.gh_val.setText(
+            f'<a href="{app_info.APP_GITHUB}">'
+            f'<span style="color:{color}; text-decoration:none;">'
+            f'{app_info.APP_GITHUB}</span></a>')
+        self.em_val.setText(
+            f'<a href="mailto:{app_info.APP_EMAIL}">'
+            f'<span style="color:{color}; text-decoration:none;">'
+            f'{app_info.APP_EMAIL}</span></a>')
+
+    def refresh_theme_colors(self):
+        """主题切换后调用（链接颜色不会自己跟着 QSS 变）。"""
+        self._refresh_link_labels()
 
     def _refresh_env_info(self):
         try:
@@ -221,52 +246,55 @@ class AboutPage(QWidget):
         self.btn_check_update.setEnabled(True)
         self.btn_check_update.setText(self.i18n.t("about.check_update"))
 
+        from ui.update_dialog import MessageDialog, ask_update
+
         if info is None:
-            QMessageBox.warning(self, self.i18n.t("common.warning"),
-                                self.i18n.t("about.check_update.failed"))
+            MessageDialog(self.i18n, self.i18n.t("update.failed.title"),
+                          self.i18n.t("about.check_update.failed"),
+                          self, icon="warning").exec()
             return
 
         if not info.get("has_update"):
-            QMessageBox.information(
-                self, self.i18n.t("common.info"),
-                self.i18n.t("about.check_update.latest") + f"\n\n{info['current']}")
+            MessageDialog(
+                self.i18n, self.i18n.t("update.latest.title"),
+                self.i18n.t("update.latest.text", current=info["current"]),
+                self).exec()
             return
 
-        notes = (info.get("notes") or "").strip()
-        if len(notes) > 800:
-            notes = notes[:800] + "\n…"
-        msg = self.i18n.t("about.check_update.available", version=info["latest"])
-        if notes:
-            msg += "\n\n" + notes
-        msg += "\n\n" + self.i18n.t("about.check_update.confirm")
-
-        ret = QMessageBox.question(self, "MaaAuto", msg,
-                                   QMessageBox.Yes | QMessageBox.No,
-                                   QMessageBox.Yes)
-        if ret != QMessageBox.Yes:
+        if not ask_update(self.i18n, info, self):
             return
 
         from update_checker import apply_update
-        if apply_update(self, silent=False, channel=self._channel()):
-            from PySide6.QtWidgets import QApplication
-            win = self.window()
-            if hasattr(win, "is_quitting"):
-                win.is_quitting = True
-            try:
-                if hasattr(win, "_save_geometry"):
-                    win._save_geometry()
-                if hasattr(win, "cleanup_on_exit"):
-                    win.cleanup_on_exit()
-            except Exception:
-                pass
-            QApplication.quit()
+        if not apply_update(self, silent=False, channel=self._channel()):
+            MessageDialog(self.i18n, self.i18n.t("update.failed.title"),
+                          self.i18n.t("update.apply_failed"),
+                          self, icon="warning").exec()
+            return
+
+        from PySide6.QtWidgets import QApplication
+        win = self.window()
+        if hasattr(win, "is_quitting"):
+            win.is_quitting = True
+        # 升级后会自动重启，别把 MAA / 模拟器一起关掉
+        if hasattr(win, "_relaunching"):
+            win._relaunching = True
+        try:
+            if hasattr(win, "_save_geometry"):
+                win._save_geometry()
+            if hasattr(win, "cleanup_on_exit"):
+                win.cleanup_on_exit()
+        except Exception:
+            pass
+        QApplication.quit()
 
     def _on_check_error(self, err_msg):
         self.btn_check_update.setEnabled(True)
         self.btn_check_update.setText(self.i18n.t("about.check_update"))
-        QMessageBox.warning(
-            self, self.i18n.t("common.warning"),
-            self.i18n.t("about.check_update.failed") + f"\n\n{err_msg}")
+        from ui.update_dialog import MessageDialog
+        MessageDialog(
+            self.i18n, self.i18n.t("update.failed.title"),
+            self.i18n.t("about.check_update.failed") + f"\n\n{err_msg}",
+            self, icon="warning").exec()
 
     def retranslate(self):
         self.page_title.setText(self.i18n.t("nav.about"))
@@ -279,5 +307,6 @@ class AboutPage(QWidget):
         self.btn_open_config.setText(self.i18n.t("about.open_config"))
         self.btn_open_logs.setText(self.i18n.t("about.open_logs"))
         self.btn_check_update.setText(self.i18n.t("about.check_update"))
+        self.btn_announcements.setText(self.i18n.t("announce.title"))
         self.btn_export.setText(self.i18n.t("about.export_logs"))
         self.copyright_label.setText(self.i18n.t("about.copyright"))

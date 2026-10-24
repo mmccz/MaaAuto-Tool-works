@@ -1,0 +1,89 @@
+name: tests
+
+# 触发：push / PR 到 main。发版前先在 CI 上把「不依赖桌面的单元测试」跑一遍，
+# 免得把「版本解析错了」「payload 路径穿越」「找图换缩放失效」这类问题带到 Release。
+#
+# 这里只跑纯逻辑测试：不截真实屏幕、不注入真实鼠标、不联网（网络全部被 mock）。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout main app
+        uses: actions/checkout@v4
+
+      # 安装器仓库里也有一套测试（版本解析 / payload 替换回滚 / native_ui）。
+      # 与发版 job 一样按 main 拉取：两边的契约常量必须对得上。
+      - name: Checkout installer
+        uses: actions/checkout@v4
+        with:
+          repository: mmccz/MaaAuto-Installer
+          ref: main
+          path: installer
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            MaaAutoProject/requirements.txt
+            installer/MaaAutoInstaller/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r MaaAutoProject/requirements.txt
+          pip install -r installer/MaaAutoInstaller/requirements.txt
+          pip install pytest
+
+      # vision.py 依赖 cv2；缺了会「静默变慢/降级」，这里先硬性确认。
+      - name: Verify test prerequisites
+        shell: pwsh
+        run: |
+          python --version
+          python -c "import cv2, numpy, PIL, psutil, PySide6; print('deps ok')"
+
+      - name: Run main-app tests
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: "1"
+        run: |
+          python -m pytest tests -q --junitxml=pytest-main.xml
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Run installer tests
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: "1"
+        run: |
+          Push-Location installer
+          python -m pytest tests -q --junitxml=../pytest-installer.xml
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { exit 1 }
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: |
+            pytest-main.xml
+            pytest-installer.xml
+          if-no-files-found: ignore

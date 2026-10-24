@@ -7,7 +7,9 @@ from PySide6.QtCore import (Qt, Signal, QTimer, QPropertyAnimation,
 class WheelColumn(QListWidget):
     """单行滚轮：只显示当前值，滚轮/拖动切换，点击激活。"""
 
-    ITEM_HEIGHT = 26
+    ITEM_HEIGHT = 26          # 当前实际行高（随界面缩放变化）
+    BASE_ITEM_HEIGHT = 26     # 100% 时的行高
+    BASE_WIDTH = 48
     VISIBLE_ITEMS = 1
 
     valueChanged = Signal(str)
@@ -17,6 +19,7 @@ class WheelColumn(QListWidget):
         self._values = [str(v) for v in values]
         self._current_index = 0
         self._snapping = False
+        self._scale = 1.0
 
         self.setObjectName("WheelColumn")
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
@@ -27,7 +30,7 @@ class WheelColumn(QListWidget):
         self.setFrameShape(QFrame.NoFrame)
         self.setUniformItemSizes(True)
 
-        self.setFixedWidth(48)
+        self.setFixedWidth(self.BASE_WIDTH)
         self.setFixedHeight(self.ITEM_HEIGHT)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
@@ -47,7 +50,46 @@ class WheelColumn(QListWidget):
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
         self.itemClicked.connect(self._on_item_clicked)
 
-        QTimer.singleShot(0, lambda: self._scroll_to(0, animate=False))
+        # 首次布局完成后把滚动条对到「当前值」。
+        #
+        # ★ 这里绝不能用 _scroll_to(0)：设置页构造时会 setTime("08:00")，而这条
+        #   定时器要晚一个事件循环才跑，会把小时滚回 00:00 并 emit 一次
+        #   timeChanged。实测（1.0.4）:每次启动「定时执行时间」都会在第一个事件
+        #   循环被改成 00:00 并落盘；顺带把启动瞬间写好的其它配置（界面缩放、
+        #   主题）用旧快照冲掉。必须直接对齐当前值、不 emit。
+        QTimer.singleShot(0, self._scroll_to_current)
+
+    # ------------------------------------------------------------------
+    # 界面缩放
+    #
+    # 行高/宽度是写死的（26/48），QSS 的 font-size 管不到 —— 150% 时字号 21px
+    # 仍塞在 26px 的行里会顶到边。这里按缩放重算行高并同步每个 item。
+    # ------------------------------------------------------------------
+    def set_ui_scale(self, scale):
+        try:
+            scale = max(1.0, min(2.0, float(scale)))
+        except (TypeError, ValueError):
+            scale = 1.0
+        height = max(self.BASE_ITEM_HEIGHT, int(round(self.BASE_ITEM_HEIGHT * scale)))
+        width = max(self.BASE_WIDTH, int(round(self.BASE_WIDTH * scale)))
+        self._scale = scale
+        self.ITEM_HEIGHT = height
+        self.setFixedWidth(width)
+        self.setFixedHeight(height)
+        for i in range(self.count()):
+            item = self.item(i)
+            if item is not None:
+                item.setSizeHint(QSize(0, height))
+        self._scroll_to_current()
+
+    def _scroll_to_current(self):
+        self._snapping = True
+        try:
+            self.setCurrentRow(self._current_index)
+            self.verticalScrollBar().setValue(
+                self._current_index * self.ITEM_HEIGHT)
+        finally:
+            self._snapping = False
 
     # ------------------------------------------------------------------
     # 焦点 / 拖动
@@ -159,6 +201,7 @@ class WheelTimePicker(QWidget):
     """小时 + 分钟 单行滚轮。"""
 
     timeChanged = Signal(QTime)
+    BASE_COLON_WIDTH = 10
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -169,7 +212,8 @@ class WheelTimePicker(QWidget):
         colon = QLabel(":")
         colon.setObjectName("WheelColon")
         colon.setAlignment(Qt.AlignCenter)
-        colon.setFixedWidth(10)
+        colon.setFixedWidth(self.BASE_COLON_WIDTH)
+        self._colon = colon
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -182,6 +226,14 @@ class WheelTimePicker(QWidget):
 
         self._hour_col.valueChanged.connect(lambda *_: self.timeChanged.emit(self.time()))
         self._min_col.valueChanged.connect(lambda *_: self.timeChanged.emit(self.time()))
+
+    def set_ui_scale(self, scale):
+        """两个滚轮列 + 冒号一起按界面缩放重排。"""
+        self._hour_col.set_ui_scale(scale)
+        self._min_col.set_ui_scale(scale)
+        self._colon.setFixedWidth(
+            max(self.BASE_COLON_WIDTH,
+                int(round(self.BASE_COLON_WIDTH * max(1.0, float(scale))))))
 
     def time(self) -> QTime:
         return QTime(int(self._hour_col.value()), int(self._min_col.value()))

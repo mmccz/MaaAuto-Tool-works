@@ -3,12 +3,15 @@ import subprocess
 import os
 import datetime
 import logging
-import pyautogui
+import vision
+import input_driver
 from utils import resource_path
+from config_manager import CONFIG_DIR, LOG_DIR
 from process_utils import (kill_foreground_apps, kill_blacklist_apps,
                            is_process_running,
                            wait_for_process_exit, wait_for_process_start,
                            minimize_process_windows, bring_process_to_front,
+                           find_process_window, get_client_rect_screen,
                            TaskInterrupted, check_interrupt,
                            interruptible_sleep)
 from notifier import send_task_report  # <--- 引入独立的推送模块
@@ -17,25 +20,145 @@ logger = logging.getLogger("MaaAuto")
 
 
 # --------------------------------------------------------------------------- #
-# OpenCV 探测
+# 找图相关配置（全部有默认值，老配置文件不改也能跑）
 #
-# pyautogui.locateCenterOnScreen(..., confidence=0.75) 的 confidence 参数
-# 只有在安装了 OpenCV（cv2）时才可用。缺失时会抛：
-#   The confidence keyword argument is only available if OpenCV is installed.
-#
-# 解决：
-#   1) requirements.txt 里声明 opencv-python-headless（推荐，无 GUI 依赖，体积小）
-#   2) 这里探测 cv2；缺失则降级为不带 confidence 的精确匹配（精度下降但仍可用）
+# 背景：1.0.x 用 pyautogui.locateCenterOnScreen 全屏精确尺寸匹配，模板在
+# 125% / 150% 缩放下比屏幕上的按钮小一圈，于是一直「找不到按钮」。现在改为
+# vision.find 多尺度匹配 + 限定目标窗口客户区，参数集中在这里。
 # --------------------------------------------------------------------------- #
-try:
-    import cv2 as _cv2  # noqa: F401
-    HAS_OPENCV = True
-except ImportError:
-    HAS_OPENCV = False
-    logger.warning(
-        "未检测到 OpenCV，找图将使用精确像素匹配（无 confidence 容差）。"
-        "如需更稳的找图，请安装：pip install opencv-python-headless"
-    )
+DEFAULT_MATCH_THRESHOLD = 0.80      # 相关系数阈值
+DEFAULT_SCALE_MIN = 0.60            # 模板缩放搜索下限（60%）
+DEFAULT_SCALE_MAX = 2.00            # 上限（200%）
+DEFAULT_SCALE_STEP = 0.05
+DEFAULT_MATCH_INTERVAL = 1.5        # 两次尝试之间的间隔（秒）
+DEFAULT_VERIFY_DELAY_MS = 900       # 点击后等多久再判断「有没有生效」
+DEFAULT_VERIFY_RETRIES = 1          # 点击无效时再补几次（0=不补）
+
+
+class EmulatorStartupFailed(RuntimeError):
+    """模拟器启动/连接失败（环境问题，重试也不会好）。"""
+
+
+# --------------------------------------------------------------------------- #
+# 点击生效判定
+#
+# 为什么需要它：「点击发出去了」不等于「点到了」。目标窗口若被别的窗口挡住、
+# 或者没抢到前台，注入的点击会落到上层窗口上——日志一切正常，界面毫无反应。
+# 这里在点击点周围取一小块像素，比较点击前后的变化，变化明显才认为生效。
+# --------------------------------------------------------------------------- #
+def _patch_region(x, y, half_w=40, half_h=28):
+    return (int(x) - half_w, int(y) - half_h, int(x) + half_w, int(y) + half_h)
+
+
+def _patch_diff(before, after):
+    """两块截图的平均像素差；任一为空或不匹配时返回一个大值。"""
+    if before is None or after is None or before.shape != after.shape:
+        return 999.0
+    try:
+        import numpy as np
+        return float(np.abs(after.astype(np.int16) - before.astype(np.int16)).mean())
+    except Exception:
+        return 999.0
+
+
+def _wait_patch_change(region, before, delay_ms, threshold=1.5):
+    """等 delay_ms 后重新截同一块，返回 (是否变化, 差值)。"""
+    time.sleep(max(0, delay_ms) / 1000.0)
+    after = vision.grab(region)
+    diff = _patch_diff(before, after)
+    return diff >= threshold, diff
+
+
+def _resolve_target_window(hwnd, procs, x, y):
+    """确定要激活/投递的顶层窗口句柄。"""
+    target = int(hwnd or 0)
+    if not target:
+        target = int(input_driver.window_at_point(x, y) or 0)
+    if not target and procs:
+        target = int(find_process_window(procs) or 0)
+    return input_driver.root_window(target) if target else 0
+
+
+def click_match(match, config, procs=None, hwnd=0):
+    """按配置点击一次匹配结果，并尽量确认「真的点到了」。
+
+    流程：
+      1. 坐标 = 命中中心 + 点击偏移；
+      2. 取目标顶层窗口，尝试切前台（ensure_foreground 多级回退并校验）；
+      3. 前台失败 → **先试后台点击**（PostMessage 不受窗口层级影响，Qt 程序可用）；
+      4. 前台成功 → 真实点击，等一会儿比对点击点附近像素是否变化；
+      5. 没变化 → 补点（次数由 ``click_retries`` 控制），仍无变化则警告并继续。
+    """
+    config = config or {}
+    offset_x = int(config.get("click_offset_x", 0) or 0)
+    offset_y = int(config.get("click_offset_y", 0) or 0)
+    cx, cy = match.center
+    x, y = cx + offset_x, cy + offset_y
+
+    mode = str(config.get("click_mode", input_driver.CLICK_SENDINPUT)).lower()
+    verify = bool(config.get("click_verify", True))
+    delay_ms = int(config.get("click_verify_delay_ms", DEFAULT_VERIFY_DELAY_MS))
+    retries = max(0, int(config.get("click_retries", DEFAULT_VERIFY_RETRIES)))
+
+    target = _resolve_target_window(hwnd, procs, x, y)
+    patch = _patch_region(x, y)
+    before = vision.grab(patch) if verify else None
+
+    if mode == input_driver.CLICK_POSTMESSAGE:
+        if input_driver.click(x, y, mode=mode, hwnd=target):
+            if not verify:
+                logger.info(f"后台点击已投递: ({x}, {y})")
+                return True
+            changed, diff = _wait_patch_change(patch, before, delay_ms)
+            if changed:
+                logger.info(f"后台点击生效: ({x}, {y}) 像素差 {diff:.1f}")
+                return True
+            logger.warning(f"后台点击未生效（像素差 {diff:.1f}），改用真实点击")
+        else:
+            logger.warning("后台点击投递失败，改用真实点击")
+
+    fg_ok = input_driver.ensure_foreground(target) if target else False
+    if target and not fg_ok:
+        logger.info("目标窗口未能切到前台，先尝试后台点击（不占用鼠标）")
+        if input_driver.post_click(target, x, y):
+            if not verify:
+                return True
+            changed, diff = _wait_patch_change(patch, before, delay_ms)
+            if changed:
+                logger.info(f"后台点击生效: ({x}, {y}) 像素差 {diff:.1f}")
+                return True
+            logger.warning(f"后台点击未生效（像素差 {diff:.1f}），继续尝试真实点击")
+
+    attempt = 0
+    while True:
+        attempt += 1
+        ok = input_driver.click(
+            x, y,
+            mode=input_driver.CLICK_SENDINPUT,
+            restore_cursor=bool(config.get("click_restore_cursor", True)),
+            move_delay_ms=int(config.get("click_move_delay_ms", 80)),
+            hwnd=target)
+        if not ok:
+            logger.error(f"鼠标点击失败: ({x}, {y})")
+            return False
+
+        if not verify:
+            logger.info(f"已点击: ({x}, {y})")
+            return True
+
+        changed, diff = _wait_patch_change(patch, before, delay_ms)
+        if changed:
+            logger.info(f"点击生效: ({x}, {y}) 第 {attempt} 次，像素差 {diff:.1f}")
+            return True
+
+        if attempt > retries:
+            logger.warning(
+                f"点击已发送但画面无变化（({x}, {y}) 像素差 {diff:.1f}）。"
+                f"可能是按钮状态本身不变、目标被遮挡或窗口未激活；继续后续流程。")
+            return True
+
+        logger.info(f"点击后画面无变化（像素差 {diff:.1f}），补点第 {attempt + 1} 次")
+        input_driver.ensure_foreground(target)
 
 
 def _launch_program(exe_path, logger):
@@ -53,33 +176,126 @@ def _launch_program(exe_path, logger):
     return subprocess.Popen(exe_path, shell=True)
 
 
-def find_and_click(image_name, timeout=60):
-    """寻找目标图像并点击"""
-    image_path = resource_path(os.path.join("resources", image_name))
-    if not os.path.exists(image_path):
-        logger.error(f"【严重错误】找不到图像文件: {image_path}！")
+def _user_template_dir(config):
+    """用户模板目录：配置指定，默认 ``config/templates``。"""
+    path = (config or {}).get("template_dir", "").strip()
+    if path:
+        return path
+    return os.path.join(CONFIG_DIR, "templates")
+
+
+def template_paths(image_name, config=None):
+    """模板候选路径：用户目录优先，其次内置 resources。"""
+    return vision.template_candidates(
+        image_name,
+        user_dir=_user_template_dir(config),
+        bundled_dir=resource_path("resources"),
+    )
+
+
+def _search_region(config, procs):
+    """按配置返回 (搜索矩形, 窗口句柄)。
+
+    ``search_scope = window``（默认）：限定在目标窗口客户区内找。
+        好处是快（少扫几十倍面积）、不会被别处的相似图误命中。
+    ``search_scope = screen``：整屏找，用于窗口标题/边框遮挡、或目标程序
+        把按钮画在独立无边框窗口里的情况。
+    """
+    scope = str((config or {}).get("search_scope", "window")).lower()
+    if scope == "screen" or not procs:
+        return None, 0
+
+    hwnd = find_process_window(procs)
+    rect = get_client_rect_screen(hwnd)
+    if not rect:
+        return None, 0
+
+    # 允许外扩若干像素：按钮贴边或窗口边框半透明时的容错
+    pad = int((config or {}).get("search_padding", 0) or 0)
+    if pad:
+        rect = (rect[0] - pad, rect[1] - pad, rect[2] + pad, rect[3] + pad)
+    return rect, hwnd
+
+
+def _save_failure_screenshot(image_name, region):
+    """找图超时时留一张现场截图，方便用户回报「明明在屏幕上却找不到」。"""
+    try:
+        img = vision.grab(region)
+        if img is None:
+            return None
+        path = os.path.join(
+            LOG_DIR,
+            f"find_fail_{os.path.splitext(image_name)[0]}_"
+            f"{datetime.datetime.now():%Y%m%d_%H%M%S}.png")
+        return path if vision.save_png(img, path) else None
+    except Exception as e:
+        logger.debug(f"保存现场截图失败: {e}")
+        return None
+
+
+def find_and_click(image_name, config=None, procs=None, timeout=None):
+    """寻找目标图像并点击。
+
+    相比 1.0.x 的 ``pyautogui.locateCenterOnScreen``：
+      * 多尺度匹配 → 125%/150% 缩放、不同分辨率下同样能找到；
+      * 限定在目标窗口客户区搜索 → 快，且不会点到别处；
+      * 支持用户模板覆盖（``config/templates/``）→ 换分辨率后可自行重截；
+      * 点击方式可选：真实点击（默认）或后台 PostMessage 点击。
+
+    :param image_name: 模板文件名，如 ``maa_start.png``
+    :param config:     配置字典（读 match_* / click_* 参数）
+    :param procs:      目标进程名列表，用于定位窗口与后台点击
+    :param timeout:    覆盖配置里的 ``wait_timeout``
+    """
+    config = config or {}
+    procs = procs or []
+    if timeout is None:
+        timeout = config.get("wait_timeout", 60)
+
+    candidates = template_paths(image_name, config)
+    if not candidates:
+        logger.error(
+            f"【严重错误】找不到图像文件: {image_name} "
+            f"（已查 {_user_template_dir(config)} 与内置 resources）")
         return False
 
-    logger.info(f"开始寻找目标按钮: {image_name} (超时 {timeout} 秒)"
-                f"{'' if HAS_OPENCV else ' [无 OpenCV，精确匹配]'}")
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        check_interrupt()          # ← 中断检查
-        try:
-            if HAS_OPENCV:
-                location = pyautogui.locateCenterOnScreen(
-                    image_path, confidence=0.75, grayscale=True)
-            else:
-                location = pyautogui.locateCenterOnScreen(
-                    image_path, grayscale=True)
-            if location:
-                logger.info(f"找到目标按钮，执行点击... (图片: {image_name})")
-                pyautogui.click(location)
-                return True
-        except pyautogui.ImageNotFoundException:
-            pass
-        interruptible_sleep(2)     # ← 原本是 time.sleep(2)，改为可中断
+    threshold = float(config.get("match_threshold", DEFAULT_MATCH_THRESHOLD))
+    scale_min = float(config.get("match_scale_min", DEFAULT_SCALE_MIN))
+    scale_max = float(config.get("match_scale_max", DEFAULT_SCALE_MAX))
+    scale_step = float(config.get("match_scale_step", DEFAULT_SCALE_STEP))
+    interval = max(0.3, float(config.get("match_interval", DEFAULT_MATCH_INTERVAL)))
+    click_mode = str(config.get("click_mode", input_driver.CLICK_SENDINPUT)).lower()
 
+    logger.info(
+        f"开始寻找目标按钮: {image_name} (超时 {timeout} 秒, "
+        f"阈值 {threshold:.2f}, 尺度 {scale_min:.2f}~{scale_max:.2f}, "
+        f"点击方式 {click_mode})")
+
+    start_time = time.time()
+    attempt = 0
+    last_region = None
+
+    while time.time() - start_time < timeout:
+        check_interrupt()
+        attempt += 1
+        region, hwnd = _search_region(config, procs)
+        last_region = region
+
+        match = vision.find_any(
+            candidates, region=region, threshold=threshold,
+            scale_min=scale_min, scale_max=scale_max, scale_step=scale_step)
+
+        if match:
+            logger.info(
+                f"命中目标（第 {attempt} 次尝试）: {match}；"
+                f"缩放比 {match.scale:.2f}")
+            return click_match(match, config, procs=procs, hwnd=hwnd)
+
+        interruptible_sleep(interval)
+
+    shot = _save_failure_screenshot(image_name, last_region)
+    if shot:
+        logger.info(f"找图失败现场截图: {shot}")
     raise TimeoutError(f"找图超时，未能找到: {image_name}")
 
 
@@ -103,18 +319,57 @@ def run_maa_phase(config, logger):
         _launch_program(maa_path, logger)
         interruptible_sleep(5)
 
+    # 点击前先看看模拟器在不在。MAA 的「启动后自动开启模拟器」如果没开
+    # （gui.json 里 Start.OpenEmulatorAfterLaunch=False），它会直接去连 ADB，
+    # 而模拟器没起来时连接会被拒绝（MAA 日志里是 10061），任务当场失败——
+    # 但这属于环境问题，先把话说明白，避免用户以为是「点击没生效」。
+    if not is_process_running([emulator_proc]):
+        logger.warning(
+            f"点击前未检测到模拟器进程（{emulator_proc}）。如果 MAA 的"
+            f"「启动后自动开启模拟器」没有打开，MAA 会立刻连接失败（ADB 10061）。"
+            f"建议：在 MAA 里勾选该选项，或先手动启动模拟器再执行任务。")
+
     logger.info("正在尝试点击 MAA 的【Link Start!】按钮...")
-    find_and_click("maa_start.png", config.get("wait_timeout", 60))
+    find_and_click("maa_start.png", config, procs=maa_procs)
 
     wait_for_process_start([emulator_proc], config.get("game_start_timeout", 120))
+    emulator_started_at = time.time()
 
     logger.info("MAA 正在运行，等待模拟器关闭...")
     wait_for_process_exit([emulator_proc], config.get("game_exit_timeout", 7200), check_interval=15)
 
+    uptime = time.time() - emulator_started_at
+    _check_emulator_runtime(uptime, config.get("min_emulator_runtime", 60))
+
+    logger.info(f"模拟器运行 {uptime / 60:.1f} 分钟后退出，判定本次任务完成。")
     logger.info("模拟器已关闭，正在将 MAA 最小化到后台备用...")
     minimize_process_windows(maa_procs)
     interruptible_sleep(3)
     return True
+
+
+def _check_emulator_runtime(uptime, min_runtime):
+    """模拟器「刚启动就退出」几乎都是启动/连接失败，不能算任务成功。
+
+    1.0.3 及以前只看「模拟器进程退出」就判定成功：MuMu 因为 ADB 连不上
+    （MAA 日志里的 10061）当场退出时，我们会误报「成功」，用户还以为真的挂完了。
+    :raises RuntimeError: 运行时长低于阈值
+    """
+    try:
+        min_runtime = float(min_runtime or 0)
+    except (TypeError, ValueError):
+        min_runtime = 0.0
+    if min_runtime <= 0 or uptime >= min_runtime:
+        return
+    raise EmulatorStartupFailed(
+        f"模拟器启动后仅 {uptime:.0f} 秒就退出（阈值 {min_runtime:.0f} 秒），"
+        f"判定为启动/连接失败，而不是任务完成。常见原因：\n"
+        f"  1) MAA 的模拟器连接设置不对（MuMu 12 默认应为 127.0.0.1:16384）；\n"
+        f"  2) MAA 未开启「启动后自动开启模拟器」，而模拟器本来就没运行；\n"
+        f"  3) 模拟器没启动完（Android 还在开机）就被要求连接；\n"
+        f"  4) 虚拟机加速不可用 / 模拟器安装不完整。\n"
+        f"请查看 MAA 自己的日志（其安装目录下 debug\\asst.log）确认是 "
+        f"ConnectingFailed 还是模拟器崩溃。")
 
 
 def run_maaend_phase(config, logger):
@@ -138,7 +393,7 @@ def run_maaend_phase(config, logger):
         interruptible_sleep(10)
 
     logger.info("正在尝试点击 MaaEnd 的【开始任务】按钮...")
-    find_and_click("maaend_start.png", config.get("wait_timeout", 60))
+    find_and_click("maaend_start.png", config, procs=maaend_procs)
 
     wait_for_process_start([pc_game_proc], config.get("game_start_timeout", 120))
 
@@ -209,6 +464,11 @@ def execute_workflow(config, logger):
                     break
                 except TaskInterrupted:
                     raise
+                except EmulatorStartupFailed as e:
+                    # 环境/配置问题：再点几次 Link Start 也是同样的失败，直接收尾
+                    logger.error(f"MAA 阶段失败（环境问题，不再重试）: {e}")
+                    overall_status = "报错"
+                    break
                 except Exception as e:
                     logger.error(f"MAA 阶段发生异常: {e}")
                     if attempt < retry_times:

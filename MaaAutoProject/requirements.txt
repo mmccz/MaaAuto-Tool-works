@@ -9,10 +9,11 @@ psutil>=5.9.0
 pywin32>=306
 
 # ---- 自动化找图 ----
-pyautogui>=0.9.54
+# 1.0.2 起不再用 pyautogui（它按固定尺寸全屏找图，换缩放就失效）；
+# 找图改用 vision.py 的 cv2 多尺度匹配，点击用 ctypes SendInput 直接注入。
 Pillow>=10.0.0
 
-# ---- 图像识别（pyautogui confidence 参数依赖）----
+# ---- 图像识别（vision.py 多尺度模板匹配）----
 # 用 headless 版：无 GUI 依赖，体积比 opencv-python 小
 opencv-python-headless>=4.8.0
 

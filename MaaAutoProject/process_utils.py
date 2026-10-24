@@ -288,3 +288,94 @@ def kill_blacklist_apps(blacklist_names):
             pass
 
     logger.info(f"黑名单程序清理完成，共关闭 {killed_count} 个程序。")
+
+
+# --------------------------------------------------------------------------- #
+# 窗口几何（供找图限定搜索区域、点击定位使用）
+#
+# 坐标一律是**屏幕物理像素**：本进程在 main.py 里声明了 per-monitor-v2 DPI 感知，
+# 所以 win32gui.GetWindowRect / ClientToScreen 返回的坐标与 ImageGrab 截到的像素、
+# SetCursorPos 接受的坐标是同一套，不需要任何换算。
+# --------------------------------------------------------------------------- #
+MIN_WINDOW_AREA = 200 * 100     # 低于这个面积的窗口当作托盘/提示窗，忽略
+
+
+def find_process_window(process_names, min_area=MIN_WINDOW_AREA):
+    """返回匹配进程中面积最大的可见顶层窗口句柄；找不到返回 0。
+
+    取「面积最大」而不是「第一个」：MAA 之类程序常常同时有主窗口、日志浮窗、
+    隐藏的辅助窗口，主窗口面积通常最大，用它做搜索区域最稳。
+    """
+    process_names = [p.lower() for p in process_names if p]
+    if not process_names:
+        return 0
+
+    best = {"hwnd": 0, "area": 0}
+
+    def callback(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd):
+            return True
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            proc = psutil.Process(pid)
+            name = proc.name().lower()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            return True
+        except Exception:
+            return True
+        if not any(target in name for target in process_names):
+            return True
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        except Exception:
+            return True
+        area = max(0, right - left) * max(0, bottom - top)
+        if area >= min_area and area > best["area"]:
+            best["hwnd"] = hwnd
+            best["area"] = area
+        return True
+
+    try:
+        win32gui.EnumWindows(callback, None)
+    except Exception as e:
+        logger.debug(f"枚举窗口失败: {e}")
+    return best["hwnd"]
+
+
+def get_window_rect_screen(hwnd):
+    """窗口外框的屏幕矩形 (left, top, right, bottom)；失败返回 None。"""
+    if not hwnd:
+        return None
+    try:
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    except Exception:
+        return None
+    if right <= left or bottom <= top:
+        return None
+    return (left, top, right, bottom)
+
+
+def get_client_rect_screen(hwnd):
+    """窗口客户区（去掉标题栏/边框）的屏幕矩形；失败时退回外框矩形。
+
+    找图应该用客户区：标题栏里的图标/文字会干扰匹配，而且客户区在不同
+    主题（深色/浅色标题栏）下更稳定。
+    """
+    if not hwnd:
+        return None
+    try:
+        left, top, right, bottom = win32gui.GetClientRect(hwnd)
+        if right <= left or bottom <= top:
+            return get_window_rect_screen(hwnd)
+        sx, sy = win32gui.ClientToScreen(hwnd, (left, top))
+        ex, ey = win32gui.ClientToScreen(hwnd, (right, bottom))
+        return (sx, sy, ex, ey)
+    except Exception:
+        return get_window_rect_screen(hwnd)
+
+
+def is_window_valid(hwnd):
+    try:
+        return bool(hwnd) and bool(win32gui.IsWindow(hwnd))
+    except Exception:
+        return False

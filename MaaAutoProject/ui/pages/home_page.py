@@ -13,11 +13,14 @@ class HomePage(QWidget):
     run_clicked = Signal()
     stop_clicked = Signal()
     clear_log_clicked = Signal()
+    tutorial_clicked = Signal()
+    announcements_clicked = Signal()
 
     def __init__(self, i18n, parent=None):
         super().__init__(parent)
         self.i18n = i18n
         self._is_running = False
+        self._unread_announcements = 0
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -26,12 +29,25 @@ class HomePage(QWidget):
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(18)
 
-        # 顶部标题 + 运行/结束按钮
+        # 顶部标题 + 教程/公告/运行按钮
         top = QHBoxLayout()
+        top.setSpacing(10)
         self.page_title = QLabel(self.i18n.t("nav.home"))
         self.page_title.setObjectName("PageTitle")
         top.addWidget(self.page_title)
         top.addStretch()
+
+        self.btn_announcements = QPushButton(self.i18n.t("announce.title"))
+        self.btn_announcements.setObjectName("GhostButton")
+        self.btn_announcements.setCursor(Qt.PointingHandCursor)
+        self.btn_announcements.clicked.connect(self.announcements_clicked)
+        top.addWidget(self.btn_announcements)
+
+        self.btn_tutorial = QPushButton(self.i18n.t("tutorial.button"))
+        self.btn_tutorial.setObjectName("GhostButton")
+        self.btn_tutorial.setCursor(Qt.PointingHandCursor)
+        self.btn_tutorial.clicked.connect(self.tutorial_clicked)
+        top.addWidget(self.btn_tutorial)
 
         self.run_btn = QPushButton(self.i18n.t("home.btn.run"))
         self.run_btn.setObjectName("PrimaryButton")
@@ -164,12 +180,31 @@ class HomePage(QWidget):
             self.card_status.setStyleSheet("")
 
     # ------------------------------------------------------------------
+    # 公告 / 教程
+    # ------------------------------------------------------------------
+    def set_announcement_badge(self, unread):
+        """未读公告数：按钮文字后面挂一个红点数字。"""
+        self._unread_announcements = max(0, int(unread or 0))
+        base = self.i18n.t("announce.title")
+        if self._unread_announcements:
+            self.btn_announcements.setText(f"{base}  ⦁{self._unread_announcements}")
+            self.btn_announcements.setObjectName("GhostButtonHot")
+        else:
+            self.btn_announcements.setText(base)
+            self.btn_announcements.setObjectName("GhostButton")
+        # objectName 变了必须重新 polish，否则新 QSS 不生效
+        self.btn_announcements.style().unpolish(self.btn_announcements)
+        self.btn_announcements.style().polish(self.btn_announcements)
+
+    # ------------------------------------------------------------------
     # 语言切换
     # ------------------------------------------------------------------
     def retranslate(self):
         self.page_title.setText(self.i18n.t("nav.home"))
         self.run_btn.setText(self.i18n.t("home.btn.stop") if self._is_running
                              else self.i18n.t("home.btn.run"))
+        self.btn_tutorial.setText(self.i18n.t("tutorial.button"))
+        self.set_announcement_badge(self._unread_announcements)
         self.card_status.set_title(self.i18n.t("home.status.label"))
         self.card_last_run.set_title(self.i18n.t("home.last_run.label"))
         self.card_next_run.set_title(self.i18n.t("home.next_run.label"))

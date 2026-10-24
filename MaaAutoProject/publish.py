@@ -231,9 +231,8 @@ def check_dependencies():
         "pyside6": "PySide6",
         "pyinstaller": "pyinstaller",
         "psutil": "psutil",
-        "pyautogui": "pyautogui",
         "pillow": "Pillow",
-        "opencv": "opencv-python-headless",   # ← pyautogui confidence 参数依赖
+        "opencv": "opencv-python-headless",   # ← vision.py 多尺度匹配依赖
         "packaging": "packaging",
         "pywin32": "pywin32",
     }

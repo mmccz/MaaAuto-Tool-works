@@ -36,18 +36,37 @@ class _SnapshotOverlay(QWidget):
             p.drawPixmap(self.rect(), self._pixmap)
 
 
-def theme_transition(window, switch_callback, duration=260):
-    target = window.centralWidget() or window
+def clear_transition_overlay(window):
+    """立刻清掉换主题/换缩放时留下的「旧画面遮罩」。
 
-    # 0) 如果上一次的 overlay 还在，先清掉
+    ★ 这个遮罩是一张旧界面的截图，几何尺寸在创建时就定死了。如果紧接着发生了
+    布局变化（切界面缩放、窗口变大变小），遮罩没跟着变，淡出过程中就会看到
+    旧布局残影 —— 实测 150% 切换时偶尔闪出旧侧栏的一角，点一下对话框又
+    「自己好了」（因为动画跑完、遮罩被删）。所以改变窗口结构前必须先清掉它。
+    """
     old = getattr(window, "_theme_overlay", None)
     if old is not None:
         try:
+            old.setGraphicsEffect(None)
             old.setParent(None)
             old.deleteLater()
         except Exception:
             pass
         window._theme_overlay = None
+    anim = getattr(window, "_theme_anim", None)
+    if anim is not None:
+        try:
+            anim.stop()
+        except Exception:
+            pass
+        window._theme_anim = None
+
+
+def theme_transition(window, switch_callback, duration=260):
+    target = window.centralWidget() or window
+
+    # 0) 如果上一次的 overlay 还在，先清掉
+    clear_transition_overlay(window)
 
     # 1) 抓旧画面
     pix = target.grab()

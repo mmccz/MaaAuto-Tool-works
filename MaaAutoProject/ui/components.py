@@ -7,6 +7,20 @@ from PySide6.QtGui import QColor, QPainter
 
 
 # =============================================================================
+# 界面缩放：自绘 / 固定尺寸控件的换算
+#
+# QSS 只能缩放 ``font-size``。Switch / 色块 / 滚轮时间这类尺寸写死在代码里的
+# 控件不会跟着变——150% 时字体已经 20px，开关还是 44×24，视觉上明显脱节。
+# 统一用这个函数按 ui_scale 换算。
+# =============================================================================
+def scale_px(value, scale, minimum=1):
+    try:
+        return max(int(minimum), int(round(float(value) * float(scale))))
+    except (TypeError, ValueError):
+        return int(value)
+
+
+# =============================================================================
 # Card / StatCard / SettingItem / SettingGroup（保持原样）
 # =============================================================================
 class Card(QFrame):
@@ -117,11 +131,14 @@ class Switch(QAbstractButton):
         Switch { qproperty-accent: #3b82f6; qproperty-trackOff: #e5e7eb;
                  qproperty-knobColor: #ffffff; }
     """
+    BASE_WIDTH = 44
+    BASE_HEIGHT = 24
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("Switch")
         self.setCheckable(True)
-        self.setFixedSize(44, 24)
+        self.set_ui_scale(1.0)
         self.setCursor(Qt.PointingHandCursor)
 
         self._progress = 0.0
@@ -133,6 +150,12 @@ class Switch(QAbstractButton):
         self._anim.setDuration(240)
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
         self.toggled.connect(self._on_toggled)
+
+    def set_ui_scale(self, scale):
+        """开关是自绘的固定尺寸控件，QSS 缩放不到它，这里跟着界面缩放走。"""
+        self.setFixedSize(scale_px(self.BASE_WIDTH, scale),
+                          scale_px(self.BASE_HEIGHT, scale))
+        self.update()
 
     # -------- progress --------
     def _get_progress(self):
@@ -372,25 +395,13 @@ class AccentColorPicker(QWidget):
             btn.setObjectName("AccentSwatch")
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedSize(24, 24)
             btn.setToolTip(hexv)
-            # 色块自身颜色是动态的，无法走全局 QSS，这里直接内联样式
-            btn.setStyleSheet(f"""
-                QPushButton#AccentSwatch {{
-                    background-color: {hexv};
-                    border: 2px solid transparent;
-                    border-radius: 12px;
-                }}
-                QPushButton#AccentSwatch:hover {{
-                    border: 2px solid rgba(148, 163, 184, 0.65);
-                }}
-                QPushButton#AccentSwatch:checked {{
-                    border: 2px solid #94a3b8;
-                }}
-            """)
             self._group.addButton(btn, i)
             self._swatches[hexv] = btn
             lay.addWidget(btn)
+
+        self._scale = 1.0
+        self.set_ui_scale(1.0)
 
         self._group.idClicked.connect(self._on_swatch_clicked)
 
@@ -405,6 +416,34 @@ class AccentColorPicker(QWidget):
         self.set_color(self._color, emit=False)
 
     # ------------------------------------------------------------------
+    SWATCH_PX = 24
+
+    @staticmethod
+    def _swatch_style(hexv, scale=1.0):
+        """色块的内联样式（颜色是动态的，走不了全局 QSS）。"""
+        radius = scale_px(AccentColorPicker.SWATCH_PX / 2.0, scale)
+        border = scale_px(2, scale)
+        return f"""
+            QPushButton#AccentSwatch {{
+                background-color: {hexv};
+                border: {border}px solid transparent;
+                border-radius: {radius}px;
+            }}
+            QPushButton#AccentSwatch:hover {{
+                border: {border}px solid rgba(148, 163, 184, 0.65);
+            }}
+            QPushButton#AccentSwatch:checked {{
+                border: {border}px solid #94a3b8;
+            }}
+        """
+
+    def set_ui_scale(self, scale):
+        """色块是固定尺寸 + 内联圆角，跟随界面缩放重排。"""
+        size = scale_px(self.SWATCH_PX, scale)
+        for hexv, btn in self._swatches.items():
+            btn.setFixedSize(size, size)
+            btn.setStyleSheet(self._swatch_style(hexv, scale))
+        self._scale = scale
     def _on_swatch_clicked(self, idx):
         hexv = self.PRESETS[idx]
         self._color = hexv

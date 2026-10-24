@@ -101,10 +101,12 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           name: MaaAuto ${{ env.TAG }}
+          # 发布说明直接取仓库里的 RELEASE_NOTES.md（每次发版同步更新这个文件）。
+          body_path: RELEASE_NOTES.md
           # 预发布（tag 含 b / rc / beta）：自动发布为 prerelease，beta 渠道才能拉到；
-          # 正式版仍保持草稿，人工检查后再发布。
+          # 正式版同样直接发布 —— 构建失败时前面的步骤会 exit 1，不会产生半成品 Release。
           prerelease: ${{ contains(env.TAG, 'b') || contains(env.TAG, 'rc') || contains(env.TAG, 'beta') }}
-          draft: ${{ !(contains(env.TAG, 'b') || contains(env.TAG, 'rc') || contains(env.TAG, 'beta')) }}
+          draft: false
           generate_release_notes: false
           files: out/*
         env:

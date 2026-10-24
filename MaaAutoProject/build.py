@@ -61,23 +61,18 @@ EXTRA_DIST_FILES = [
     "_version_info.txt",   # 由本脚本生成
 ]
 
-# pyautogui / Pillow / psutil / cv2 等常被 PyInstaller 漏掉的隐式导入
+# Pillow / psutil / cv2 等常被 PyInstaller 漏掉的隐式导入
 HIDDEN_IMPORTS = [
-    "pyscreeze",
-    "pygetwindow",
-    "pymsgbox",
-    "mouseinfo",
     "PIL",
-    "PIL._tkinter_finder",
     "PIL.Image",
-    "PIL.ImageQt",
+    "PIL.ImageGrab",    # ← vision.grab() 截屏依赖
     "psutil",
     "win32gui",
     "win32process",
     "win32con",
     "winreg",
     "serverchan_sdk",   # ← 本地文件 serverchan_sdk.py，确保进 exe
-    "cv2",              # ← pyautogui confidence 参数依赖（opencv-python-headless）
+    "cv2",              # ← vision.py 多尺度模板匹配依赖（opencv-python-headless）
 ]
 
 # 体积优化：明确排除这些包
@@ -96,7 +91,12 @@ EXCLUDES = [
     "PyQt6",
     "PySide2",
     "wx",
-    # "tkinter",   # 若 pyautogui 弹窗报错，取消这行注释
+    # 1.0.2 起不再依赖 pyautogui，这几个陪跑包可以放心排除（能省几 MB）
+    "pyscreeze",
+    "pygetwindow",
+    "pymsgbox",
+    "mouseinfo",
+    "tkinter",
 ]
 
 PYCACHE_SKIP_DIRS = {
@@ -356,24 +356,24 @@ def main():
     if not ensure_pyinstaller():
         sys.exit(1)
 
-    # 检查 cv2 是否可用（否则打出来的包找图会失败）
+    # 检查 cv2 是否可用（vision.py 的多尺度找图完全依赖它）
     try:
         import cv2  # noqa: F401
-        print(f"[info] OpenCV 已安装（找图 confidence 参数可用）")
+        print("[info] OpenCV 已安装（多尺度找图可用）")
         try:
             import numpy  # noqa: F401
         except ImportError:
             print()
             print("=" * 60)
             print("[warn] 找到 cv2 但没有 numpy —— cv2 无法工作！")
-            print("       打包版会退化为精确像素匹配。请先安装：pip install numpy")
+            print("       打包版的找图会直接报错。请先安装：pip install numpy")
             print("=" * 60)
             print()
     except ImportError:
         print()
         print("=" * 60)
-        print("[warn] 未检测到 OpenCV，打出的包将无法使用 confidence 找图。")
-        print("       建议先安装：pip install opencv-python-headless")
+        print("[warn] 未检测到 OpenCV，打出的包无法找图（vision.find 直接返回 None）。")
+        print("       请先安装：pip install opencv-python-headless")
         print("=" * 60)
         print()
 

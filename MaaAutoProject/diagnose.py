@@ -27,6 +27,9 @@ def read_text_safe(path):
 
 
 def main():
+    # 先声明 DPI 感知，否则下面的屏幕尺寸/DIP 都是被系统虚拟化过的值（125% 下会
+    # 显示成 1536x864 而不是 1920x1080），找图排查时非常容易误判。
+    _set_dpi_awareness()
     print("=" * 64)
     print("MaaAuto 诊断")
     print("=" * 64)
@@ -125,9 +128,80 @@ def main():
     except Exception as e:
         print(f"  [ERROR] {e}")
 
+    print("\n[8] 显示 / 找图环境")
+    try:
+        import ctypes
+        from ctypes import wintypes
+        w, h = ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
+        print(f"  屏幕(物理像素) : {w}x{h}")
+        print(f"  进程 DPI 感知  : {'是' if _is_dpi_aware() else '否（找图坐标会错位）'}")
+        import vision
+        print(f"  dpi_scale     : {vision.dpi_scale():.2f}")
+        print(f"  opencv        : {'可用' if vision.HAS_CV2 else '缺失！找图不可用'}")
+        import automation
+        cfg = {}
+        try:
+            from config_manager import load_config
+            cfg = load_config()
+        except Exception:
+            pass
+        for name in ("maa_start.png", "maaend_start.png"):
+            paths = automation.template_paths(name, cfg)
+            origin = "用户模板" if paths and paths[0].endswith(
+                name) and "resources" not in paths[0] else "内置模板"
+            print(f"  {name:16s} : {'找到' if paths else '缺失'} ({origin}) {paths[:1]}")
+        print(f"  搜索范围       : {cfg.get('search_scope', 'window')}")
+        print(f"  相似度阈值     : {cfg.get('match_threshold', 0.8)}")
+        print(f"  缩放搜索区间   : {cfg.get('match_scale_min', 0.6)}~{cfg.get('match_scale_max', 2.0)}")
+        print(f"  点击方式       : {cfg.get('click_mode', 'sendinput')}")
+    except Exception as e:
+        print(f"  [ERROR] {e}")
+
     print("\n" + "=" * 64)
     print("诊断完成")
     print("=" * 64)
+
+
+def _set_dpi_awareness():
+    """与 main.py 相同的三级回退，保证诊断数值是物理像素。
+
+    ★ 这三个 API 失败时**返回错误码/0 而不是抛异常**，必须看返回值；
+      只看「没抛异常」就返回，会以为设置成功（进程仍是 DPI 不感知，
+      截图是物理像素、GetWindowRect 是虚拟像素，找图坐标整体错位）。
+    """
+    import ctypes
+    user32 = ctypes.windll.user32
+    try:
+        if user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            return True
+    except Exception:
+        pass
+    try:
+        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        if user32.SetProcessDPIAware():
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _is_dpi_aware():
+    """当前进程是否已声明 DPI 感知（未声明时找图坐标会与截图错位）。
+
+    GetAwarenessFromDpiAwarenessContext: 0=不感知 1=系统级 2=每显示器级。
+    """
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        ctx = user32.GetThreadDpiAwarenessContext()
+        awareness = user32.GetAwarenessFromDpiAwarenessContext(ctx)
+        return int(awareness) > 0
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":

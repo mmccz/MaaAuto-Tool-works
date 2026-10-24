@@ -195,6 +195,11 @@ QWidget#SettingsContainer {
     border-radius: 14px;
 }
 
+/* 新手教程的滚动容器（不透明的话深色主题下会露白底） */
+QWidget#TutorialContainer {
+    background: transparent;
+}
+
 /* ============ 进程选择表 ============ */
 QTableWidget {
     background: rgba(255, 255, 255, 0.92);
@@ -239,3 +244,87 @@ QLabel#WheelColon {
     font-size: 16px;
     font-weight: 700;
 }
+
+/* ============ 版本标签（关于页） ============ */
+/* 旧实现把颜色写在内联样式里（#1d4ed8 深蓝），深色主题下几乎看不见 */
+QLabel#VersionTag {
+    background: rgba({accent_rgb}, 0.16);
+    color: {accent_deep};
+    border: 1px solid rgba({accent_rgb}, 0.28);
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#LicenseTag {
+    background: rgba(16, 185, 129, 0.16);
+    color: #047857;
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* ============ 对话框（升级提示 / 公告 / 新手教程） ============ */
+QLabel#DialogTitle { font-size: 20px; font-weight: 700; color: #111827; }
+QLabel#DialogSubtitle { font-size: 12px; color: #6b7280; }
+QLabel#DialogText { font-size: 13px; color: #374151; }
+QLabel#DialogIconWarn { font-size: 24px; color: #d97706; }
+QLabel#UpdateChannelTag {
+    background: rgba({accent_rgb}, 0.14);
+    color: {accent_deep};
+    border-radius: 8px;
+    padding: 1px 8px;
+    font-size: 11px;
+}
+QTextBrowser#ReleaseNotes, QTextBrowser#AnnouncementBody {
+    background: rgba(255, 255, 255, 0.80);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: 10px;
+    color: #1f2937;
+    font-size: 13px;
+}
+QListWidget#AnnouncementList {
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: 6px;
+    outline: none;
+}
+QListWidget#AnnouncementList::item {
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #334155;
+    font-size: 13px;
+}
+QListWidget#AnnouncementList::item:hover { background: rgba(0, 0, 0, 0.04); }
+QListWidget#AnnouncementList::item:selected {
+    background: rgba({accent_rgb}, 0.16);
+    color: {accent_deep};
+    font-weight: 600;
+}
+
+/* 新手教程里的「必须做」提示块 */
+QLabel#TutorialWarning {
+    background: rgba(239, 68, 68, 0.10);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    border-left: 4px solid rgba(239, 68, 68, 0.85);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #b91c1c;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* 有未读公告的按钮 */
+QPushButton#GhostButtonHot {
+    background: rgba({accent_rgb}, 0.12);
+    color: {accent_deep};
+    border: 1px solid rgba({accent_rgb}, 0.40);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-weight: 600;
+}
+QPushButton#GhostButtonHot:hover { background: rgba({accent_rgb}, 0.20); }

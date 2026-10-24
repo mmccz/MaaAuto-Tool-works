@@ -1,0 +1,71 @@
+{
+    "updated": "2026-10-24",
+    "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
+    "items": [
+        {
+            "id": "v1.0.7",
+            "date": "2026-10-24",
+            "tag": "版本更新",
+            "title": {
+                "zh_CN": "1.0.7：公告支持在线更新、背景模糊改滑杆、教程不再重复弹",
+                "en_US": "1.0.7: online announcements, blur slider, tutorial no longer repeats"
+            },
+            "body": {
+                "zh_CN": "**公告现在从 GitHub 在线拉取了**：以后改公告只要编辑仓库里的 `MaaAutoProject/resources/announcements.json` 并 push，客户端下次启动就会看到，不需要发新版本；断网或拉取失败时用上次缓存/安装包内置内容。\n\n本版其它改动：\n\n- 新手教程**不再每次启动都弹**（之前改任意设置会把\"已看过\"状态冲掉）；\n- 设置 → 外观 → **背景模糊改成滑杆**，拖动即时预览数值；\n- 有公告更新时会**重新显示红点并自动弹一次**公告。",
+                "en_US": "**Announcements are now fetched from GitHub**: to update them, just edit `MaaAutoProject/resources/announcements.json` and push — clients see it on the next launch, no new release needed. Offline or on failure the cached/bundled copy is used.\n\nOther changes:\n\n- The beginner tutorial **no longer shows up on every launch** (changing any setting used to reset the seen flag);\n- Settings → Appearance → **background blur is now a slider**;\n- When announcements change, the unread badge reappears and the dialog pops up once."
+            }
+        },
+        {
+            "id": "v1.0.6",
+            "date": "2026-10-24",
+            "tag": "版本更新",
+            "title": {
+                "zh_CN": "1.0.6：更新弹窗重做、新手教程、开始菜单可选",
+                "en_US": "1.0.6: new update dialog, beginner tutorial, optional Start Menu shortcut"
+            },
+            "body": {
+                "zh_CN": "本版把「检查更新」的弹窗重新做了一遍：版本对比、Markdown 发布说明、明确的「立即升级 / 稍后 / 查看发布页」按钮。\n\n同时新增：\n\n- **新手教程**（首页右上角「新手教程」），第一次启动会自动弹出；\n- **公告**（本窗口）；\n- 安装时可选择是否创建开始菜单快捷方式。\n\n修复：点「重启程序」会把已开的 MAA / MuMu 一起关掉；切换界面缩放偶尔出现的重影；深色模式下版本号看不清；卸载后开始菜单残留。",
+                "en_US": "This release rebuilds the update prompt: version comparison, Markdown release notes and explicit Update / Later / View release buttons.\n\nAlso new:\n\n- **Beginner tutorial** (top-right of Home, shown automatically on first launch)\n- **Announcements** (this window)\n- Optional Start Menu shortcut during installation\n\nFixed: Restart closing your running MAA/MuMu; occasional ghosting after changing the interface scale; version tag unreadable in dark mode; Start Menu leftovers after uninstall."
+            }
+        },
+        {
+            "id": "notice-maa-settings",
+            "date": "2026-10-24",
+            "tag": "重要提醒",
+            "title": {
+                "zh_CN": "使用之前必须先改两处设置（MAA / MaaEnd）",
+                "en_US": "Two settings you MUST change first (MAA / MaaEnd)"
+            },
+            "body": {
+                "zh_CN": "**① MAA：一定要选择「完成后退出模拟器」**\n\n`MAA → 设置 → 启动设置 → 完成后退出模拟器`\n\n不勾选的话，任务跑完模拟器还开着，MaaAuto 会一直等不到「模拟器退出」，后续阶段/下次启动都可能失败。\n\n**② MaaEnd：一定要在任务列表最后添加「关闭程序」或「关闭模拟器」**\n\n`MaaEnd → 任务列表 → 末尾添加「关闭程序」/「关闭模拟器」`\n\n最后这一条是给 MaaAuto 的「任务结束」信号：没有它，MaaAuto 无法判断 MaaEnd 已经跑完，会一直等到超时（默认 2 小时）。\n\n详细步骤见「新手教程」。",
+                "en_US": "**① MAA: enable “Quit emulator when finished”**\n\n`MAA → Settings → Startup → Quit emulator when finished`\n\nWithout it the emulator stays open after the task, MaaAuto never sees the emulator exit, and later stages / the next run can fail.\n\n**② MaaEnd: add “Close program” or “Close emulator” as the LAST task**\n\n`MaaEnd → Task list → append “Close program” / “Close emulator”`\n\nThat last task is MaaAuto's “task finished” signal. Without it MaaAuto cannot tell MaaEnd has finished and waits until timeout (2 hours by default).\n\nSee the beginner tutorial for the full walkthrough."
+            }
+        },
+        {
+            "id": "notice-auto-update",
+            "date": "2026-10-24",
+            "tag": "使用技巧",
+            "title": {
+                "zh_CN": "自动更新与任务结果推送",
+                "en_US": "Automatic updates and task notifications"
+            },
+            "body": {
+                "zh_CN": "**自动更新**：`设置 → 常规 → 自动下载并升级`。勾选后检测到新版本会等任务结束再升级，并自动重启。更新频道可选「稳定版」或「测试版」（测试版会收到 b1/rc 预发布）。\n\n**任务结果推送**：`设置 → 定时与推送`，支持 Server 酱 SendKey 与通用 Webhook（POST JSON `{title, content}`），任务成功/失败/中止都会推送。\n\n**定时执行**：同一分区可设每日执行时间；到点时若任务仍在跑，会在结束后自动补跑一次。",
+                "en_US": "**Automatic updates**: `Settings → General → Automatically download and install updates`. When enabled, a new version is installed after the current task finishes, and MaaAuto restarts itself. Channel can be Stable or Beta (Beta receives b1/rc prereleases).\n\n**Task notifications**: `Settings → Schedule & Notifications` supports ServerChan SendKey and a generic Webhook (POST JSON `{title, content}`) for success/failure/abort.\n\n**Scheduling**: set a daily run time; if a task is still running at that time, it runs once afterwards."
+            }
+        },
+        {
+            "id": "notice-feedback",
+            "date": "2026-10-24",
+            "tag": "使用技巧",
+            "title": {
+                "zh_CN": "出问题怎么反馈（日志在哪）",
+                "en_US": "How to report a problem (where the logs are)"
+            },
+            "body": {
+                "zh_CN": "**一键导出**：`关于 → 导出日志`，会把 `logs/` 打包成 zip。\n\n**任务日志**：`%LOCALAPPDATA%\\Programs\\MaaAuto\\logs\\年\\月\\日\\run_N_时间\\task.log`\n\n**MAA 自己的日志**：`<MAA 安装目录>\\debug\\asst.log` —— 卡在 MAA 阶段时这个最有用（连接失败、任务报错都在里面）。\n\n反馈时请附上：版本号、当时的界面缩放、`task.log`，以及（若卡在 MAA 阶段）`asst.log`。",
+                "en_US": "**One click**: `About → Export logs` packs `logs/` into a zip.\n\n**Task log**: `%LOCALAPPDATA%\\Programs\\MaaAuto\\logs\\<year>\\<month>\\<day>\\run_N_<time>\\task.log`\n\n**MAA's own log**: `<MAA install dir>\\debug\\asst.log` — most useful when a run gets stuck in the MAA stage (connection failures and task errors are there).\n\nWhen reporting, include: version, interface scale, `task.log`, and `asst.log` if the MAA stage failed."
+            }
+        }
+    ]
+}

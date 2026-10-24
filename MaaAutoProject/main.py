@@ -155,21 +155,65 @@ def is_admin() -> bool:
 # --------------------------------------------------------------------------- #
 # DPI
 # --------------------------------------------------------------------------- #
-def set_dpi_awareness():
+def set_dpi_awareness() -> bool:
+    """声明 per-monitor-v2 DPI 感知，成功返回 True。
+
+    ★ 这三个 API 失败时返回 0 / 错误码，**不会抛异常**。旧实现只看「有没有
+      抛异常」，于是设置失败也当作成功继续跑——此时进程仍是不感知状态：
+      ImageGrab 截到的是物理像素、GetWindowRect 返回虚拟像素，找图的
+      点击坐标会整体偏移（125% 缩放下偏 20%）。
+    """
     try:
-        ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)
-        return
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            return True
     except Exception:
         pass
     try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        return
+        # 0 = S_OK
+        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+            return True
     except Exception:
         pass
     try:
-        ctypes.windll.user32.SetProcessDPIAware()
+        if ctypes.windll.user32.SetProcessDPIAware():
+            return True
     except Exception:
         pass
+    return False
+
+
+# --------------------------------------------------------------------------- #
+# 界面缩放
+#
+# Qt 会按系统 DPI 自动缩放布局，但「1080×720 的窗口 + 默认字号」在 4K/高缩放
+# 或 1366×768 小屏上都显得不合适。这里只放大基础字号（QSS 里没有 px 字号，
+# 所以整体会等比放大），配合 MainWindow 按可用区域收缩窗口。
+# --------------------------------------------------------------------------- #
+def apply_ui_scale(app, config):
+    """把 ui_scale 应用到 app 字体，返回实际生效的倍数。
+
+    注意：真正让界面「看得见变大」的是 ``ThemeManager.apply_theme`` 里对 QSS
+    ``font-size`` 的重写（QSS 会覆盖 app 字体）。这里保留 app 字体缩放是为了
+    覆盖将来可能新增的、未被 QSS 命中的控件；设置页切换比例时走
+    ``ui.main_window.apply_ui_scale_live`` 的即时路径，不必重启。
+    """
+    try:
+        scale = float(config.get("ui_scale", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        scale = 1.0
+    scale = max(0.75, min(2.0, scale))
+    if abs(scale - 1.0) < 1e-3:
+        return scale
+    try:
+        font = app.font()
+        base = font.pointSizeF()
+        if base <= 0:
+            base = 9.0
+        font.setPointSizeF(base * scale)
+        app.setFont(font)
+    except Exception as e:
+        logging.getLogger("MaaAuto").warning(f"应用界面缩放失败: {e}")
+    return scale
 
 
 # --------------------------------------------------------------------------- #
@@ -213,7 +257,9 @@ def main():
         sys.exit(0)
 
     # 2) DPI
-    set_dpi_awareness()
+    if not set_dpi_awareness():
+        logging.getLogger("MaaAuto").warning(
+            "未能声明 DPI 感知，找图坐标可能偏移；如遇到点偏请反馈")
 
     # 3) QApplication
     app = QApplication(sys.argv)
@@ -239,14 +285,18 @@ def main():
     # 5) i18n + 配置
     i18n = init_i18n(resource_path("i18n"))
     config = load_config()
+    ui_scale = apply_ui_scale(app, config)
+    logger.info(f"界面缩放: {int(round(ui_scale * 100))}%"
+                f"（设置页可即时调整，无需重启）")
 
     lang = config.get("language", "zh_CN")
     if not i18n.load_language(lang):
         i18n.load_language("zh_CN")
 
-    # 6) 主题
+    # 6) 主题（界面缩放一并传入：QSS 里的 font-size 会覆盖 app 字体）
     theme_manager = ThemeManager(resource_path("themes"))
-    theme_manager.apply_theme(config.get("theme", "system"), app)
+    theme_manager.apply_theme(config.get("theme", "system"), app,
+                              ui_scale=config.get("ui_scale", 1.0))
 
     # 7) 主窗口
     window = MainWindow(i18n, theme_manager)

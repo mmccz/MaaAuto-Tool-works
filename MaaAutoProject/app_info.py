@@ -10,7 +10,7 @@ APP_DISPLAY_NAME = "MaaAuto"
 # 跨仓库契约：安装器 / 升级器读取本行。
 # 允许的版本语法（与升级器解析器对齐）：
 #   X.Y.Z / X.Y.ZaN / X.Y.ZbN / X.Y.ZrcN / X.Y.Z.postN
-APP_VERSION = "1.0.1b1"
+APP_VERSION = "1.1.0"
 APP_ORG = "MaaAuto"
 APP_GITHUB = "https://github.com/mmccz/MaaAuto-Tool-works"
 APP_EMAIL = "Frank010700@outlook.com"
@@ -27,3 +27,13 @@ APP_MIN_INSTALLER_VERSION = "1.0.0"       # 升级器低于该版本时提示用
 # 升级器下载的预构建包，实际文件名 = 前缀 + 版本号 + ".zip"
 # 例如 MaaAuto_payload_v1.0.0.zip。CI 产出，用户机不再编译。
 APP_PAYLOAD_ASSET_PREFIX = "MaaAuto_payload_v"
+
+# ---- 在线公告（不进安装器契约，改地址不需要重新打包安装器）----
+# 公告内容是仓库里的这个文件，改完 push 到 main，客户端下次启动就会拉到，
+# 不需要发新版本。jsDelivr 是 raw.githubusercontent 的国内可用镜像，二选一。
+APP_ANNOUNCEMENTS_URLS = (
+    "https://raw.githubusercontent.com/mmccz/MaaAuto-Tool-works/main/"
+    "MaaAutoProject/resources/announcements.json",
+    "https://cdn.jsdelivr.net/gh/mmccz/MaaAuto-Tool-works@main/"
+    "MaaAutoProject/resources/announcements.json",
+)
