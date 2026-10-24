@@ -16,7 +16,8 @@ import urllib.request
 
 from packaging.version import Version, InvalidVersion
 
-from app_info import APP_VERSION, APP_UPDATE_API, APP_SOURCE_ASSET
+from app_info import (APP_VERSION, APP_UPDATE_API, APP_SOURCE_ASSET,
+                      APP_PAYLOAD_ASSET_PREFIX)
 
 logger = logging.getLogger("MaaAuto")
 
@@ -54,14 +55,24 @@ def _parse_version(tag):
         return None
 
 
-def _pick_asset(release):
+def _pick_asset(release, latest_version=""):
     """
-    三级优先：
-      1) name == MaaAuto_Source.zip
-      2) name 含 'win' 且以 .zip 结尾（大小写不敏感）
-      3) 任意 .zip
+    优先级（3.0.0 起）：
+      1) name == MaaAuto_payload_v{latest}.zip —— 升级器真正下载的预构建包
+      2) name == MaaAuto_Source.zip            —— 2.x 过渡期的源码包
+      3) name 含 'win' 且以 .zip 结尾
+      4) 任意 .zip
+
+    这里的结果只用于**展示**（「关于」页提示升级包大小）；真正的下载由
+    upgrade.exe 自己重新查询 Release 决定，因此本函数选错也不影响升级。
     """
     assets = release.get("assets") or []
+    want = f"{APP_PAYLOAD_ASSET_PREFIX}{latest_version}.zip".lower()
+
+    if latest_version:
+        for a in assets:
+            if (a.get("name") or "").lower() == want:
+                return a
 
     for a in assets:
         if a.get("name") == APP_SOURCE_ASSET:
@@ -113,7 +124,7 @@ def check_update():
         "current": str(current),
         "latest": str(latest),
         "tag": release.get("tag_name", ""),
-        "asset": _pick_asset(release),
+        "asset": _pick_asset(release, str(latest)),
         "notes": release.get("body", "") or "",
         "html_url": release.get("html_url", "") or "",
     }

@@ -252,6 +252,10 @@ def build_command(args, info, version_file):
     cmd.append("--onefile" if args.onefile else "--onedir")
     cmd.append("--console" if args.debug else "--windowed")
 
+    # 3.0.0 起管理员权限由 exe 内嵌清单声明（Inno 安装不再写 RUNASADMIN 注册表）。
+    # 这样每次启动弹一次 UAC，而不是依赖 HKCU 的兼容性标志。
+    cmd.append("--uac-admin")
+
     # 关闭 UPX：杀软对 UPX 壳误报率高，UPX 也常压坏 Qt 的 DLL。
     # （安装器侧原来只设了 PYI_DISABLE_UPX 环境变量，PyInstaller 不认，等于没生效；
     #  这里显式传 --noupx，两边一致。）
