@@ -10,7 +10,7 @@ APP_DISPLAY_NAME = "MaaAuto"
 # 跨仓库契约：安装器 / 升级器读取本行。
 # 允许的版本语法（与升级器解析器对齐）：
 #   X.Y.Z / X.Y.ZaN / X.Y.ZbN / X.Y.ZrcN / X.Y.Z.postN
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 APP_ORG = "MaaAuto"
 APP_GITHUB = "https://github.com/mmccz/MaaAuto-Tool-works"
 APP_EMAIL = "Frank010700@outlook.com"

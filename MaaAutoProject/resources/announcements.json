@@ -3,6 +3,19 @@
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
         {
+            "id": "v1.4.2",
+            "date": "2026-10-25",
+            "tag": "问题修复",
+            "title": {
+                "zh_CN": "1.4.2：修好「升级后图标、开始菜单、应用列表都没了」",
+                "en_US": "1.4.2: fixed the missing desktop / Start Menu icons and app-list entry"
+            },
+            "body": {
+                "zh_CN": "**症状**：升级之后桌面图标、开始菜单、「设置 → 应用」里的 MaaAuto 全都消失了，Windows 还提示「系统找不到应用」。\n\n**程序和数据一直是好的**——直接运行安装目录里的 `MaaAuto.exe` 就能正常用。坏掉的只是**登记信息**：发布前在本机跑的安装/卸载校验脚本，和你的正式安装用了同一个 Inno AppId（Inno 的「设置→应用」记录、开始菜单组、桌面快捷方式都是按 AppId 全局共享的），于是那次卸载把共享的登记一起删了。\n\n**这一版**：校验脚本改装到独立目录 `MaaAuto_verify`，跑前备份、跑完还原，并且拒绝在正式安装目录上运行；`smoke_install.py` 也加了同样的拦截。\n\n**已经被误删的机器不用重装**：跑一下 `tools/repair_integration.py` 就能重建图标和「设置 → 应用」条目。",
+                "en_US": "**Symptom**: after updating, the desktop icon, the Start Menu entry and the MaaAuto entry under Settings > Apps all disappeared, with Windows reporting \"This app can't be found\".\n\n**The program and your data were fine all along** - running `MaaAuto.exe` from the install folder worked normally. Only the *registration* was gone: the install/uninstall check that runs before a release used the same Inno AppId as your real installation, and Inno keeps the uninstall registry entry, the Start Menu group and the desktop shortcut shared per AppId, so that uninstall removed them for your install too.\n\n**In this release**: the check scripts now install into a separate `MaaAuto_verify` folder, snapshot everything before and restore it afterwards, and refuse to run against the real install folder.\n\n**Already affected?** No reinstall needed - run `tools/repair_integration.py` to recreate the icons and the Settings > Apps entry."
+            }
+        },
+        {
             "id": "v1.4.1",
             "date": "2026-10-25",
             "tag": "版本更新",
