@@ -466,6 +466,10 @@ class SettingsPage(QWidget):
                                        "minimize_to_tray", True)
         self.kill_sw = self._add_switch(g, "settings.kill_on_exit", None,
                                        "kill_on_exit", True)
+        self.log_retention_spin = self._make_spin(
+            0, 3650, int(self.config.get("log_retention_days", 90) or 0))
+        self._add_item(g, "settings.log_retention_days",
+                       "settings.log_retention_days.desc", self.log_retention_spin)
         self.auto_check_update_sw = self._add_switch(
             g, "settings.auto_check_update", None, "auto_check_update", True)
         self.auto_download_update_sw = self._add_switch(
@@ -636,7 +640,8 @@ class SettingsPage(QWidget):
         for w in (self.wait_timeout_spin, self.game_start_spin, self.game_exit_spin,
                   self.retry_times_spin, self.retry_interval_spin,
                   self.threshold_spin, self.scale_min_spin, self.scale_max_spin,
-                  self.offset_x_spin, self.offset_y_spin, self.min_emu_runtime_spin):
+                  self.offset_x_spin, self.offset_y_spin, self.min_emu_runtime_spin,
+                  self.log_retention_spin):
             w.valueChanged.connect(emit_config)
         for sw, _key in self._switches:
             sw.toggled.connect(emit_config)
@@ -876,6 +881,7 @@ class SettingsPage(QWidget):
         c["retry_times"] = self.retry_times_spin.value()
         c["retry_interval"] = self.retry_interval_spin.value()
         c["min_emulator_runtime"] = self.min_emu_runtime_spin.value()
+        c["log_retention_days"] = self.log_retention_spin.value()
         c["execute_time"] = self.time_edit.time().toString("HH:mm")
         c["serverchan_key"] = self.sc_edit.text().strip()
         c["webhook_url"] = self.webhook_edit.text().strip()

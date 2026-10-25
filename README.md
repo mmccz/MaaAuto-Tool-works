@@ -6,7 +6,7 @@
 
 **MAA & MaaEnd 的定时自动化调度台**
 
-[![Version](https://img.shields.io/badge/version-1.1.0-2f81f7.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.1-2f81f7.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#环境要求)
@@ -108,8 +108,8 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 
 | 文件 | 说明 |
 | --- | --- |
-| `MaaAuto_Setup_v1.1.0-Windows-x64.exe` | **完整包（约 56 MB）**，内嵌预构建程序，断网也能装 |
-| `MaaAuto_Online_v1.1.0-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
+| `MaaAuto_Setup_v1.1.1-Windows-x64.exe` | **完整包（约 56 MB）**，内嵌预构建程序，断网也能装 |
+| `MaaAuto_Online_v1.1.1-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
 
 双击后 30 秒左右装完，**不需要 Python、不联网、不需要管理员权限**：默认装到 `%LOCALAPPDATA%\Programs\MaaAuto`；向导里也可以选「为所有用户安装」，装到 `Program Files`（这一步会弹 UAC）。
 「选择附加任务」页可以选**是否创建开始菜单快捷方式**（默认创建）与桌面图标。
@@ -203,6 +203,7 @@ python main.py
 | `auto_start` | 开机自启 | `false` |
 | `minimize_to_tray` | 关闭窗口时最小化到托盘 | `true` |
 | `kill_on_exit` | 退出时清理相关进程 | `true` |
+| `log_retention_days` | 任务日志保留天数（启动时清理更早的 `logs` 目录；`0` = 不清理） | `90` |
 | `auto_check_update` | 启动时检查更新 | `true` |
 | `auto_download_update` | 自动下载并升级（免确认） | `false` |
 | `update_channel` | `stable` / `beta` | `stable` |
@@ -213,7 +214,7 @@ python main.py
 | `match_scale_step` | 缩放步长 | `0.05` |
 | `match_interval` | 两次尝试的间隔（秒） | `1.5` |
 | `click_mode` | `sendinput`（真实点击）/ `postmessage`（后台点击，实验） | `sendinput` |
-| `click_activate` | 点击前把目标窗口切到前台 | `true` |
+| `click_activate` | 点击前把目标窗口切到前台；**关闭后只允许后台点击**（PostMessage），不会发真实点击 | `true` |
 | `click_restore_cursor` | 点击后还原鼠标位置 | `true` |
 | `click_move_delay_ms` | 移到目标后停顿再按下（毫秒） | `80` |
 | `click_offset_x` / `click_offset_y` | 命中点微调（像素） | `0` / `0` |
@@ -253,7 +254,7 @@ Content-Type: application/json
 
 ## 🔄 升级与版本
 
-当前版本 **1.1.0**，变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 **1.1.1**，变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 任何已安装的 1.x 都可以在程序内一键升级：下载 `MaaAuto_payload_v{版本}.zip` 替换程序文件，十几秒完成，失败自动回滚。
 

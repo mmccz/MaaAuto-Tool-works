@@ -139,6 +139,8 @@
     "settings.auto_start": "开机自启",
     "settings.minimize_to_tray": "关闭(X)时最小化到托盘",
     "settings.kill_on_exit": "退出程序时清理所有相关进程",
+    "settings.log_retention_days": "任务日志保留天数",
+    "settings.log_retention_days.desc": "启动时删除更早的 logs 目录（含找图失败截图）；0 = 不清理，全部保留",
     "settings.auto_check_update": "启动时自动检查更新",
     "settings.auto_download_update": "自动下载并升级（静默）",
     "settings.auto_download_update.desc": "检测到新版本后自动升级并重启，任务运行中会等任务结束后再升级",

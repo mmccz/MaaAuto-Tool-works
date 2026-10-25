@@ -139,6 +139,8 @@
     "settings.auto_start": "Run at Startup",
     "settings.minimize_to_tray": "Minimize to tray on close (X)",
     "settings.kill_on_exit": "Clean related processes on exit",
+    "settings.log_retention_days": "Keep task logs for (days)",
+    "settings.log_retention_days.desc": "Older logs folders (and find-failure screenshots) are deleted on startup; 0 = keep everything",
     "settings.auto_check_update": "Check for updates on startup",
     "settings.auto_download_update": "Auto download and upgrade (silent)",
     "settings.auto_download_update.desc": "Automatically upgrade and restart when a new version is found. If a task is running, it will wait until it finishes.",

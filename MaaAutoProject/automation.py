@@ -51,21 +51,34 @@ def _patch_region(x, y, half_w=40, half_h=28):
 
 
 def _patch_diff(before, after):
-    """两块截图的平均像素差；任一为空或不匹配时返回一个大值。"""
+    """两块截图的平均像素差。
+
+    :return: 平均差值；截图缺失或尺寸不一致（锁屏、RDP 断开、窗口最小化）时
+             返回 ``None`` 表示「无法判定」。
+
+    1.1.0 及以前这里返回 ``999.0``（一个大到必然超过阈值的数），于是「截图失败」
+    会被当成「画面变了」，日志谎报「点击生效」。缺图就是缺图，必须能表达出来。
+    """
     if before is None or after is None or before.shape != after.shape:
-        return 999.0
+        return None
     try:
         import numpy as np
         return float(np.abs(after.astype(np.int16) - before.astype(np.int16)).mean())
     except Exception:
-        return 999.0
+        return None
 
 
 def _wait_patch_change(region, before, delay_ms, threshold=1.5):
-    """等 delay_ms 后重新截同一块，返回 (是否变化, 差值)。"""
+    """等 delay_ms 后重新截同一块。
+
+    :return: ``(changed, diff)``；changed 为 True/False，
+             无法判定时为 ``None``（此时 diff 也是 None）。
+    """
     time.sleep(max(0, delay_ms) / 1000.0)
     after = vision.grab(region)
     diff = _patch_diff(before, after)
+    if diff is None:
+        return None, None
     return diff >= threshold, diff
 
 
@@ -84,10 +97,13 @@ def click_match(match, config, procs=None, hwnd=0):
 
     流程：
       1. 坐标 = 命中中心 + 点击偏移；
-      2. 取目标顶层窗口，尝试切前台（ensure_foreground 多级回退并校验）；
-      3. 前台失败 → **先试后台点击**（PostMessage 不受窗口层级影响，Qt 程序可用）；
-      4. 前台成功 → 真实点击，等一会儿比对点击点附近像素是否变化；
-      5. 没变化 → 补点（次数由 ``click_retries`` 控制），仍无变化则警告并继续。
+      2. ``click_activate=False`` → **只走后台点击**（PostMessage）：绝不激活窗口、
+         也不发真实点击，否则点击会落到当时的前台窗口（可能是别的程序）上；
+      3. ``click_mode=postmessage`` → 直接后台投递；
+      4. 需要真实点击时：先切前台（三级回退 + 校验），**切完之后**才拍「点击前」
+         画面——激活本身会改变那块像素，提前拍会让校验失去意义；
+      5. 前台失败 → 先试后台点击（PostMessage 不受窗口层级影响，Qt 程序可用）；
+      6. 截图失败 → 只警告「无法校验」，不补点、不宣称生效。
     """
     config = config or {}
     offset_x = int(config.get("click_offset_x", 0) or 0)
@@ -96,16 +112,25 @@ def click_match(match, config, procs=None, hwnd=0):
     x, y = cx + offset_x, cy + offset_y
 
     mode = str(config.get("click_mode", input_driver.CLICK_SENDINPUT)).lower()
+    activate = bool(config.get("click_activate", True))
     verify = bool(config.get("click_verify", True))
     delay_ms = int(config.get("click_verify_delay_ms", DEFAULT_VERIFY_DELAY_MS))
     retries = max(0, int(config.get("click_retries", DEFAULT_VERIFY_RETRIES)))
 
     target = _resolve_target_window(hwnd, procs, x, y)
     patch = _patch_region(x, y)
-    before = vision.grab(patch) if verify else None
 
-    if mode == input_driver.CLICK_POSTMESSAGE:
-        if input_driver.click(x, y, mode=mode, hwnd=target):
+    def _before_frame():
+        """当前这块区域的像素；关闭校验时不截图。"""
+        return vision.grab(patch) if verify else None
+
+    # ---- 只走后台点击：用户关了前台激活，或本来就是后台模式 ----
+    if not activate or mode == input_driver.CLICK_POSTMESSAGE:
+        if not activate and mode != input_driver.CLICK_POSTMESSAGE:
+            logger.info("已关闭「点击前激活窗口」：本次改用后台点击，"
+                        "不移动鼠标、不抢占焦点")
+        before = _before_frame()
+        if input_driver.click(x, y, mode=input_driver.CLICK_POSTMESSAGE, hwnd=target):
             if not verify:
                 logger.info(f"后台点击已投递: ({x}, {y})")
                 return True
@@ -113,13 +138,24 @@ def click_match(match, config, procs=None, hwnd=0):
             if changed:
                 logger.info(f"后台点击生效: ({x}, {y}) 像素差 {diff:.1f}")
                 return True
-            logger.warning(f"后台点击未生效（像素差 {diff:.1f}），改用真实点击")
+            if changed is None:
+                logger.warning(f"后台点击已投递，但截图失败无法校验: ({x}, {y})")
+                return True
+            logger.warning(f"后台点击未生效（像素差 {diff:.1f}）")
         else:
-            logger.warning("后台点击投递失败，改用真实点击")
+            logger.warning("后台点击投递失败")
 
+        if not activate:
+            logger.error(
+                "已关闭「点击前激活窗口」，而后台点击也没投递成功，放弃本次点击；"
+                "继续发真实点击会落到当前前台窗口上。可在设置里重新打开该开关。")
+            return False
+
+    # ---- 真实点击路径：先激活，再拍「点击前」画面 ----
     fg_ok = input_driver.ensure_foreground(target) if target else False
     if target and not fg_ok:
         logger.info("目标窗口未能切到前台，先尝试后台点击（不占用鼠标）")
+        before = _before_frame()
         if input_driver.post_click(target, x, y):
             if not verify:
                 return True
@@ -127,7 +163,13 @@ def click_match(match, config, procs=None, hwnd=0):
             if changed:
                 logger.info(f"后台点击生效: ({x}, {y}) 像素差 {diff:.1f}")
                 return True
+            if changed is None:
+                logger.warning(f"后台点击已投递，但截图失败无法校验: ({x}, {y})")
+                return True
             logger.warning(f"后台点击未生效（像素差 {diff:.1f}），继续尝试真实点击")
+
+    # 关键：`before` 必须在上面的激活动作之后取（激活会改变画面）
+    before = _before_frame()
 
     attempt = 0
     while True:
@@ -151,6 +193,12 @@ def click_match(match, config, procs=None, hwnd=0):
             logger.info(f"点击生效: ({x}, {y}) 第 {attempt} 次，像素差 {diff:.1f}")
             return True
 
+        if changed is None:
+            logger.warning(
+                f"点击已发送，但截图失败无法校验: ({x}, {y})"
+                "（锁屏、远程桌面断开或目标窗口最小化时会出现）")
+            return True
+
         if attempt > retries:
             logger.warning(
                 f"点击已发送但画面无变化（({x}, {y}) 像素差 {diff:.1f}）。"
@@ -159,6 +207,7 @@ def click_match(match, config, procs=None, hwnd=0):
 
         logger.info(f"点击后画面无变化（像素差 {diff:.1f}），补点第 {attempt + 1} 次")
         input_driver.ensure_foreground(target)
+
 
 
 def _launch_program(exe_path, logger):
@@ -265,6 +314,8 @@ def find_and_click(image_name, config=None, procs=None, timeout=None):
     scale_step = float(config.get("match_scale_step", DEFAULT_SCALE_STEP))
     interval = max(0.3, float(config.get("match_interval", DEFAULT_MATCH_INTERVAL)))
     click_mode = str(config.get("click_mode", input_driver.CLICK_SENDINPUT)).lower()
+    if not config.get("click_activate", True):
+        click_mode += "（不激活窗口，仅后台投递）"
 
     logger.info(
         f"开始寻找目标按钮: {image_name} (超时 {timeout} 秒, "

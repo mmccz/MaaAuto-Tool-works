@@ -1,5 +1,7 @@
+import datetime
 import json
 import os
+import shutil
 import sys
 import logging
 from PySide6.QtCore import QObject, Signal
@@ -94,6 +96,12 @@ DEFAULT_CONFIG = {
     "click_verify_delay_ms": 900,    # 点击后等多久再比对像素
     "click_retries": 1,              # 判定无效时补点次数
 
+    # ---- 日志 ----
+    # logs/<年>/<月>/<日>/run_N_<HHMMSS>/task.log 每天至少一个目录，
+    # 长期运行（尤其配合定时任务）会堆到几千个，外加找图失败现场截图。
+    # 启动时按「保留最近 N 天」清理；0 = 不清理（全部保留）。
+    "log_retention_days": 90,
+
     # ---- 任务与界面 ----
     # 任务期间把主窗口收进托盘：我们自己的窗口很容易盖住 MAA 的按钮，
     # 那会同时毁掉找图（截到自己的界面）和点击（点到自己窗口上）。
@@ -152,6 +160,91 @@ def save_config(config):
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp_file, CONFIG_FILE)
+
+
+def cleanup_old_logs(retention_days=None, log_dir=None, logger=None):
+    """删除超过保留期的旧任务日志目录（启动时调用）。
+
+    ``logs/`` 的结构是 ``<年>/<月>/<日>/run_N_<HHMMSS>/task.log``，每天至少一个目录；
+    配合定时任务长期运行会堆到几千个，外加找图失败留下的 ``find_fail_*.png``。
+
+    只按**目录名解析出的日期**判断，不看 mtime：当天目录还在写入，mtime 一直在变，
+    靠 mtime 反而可能误删正在用的目录。日期目录里的东西整棵删掉，空目录顺手清掉。
+
+    :param retention_days: 保留最近多少天；``None`` 取默认值，``<=0`` 表示不清理
+    :param log_dir:        日志根目录；默认 ``LOG_DIR``（测试可传临时目录）
+    :param logger:         可选 logger，用于 debug 输出
+    :return: 删除的日期目录数
+    """
+    if retention_days is None:
+        retention_days = DEFAULT_CONFIG["log_retention_days"]
+    try:
+        retention_days = int(retention_days)
+    except (TypeError, ValueError):
+        retention_days = DEFAULT_CONFIG["log_retention_days"]
+    if retention_days <= 0:
+        return 0
+
+    base = log_dir or LOG_DIR
+    cutoff = datetime.date.today() - datetime.timedelta(days=retention_days)
+
+    def _list_dirs(path):
+        try:
+            return sorted(os.listdir(path))
+        except OSError:
+            return []
+
+    def _rmdir_if_empty(path):
+        try:
+            if not os.listdir(path):
+                os.rmdir(path)
+        except OSError:
+            pass
+
+    removed = 0
+    for yname in _list_dirs(base):
+        ydir = os.path.join(base, yname)
+        if not (yname.isdigit() and len(yname) == 4 and os.path.isdir(ydir)):
+            continue
+        for mname in _list_dirs(ydir):
+            mdir = os.path.join(ydir, mname)
+            if not (mname.isdigit() and len(mname) == 2 and os.path.isdir(mdir)):
+                continue
+            for dname in _list_dirs(mdir):
+                ddir = os.path.join(mdir, dname)
+                if not (dname.isdigit() and len(dname) == 2 and os.path.isdir(ddir)):
+                    continue
+                try:
+                    day = datetime.date(int(yname), int(mname), int(dname))
+                except ValueError:
+                    continue
+                if day >= cutoff:
+                    continue          # 还在保留期内（含今天）
+                try:
+                    shutil.rmtree(ddir)
+                    removed += 1
+                except OSError as e:
+                    if logger:
+                        logger.debug(f"删除旧日志目录失败 {ddir}: {e}")
+            _rmdir_if_empty(mdir)
+        _rmdir_if_empty(ydir)
+
+    # 顶层的找图失败截图：文件有可靠 mtime，按 mtime 清
+    for name in _list_dirs(base):
+        if not (name.startswith("find_fail_") and name.lower().endswith(".png")):
+            continue
+        path = os.path.join(base, name)
+        try:
+            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(path)).date()
+        except OSError:
+            continue
+        if mtime < cutoff:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+    return removed
 
 
 class LogHandler(logging.Handler, QObject):

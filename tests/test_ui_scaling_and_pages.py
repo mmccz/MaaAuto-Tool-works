@@ -525,3 +525,36 @@ def test_main_window_restart_confirm_true_restarts(qapp, tmp_path, monkeypatch):
         win.tray.hide()
         win.deleteLater()
         qapp.processEvents()
+
+def test_settings_page_round_trips_log_retention(qapp):
+    """日志保留天数必须真的进出配置（1.1.1）。
+
+    这条是防回归用的：1.1.0 的 ``click_activate`` 就是「设置页有开关、配置也写了，
+    但业务代码从不读」，结果开关形同虚设。新设置项至少要有「控件 ↔ get_config」往返。
+    """
+    from config_manager import DEFAULT_CONFIG
+    from ui.pages.settings_page import SettingsPage
+
+    class FakeI18n:
+        current_lang = "zh_CN"
+
+        def t(self, key, **kwargs):
+            return key
+
+        def available_languages(self):
+            return [("zh_CN", "简体中文")]
+
+    cfg = dict(DEFAULT_CONFIG)
+    cfg["log_retention_days"] = 30
+    page = SettingsPage(cfg, FakeI18n(), None)
+    try:
+        assert page.log_retention_spin.value() == 30
+        emitted = []
+        page.config_changed.connect(emitted.append)
+        # IntLineEdit 在「编辑完成」（回车/失焦）时才发 valueChanged
+        page.log_retention_spin.setText("7")
+        page.log_retention_spin.editingFinished.emit()
+        assert page.get_config()["log_retention_days"] == 7
+        assert emitted, "改动日志保留天数应触发自动保存"
+    finally:
+        page.deleteLater()

@@ -177,8 +177,105 @@ def test_patch_diff_helpers():
     b = np.full((10, 10, 3), 50, dtype=np.uint8)
     assert automation._patch_diff(a, a) == 0.0
     assert automation._patch_diff(a, b) == pytest.approx(50.0)
-    assert automation._patch_diff(a, None) == 999.0
-    assert automation._patch_diff(a, b[0:5]) == 999.0
+    # 1.1.1：截图缺失不再返回 999.0（那会被当成「画面变了」），改为 None=无法判定
+    assert automation._patch_diff(a, None) is None
+    assert automation._patch_diff(a, b[0:5]) is None
 
     region = automation._patch_region(100, 200)
     assert region == (60, 172, 140, 228)
+
+
+# --------------------------------------------------------------------------- #
+# 1.1.1 回归：click_activate（关掉前台激活时只允许后台点击）
+# --------------------------------------------------------------------------- #
+def test_click_activate_off_uses_background_click_only(monkeypatch, no_sleep):
+    """click_activate=False → 不激活窗口，只发后台点击，绝不发真实点击。"""
+    activated = []
+    monkeypatch.setattr(input_driver, "ensure_foreground",
+                        lambda hwnd, timeout=2.0: activated.append(hwnd) or True)
+    clicks = []
+
+    def fake_click(x, y, **kw):
+        clicks.append((x, y, kw))
+        return True
+
+    monkeypatch.setattr(input_driver, "click", fake_click)
+    monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
+
+    ok = automation.click_match(
+        make_match(), {"click_activate": False, "click_verify": False})
+
+    assert ok is True
+    assert activated == []                       # 从未尝试切前台
+    assert len(clicks) == 1
+    assert clicks[0][2]["mode"] == input_driver.CLICK_POSTMESSAGE
+
+
+def test_click_activate_off_gives_up_when_background_fails(monkeypatch, no_sleep):
+    """关了激活、后台点击也失败 → 放弃（绝不能退化成真实点击）。"""
+    monkeypatch.setattr(input_driver, "ensure_foreground",
+                        lambda hwnd, timeout=2.0: pytest.fail("不该激活窗口"))
+    clicks = []
+
+    def fake_click(x, y, **kw):
+        clicks.append((x, y, kw))
+        return False
+
+    monkeypatch.setattr(input_driver, "click", fake_click)
+    monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
+
+    ok = automation.click_match(
+        make_match(), {"click_activate": False, "click_verify": False})
+
+    assert ok is False
+    assert len(clicks) == 1                      # 只尝试过后台投递
+    assert clicks[0][2]["mode"] == input_driver.CLICK_POSTMESSAGE
+
+
+# --------------------------------------------------------------------------- #
+# 1.1.1 回归：截图失败不能被当成「点击生效」
+# --------------------------------------------------------------------------- #
+def test_grab_failure_is_unknown_not_success(monkeypatch, no_sleep, fg_ok,
+                                             click_counter):
+    """截图失败（锁屏/远程断开）→ 只警告无法校验，不宣称生效、不补点。"""
+    monkeypatch.setattr(vision, "grab", lambda region=None: None)
+    monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
+
+    infos, warnings = [], []
+    monkeypatch.setattr(automation.logger, "info",
+                        lambda msg, *a, **k: infos.append(str(msg)))
+    monkeypatch.setattr(automation.logger, "warning",
+                        lambda msg, *a, **k: warnings.append(str(msg)))
+
+    ok = automation.click_match(make_match(),
+                                {"click_verify": True, "click_retries": 3},
+                                procs=["maa.exe"])
+
+    assert ok is True
+    assert len(click_counter) == 1               # 无法判定时不做无意义补点
+    assert not any("点击生效" in m for m in infos)
+    assert any("无法校验" in w for w in warnings)
+
+
+def test_before_frame_is_grabbed_after_activation(monkeypatch, no_sleep):
+    """「点击前」画面必须在激活之后取，否则激活本身就被当成点击生效。"""
+    order = []
+    monkeypatch.setattr(input_driver, "ensure_foreground",
+                        lambda hwnd, timeout=2.0: order.append("fg") or True)
+    monkeypatch.setattr(vision, "grab",
+                        lambda region=None: order.append("grab") or blank(100))
+
+    def fake_click(x, y, **kw):
+        order.append("click")
+        return True
+
+    monkeypatch.setattr(input_driver, "click", fake_click)
+    monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
+    monkeypatch.setattr(automation.logger, "warning", lambda *a, **k: None)
+
+    automation.click_match(make_match(),
+                           {"click_verify": True, "click_retries": 0})
+
+    assert order.index("fg") < order.index("grab")
+    assert order.index("grab") < order.index("click")
+

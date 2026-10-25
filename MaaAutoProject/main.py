@@ -12,7 +12,7 @@ from PySide6.QtCore import QTimer
 
 from utils import resource_path
 from config_manager import (load_config, save_config, setup_logger,
-                            CONFIG_DIR, LOG_DIR)
+                            cleanup_old_logs, CONFIG_DIR, LOG_DIR)
 from upgrade_guard import resolve_upgrade_flag
 from i18n import init_i18n
 from themes import ThemeManager
@@ -285,6 +285,16 @@ def main():
     # 5) i18n + 配置
     i18n = init_i18n(resource_path("i18n"))
     config = load_config()
+
+    # 清理过期任务日志（按目录名里的日期判断，默认保留 90 天；0=不清理）
+    try:
+        removed = cleanup_old_logs(config.get("log_retention_days"),
+                                   logger=logger)
+        if removed:
+            logger.info(f"已清理 {removed} 个超过保留期的日志目录")
+    except Exception as e:                       # 清理失败绝不能影响启动
+        logger.debug(f"清理旧日志失败: {e}")
+
     ui_scale = apply_ui_scale(app, config)
     logger.info(f"界面缩放: {int(round(ui_scale * 100))}%"
                 f"（设置页可即时调整，无需重启）")

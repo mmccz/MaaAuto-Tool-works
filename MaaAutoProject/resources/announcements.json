@@ -1,7 +1,20 @@
 {
-    "updated": "2026-10-24",
+    "updated": "2026-10-25",
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
+        {
+            "id": "v1.1.1",
+            "date": "2026-10-25",
+            "tag": "版本更新",
+            "title": {
+                "zh_CN": "1.1.1：修好「点击生效」误判与假开关，任务日志可自动清理",
+                "en_US": "1.1.1: fixed false click-success detection and a dead switch; logs now auto-clean"
+            },
+            "body": {
+                "zh_CN": "**1.1.1 是小修版**，修的是两件「日志说点了、其实没点到」的事：\n\n- **「点击前激活窗口」开关以前不生效**：关掉它没有任何作用。现在关掉后只走后台点击（PostMessage），不发真实点击，避免点击落到当时的前台窗口上。\n- **点击校验不再谎报成功**：截图失败（锁屏 / 远程桌面断开 / 窗口最小化）以前会被当成「画面变了」；另外「点击前」的画面是在激活窗口之前拍的，窗口一激活就被算成点中了。现在这两种情况都会明确写「无法校验」，不再假装成功。\n- **任务日志不再无限增长**：设置 → 常规 →「任务日志保留天数」，默认 90 天，启动时自动清理更早的日志目录和找图失败截图。\n\n已有 1.1.0 的用户：关于 → 检查更新即可，配置与日志都会保留。",
+                "en_US": "**1.1.1 is a patch release** fixing two cases where the log claimed a click succeeded when it did not:\n\n- **The \"activate window before clicking\" switch did nothing**: turning it off had no effect. It now restricts clicking to background delivery (PostMessage) - no real clicks, so nothing lands on whatever window happens to be in front.\n- **Click verification no longer over-reports success**: a failed screenshot (locked screen, RDP disconnected, minimized window) used to count as \"the screen changed\"; and the \"before\" frame was captured before activating the window, so activating it looked like a hit. Both cases are now reported as \"cannot verify\" instead of a fake success.\n- **Task logs no longer grow forever**: Settings - General - \"Keep task logs for (days)\", default 90 days; older log folders and find-failure screenshots are cleaned up on startup.\n\nAlready on 1.1.0? Check for updates under About - your config and logs are kept."
+            }
+        },
         {
             "id": "v1.1.0",
             "date": "2026-10-24",
