@@ -265,5 +265,8 @@
     "weekday.4": "Th",
     "weekday.5": "Fr",
     "weekday.6": "Sa",
-    "weekday.7": "Su"
+    "weekday.7": "Su",
+    "announce.search": "Search announcements (version or keyword)…",
+    "announce.total": "{count} entries in total",
+    "announce.matched": "{count} matched"
 }

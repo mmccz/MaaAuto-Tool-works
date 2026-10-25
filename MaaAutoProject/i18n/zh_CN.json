@@ -265,5 +265,8 @@
     "weekday.4": "四",
     "weekday.5": "五",
     "weekday.6": "六",
-    "weekday.7": "日"
+    "weekday.7": "日",
+    "announce.search": "搜索公告（版本号 / 关键词）…",
+    "announce.total": "共 {count} 条更新记录",
+    "announce.matched": "匹配 {count} 条"
 }

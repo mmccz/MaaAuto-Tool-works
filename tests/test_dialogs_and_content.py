@@ -537,3 +537,28 @@ def test_announcements_marked_read_when_opened(qapp, i18n, tmp_path, monkeypatch
         win.tray.hide()
         win.deleteLater()
         qapp.processEvents()
+
+
+def test_announcement_search_filters_index(qapp, i18n):
+    """1.4.0：所有历史更新放在同一个公告区，靠搜索框查找。"""
+    from ui.announcements import AnnouncementDialog
+
+    def item(ident, title):
+        return {"id": ident, "date": "2026-10-25", "tag": "版本更新",
+                "title": {"zh_CN": title, "en_US": title},
+                "body": {"zh_CN": f"正文 {ident}", "en_US": f"body {ident}"}}
+
+    items = [item("v1.3.0", "定时多时段"), item("v1.2.0", "差分更新")]
+    dlg = AnnouncementDialog(i18n, items, "zh_CN", updated="2026-10-25")
+    try:
+        assert dlg.list.count() == 2
+        dlg.search.setText("1.2.0")
+        hidden = [i for i in range(dlg.list.count())
+                  if dlg.list.item(i).isHidden()]
+        assert len(hidden) == 1
+        assert "1" in dlg.count_label.text()          # 匹配 1 条
+        dlg.search.setText("")
+        assert not any(dlg.list.item(i).isHidden()
+                       for i in range(dlg.list.count()))
+    finally:
+        dlg.deleteLater()

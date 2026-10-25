@@ -27,8 +27,8 @@ import urllib.request
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QListWidget, QListWidgetItem,
-                               QTextBrowser)
+                               QLineEdit, QPushButton, QListWidget,
+                               QListWidgetItem, QTextBrowser, QWidget)
 
 import app_info
 from utils import resource_path
@@ -261,6 +261,17 @@ class AnnouncementDialog(QDialog):
         body_row = QHBoxLayout()
         body_row.setSpacing(14)
 
+        left = QVBoxLayout()
+        left.setSpacing(6)
+        self.search = QLineEdit()
+        self.search.setObjectName("AnnouncementSearch")
+        self.search.setPlaceholderText(self.i18n.t("announce.search"))
+        self.search.setClearButtonEnabled(True)
+        left.addWidget(self.search)
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("DialogSubtitle")
+        left.addWidget(self.count_label)
+
         self.list = QListWidget()
         self.list.setObjectName("AnnouncementList")
         self.list.setFixedWidth(300)
@@ -268,7 +279,11 @@ class AnnouncementDialog(QDialog):
         self.list.setTextElideMode(Qt.ElideRight)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
-        body_row.addWidget(self.list)
+        left.addWidget(self.list, 1)
+        left_wrap = QWidget()
+        left_wrap.setFixedWidth(300)
+        left_wrap.setLayout(left)
+        body_row.addWidget(left_wrap)
 
         self.browser = QTextBrowser()
         self.browser.setObjectName("AnnouncementBody")
@@ -294,8 +309,37 @@ class AnnouncementDialog(QDialog):
 
         self.browser.setHtml(self._build_html())
         self.list.currentRowChanged.connect(self._jump_to)
+        self.search.textChanged.connect(self._apply_filter)
+        self._apply_filter("")
         if self._items:
             self.list.setCurrentRow(0)
+
+    # ------------------------------------------------------------------ #
+    def _haystack(self, item):
+        return " ".join([item["title"], item["body"], item["date"],
+                         item["tag"], item["id"]]).lower()
+
+    def _apply_filter(self, text):
+        """按关键词过滤左侧目录（正文长文保持完整，便于对照阅读）。"""
+        needle = (text or "").strip().lower()
+        visible = 0
+        first = -1
+        for row in range(self.list.count()):
+            node = self.list.item(row)
+            item = self._items[row]
+            match = (not needle) or (needle in self._haystack(item))
+            node.setHidden(not match)
+            if match:
+                visible += 1
+                if first < 0:
+                    first = row
+        self.count_label.setText(
+            self.i18n.t("announce.total", count=self.list.count())
+            if not needle else
+            self.i18n.t("announce.matched", count=visible))
+        if needle and first >= 0:
+            self.list.setCurrentRow(first)
+            self._jump_to(first)
 
     # ------------------------------------------------------------------ #
     def _markdown_to_html(self, text):
