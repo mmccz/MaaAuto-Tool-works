@@ -3,6 +3,19 @@
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
         {
+            "id": "v1.4.1",
+            "date": "2026-10-25",
+            "tag": "版本更新",
+            "title": {
+                "zh_CN": "1.4.1：修好 Windows 11 被识别成 Windows 10",
+                "en_US": "1.4.1: Windows 11 is no longer reported as Windows 10"
+            },
+            "body": {
+                "zh_CN": "**一处显示错误**：「关于」页的系统版本以前在 Windows 11 上会显示成 `Windows 10 10.0.22631`。原因是 `platform.release()` 读的旧接口被兼容层钉死在 10.0，而注册表里的产品名在 Windows 11 上也还写着「Windows 10」。\n\n现在改成按**构建号 + 注册表**识别，显示为 `Windows 11 专业版 23H2 (10.0.22631.4317)` 这样的完整信息；`diagnose.py` 也会打印同一行，反馈问题时直接贴即可。\n\n这一版是**小更新**（`1.4.x`），找图、点击、定时和差分升级机制都没有变化。",
+                "en_US": "**One display bug**: the About page used to report Windows 11 as `Windows 10 10.0.22631`. `platform.release()` reads a legacy API that is pinned to 10.0 by the compatibility layer, and the registry product name still says \"Windows 10\" on Windows 11 as well.\n\nIt is now detected from the **build number + registry**, showing the full label such as `Windows 11 Pro 23H2 (10.0.22631.4317)`. `diagnose.py` prints the same line, so you can paste it into a bug report.\n\nThis is a **patch release** (`1.4.x`): matching, clicking, scheduling and delta updates are unchanged."
+            }
+        },
+        {
             "id": "v1.4.0",
             "date": "2026-10-25",
             "tag": "版本更新",

@@ -2,7 +2,6 @@ import os
 import sys
 import zipfile
 import datetime
-import platform
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFileDialog, QMessageBox)
 from PySide6.QtCore import Qt, Signal
@@ -12,6 +11,7 @@ from ui.components import Card
 from utils import resource_path, AsyncWorker
 from config_manager import LOG_DIR, CONFIG_DIR, load_config
 import app_info
+import system_info
 
 
 class AboutPage(QWidget):
@@ -80,6 +80,10 @@ class AboutPage(QWidget):
             k.setFixedWidth(120)
             v = QLabel("-")
             v.setObjectName("SettingTitle")
+            # 版本串（如 "Windows 11 专业版 23H2 (10.0.22631.4317)"）比旧文案长，
+            # 允许折行，免得把整页最小宽度顶大；顺便让用户能选中复制去报 bug
+            v.setWordWrap(True)
+            v.setTextInteractionFlags(Qt.TextSelectableByMouse)
             row.addWidget(k)
             row.addWidget(v, 1)
             env_layout.addLayout(row)
@@ -189,7 +193,7 @@ class AboutPage(QWidget):
             "about.python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
             "about.pyside": pyside_ver,
             "about.qt": qVersion(),
-            "about.system": f"{platform.system()} {platform.release()} ({platform.version()})",
+            "about.system": system_info.describe_system(),
         }
         for key, val in data.items():
             if key in self.env_labels:

@@ -40,6 +40,11 @@ def main():
     print(f"  CWD            : {os.getcwd()}")
     print(f"  script path    : {os.path.abspath(__file__)}")
     print(f"  frozen         : {getattr(sys, 'frozen', False)}")
+    try:
+        import system_info
+        print(f"  OS             : {system_info.describe_system()}")
+    except Exception as e:
+        print(f"  OS             : [ERROR] {e}")
 
     print("\n[2] config_manager 路径")
     try:

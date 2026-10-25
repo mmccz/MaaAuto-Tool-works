@@ -282,6 +282,21 @@ def test_about_version_tag_uses_qss(qapp, i18n):
         page.deleteLater()
 
 
+def test_about_system_label_uses_system_info(qapp, i18n):
+    """1.4.1：系统版本必须走 system_info（按构建号纠 Win11），
+    不能再直接拼 ``platform.release()``（Win11 上它返回 "10"）。"""
+    import system_info
+    from ui.pages.about_page import AboutPage
+
+    page = AboutPage(i18n)
+    try:
+        label = page.env_labels["about.system"][1]
+        assert label.text() == system_info.describe_system()
+        assert label.text()
+    finally:
+        page.deleteLater()
+
+
 def test_home_announcement_badge(qapp, i18n):
     from ui.pages.home_page import HomePage
 
