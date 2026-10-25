@@ -4,6 +4,29 @@
 
 ---
 
+## [1.2.0] - 2026-10-25
+
+**差分更新**：升级时只下载变化的部分，实测 **61.2 MB → 0.64 MB（省 98.9%）**。
+
+### 新增
+
+- **差分 / 增量更新**：Release 里多出一个
+  `MaaAuto_delta_v{旧版本}_to_{新版本}.zip`；升级器优先下载它，只对变化文件做
+  bsdiff 补丁（`MaaAuto.exe` 5.4 MB → 148 KB，`upgrade.exe` 7.5 MB → 403 KB），
+  内容没变的文件完全不下载。
+- 没有对应差分包（跳版本）/ 本地文件被改动过 / 补丁损坏时，**自动回退整包**，
+  用户无感；失败也会走原有的回滚 + `upgrade_failed.flag`。
+- 差分包同样校验 GitHub 资产的 `sha256:` digest；还原出的每个文件再按 sha256 校验。
+
+### 工程
+
+- 新增 `installer/core/bspatch.py`（纯标准库 BSDIFF40 应用端，升级器体积不变）
+  与 `installer/core/delta.py`（构建 / 还原）；`bsdiff4` 只在构建机使用。
+- 构建：`build_release.py --delta-from <上一版 payload.zip>` 或 `--delta-auto`
+  （CI 自动从最新 Release 下载基准）。
+- 跨仓库契约新增 `APP_DELTA_ASSET_PREFIX` / `delta_asset_prefix`（两仓库需同时发版）。
+- 测试：安装器 69 → 78（补丁往返、基准不符拒绝、删除清单、资产选择、回退）。
+
 ## [1.1.1] - 2026-10-25
 
 **小修版**：修掉两个「日志说成功、实际没生效」的问题，并补上日志轮转。

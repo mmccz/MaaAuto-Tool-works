@@ -3,6 +3,19 @@
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
         {
+            "id": "v1.2.0",
+            "date": "2026-10-25",
+            "tag": "版本更新",
+            "title": {
+                "zh_CN": "1.2.0：升级只下变化的部分（61 MB → 0.6 MB）",
+                "en_US": "1.2.0: updates now download only what changed (61 MB -> 0.6 MB)"
+            },
+            "body": {
+                "zh_CN": "**1.2.0 做的是「升级下载量」**：以前每次升级都要下 65 MB 的整包，国内网络下经常要等很久；现在只下变化的部分。\n\n从 1.1.1 升上来实测 **0.64 MB**（省 98.9%）：Qt 的 DLL、内置模板这些没变的文件完全不下载，变了的 `MaaAuto.exe` / `upgrade.exe` 用二进制补丁（分别是 148 KB / 403 KB）。\n\n几种情况会自动回退整包，不会报错：\n\n- 跨多个版本升级，没有对应的差分包；\n- 安装目录被手动改过（基准对不上）；\n- 补丁包损坏（随后照旧回滚并提示）。\n\n**注意**：差分能力是 1.2.0 的升级器带的，所以「1.1.1 → 1.2.0」这一跳本身还是整包，**从 1.2.0 往后的每次升级才会走差分**。\n\n其它功能没有变化。",
+                "en_US": "**1.2.0 is about update download size.** Every update used to pull the full ~65 MB payload; now only the changed parts are downloaded.\n\nUpgrading from 1.1.1 measured **0.64 MB** (98.9% smaller): unchanged files such as Qt DLLs and bundled templates are skipped entirely, while the changed `MaaAuto.exe` and `upgrade.exe` are delivered as binary patches (148 KB / 403 KB).\n\nIt falls back to the full payload silently when:\n\n- you jump several versions (no matching delta);\n- files in the install folder were modified (base mismatch);\n- the delta is corrupt (the usual rollback and failure flag still apply).\n\n**Note**: delta support ships with the 1.2.0 updater, so the 1.1.1 -> 1.2.0 hop itself is still a full download; updates *from* 1.2.0 onward use deltas.\n\nNo other behaviour changed."
+            }
+        },
+        {
             "id": "v1.1.1",
             "date": "2026-10-25",
             "tag": "版本更新",

@@ -65,7 +65,7 @@ jobs:
       - name: Build release assets
         shell: pwsh
         run: |
-          python installer/MaaAutoInstaller/build_release.py --source-dir MaaAutoProject 2>&1 |
+          python installer/MaaAutoInstaller/build_release.py --source-dir MaaAutoProject --delta-auto 2>&1 |
             Tee-Object -FilePath build.log
           if ($LASTEXITCODE -ne 0) {
             "## 构建失败，最后 60 行日志" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
@@ -110,6 +110,7 @@ jobs:
           Copy-Item installer/dist/MaaAuto_Setup_*.exe out/
           Copy-Item installer/dist/MaaAuto_Online_*.exe out/
           Copy-Item installer/dist/MaaAuto_payload_*.zip out/
+          Copy-Item installer/dist/MaaAuto_delta_*.zip out/ -ErrorAction SilentlyContinue
           Copy-Item installer/dist/SHA256SUMS.txt out/
           Get-ChildItem out | Format-Table Name, Length
 
