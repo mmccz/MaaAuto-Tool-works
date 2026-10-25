@@ -1,13 +1,10 @@
 {
     "_meta.name": "English",
-
     "app.title": "MaaAuto Console",
     "app.description": "MAA & MaaEnd Automation Console",
-
     "nav.home": "Home",
     "nav.settings": "Settings",
     "nav.about": "About",
-
     "home.status.label": "Status",
     "home.status.idle": "Idle",
     "home.status.running": "Running",
@@ -23,13 +20,11 @@
     "home.log.title": "Live Log",
     "home.log.clear": "Clear",
     "home.log.export": "Export Log",
-
     "settings.title": "Settings",
     "settings.jump": "Jump to",
     "settings.saved": "Saved",
     "settings.reset": "Reset to Defaults",
     "settings.reset.confirm": "Reset all settings to defaults?",
-
     "settings.group.paths": "Paths",
     "settings.group.process": "Process & Timeout",
     "settings.group.foreground": "Foreground Handling",
@@ -37,7 +32,6 @@
     "settings.group.appearance": "Appearance",
     "settings.group.general": "General",
     "settings.group.vision": "Image Matching & Clicking",
-
     "settings.search_scope": "Search scope",
     "settings.search_scope.desc": "Searching only inside the target window is faster and avoids clicking the wrong thing; use the whole screen if the button lives in a separate window",
     "settings.search_scope.window": "Target window",
@@ -75,7 +69,6 @@
     "settings.ui_scale.applied.title": "Interface scale applied",
     "settings.ui_scale.applied.text": "Interface scale is now {scale}% and has been repainted immediately.\n\nIf a few windows (sidebar, log view) still do not fit, restart once to rebuild them completely at the new scale.\n\nRestart MaaAuto now?",
     "settings.restart.failed": "Could not launch a new instance, so the restart failed.\n\nPlease close MaaAuto manually and open it again.",
-
     "capture.title": "Capture template",
     "capture.name": "File name (stored in the template directory, may override the built-in one)",
     "capture.custom": "Custom file name…",
@@ -88,13 +81,11 @@
     "capture.saved": "Template saved as {file}, self-check score {score}.",
     "capture.saved_detail": "Saved: {file} ({size})\nPath: {dir}\nSelf-check score: {score}\n\nBelow 0.85 means the selection was loose; capture again and include only the button.",
     "capture.again": "Capture again",
-
     "settings.maa_path": "MAA Path",
     "settings.maa_path.desc": "Full path to MAA.exe. Leave empty to skip MAA phase.",
     "settings.maaend_path": "MaaEnd Path",
     "settings.maaend_path.desc": "Full path to MaaEnd. Leave empty to skip MaaEnd phase.",
     "settings.browse": "Browse",
-
     "settings.emulator_proc": "Emulator Process",
     "settings.emulator_proc.desc": "e.g. MuMuPlayer.exe",
     "settings.pc_game_proc": "PC Game Process",
@@ -104,21 +95,18 @@
     "settings.game_exit_timeout": "Game Exit Timeout (s)",
     "settings.retry_times": "Retry Times",
     "settings.retry_interval": "Retry Interval (s)",
-
     "settings.foreground_action": "Foreground Action Before Start",
     "settings.foreground_action.none": "Do nothing (recommended)",
     "settings.foreground_action.kill_all": "Kill all foreground apps",
     "settings.foreground_action.blacklist": "Kill blacklisted apps only",
     "settings.blacklist_apps": "Blacklist Process Names",
     "settings.blacklist_apps.desc": "Comma-separated, e.g. chrome.exe,notepad.exe,qq",
-
     "settings.enable_schedule": "Enable Daily Schedule",
     "settings.execute_time": "Daily Run Time",
     "settings.serverchan_key": "ServerChan SendKey",
     "settings.webhook_url": "Generic Webhook",
     "settings.webhook_url.desc": "POST JSON {title, content} to this URL",
     "settings.test": "Test",
-
     "settings.theme": "Theme",
     "settings.theme.light": "Light",
     "settings.theme.dark": "Dark",
@@ -135,7 +123,6 @@
     "settings.background.mode.tile": "Tile",
     "settings.background.clear": "Clear Background",
     "settings.show_animation": "Enable Page Transition Animation",
-
     "settings.auto_start": "Run at Startup",
     "settings.minimize_to_tray": "Minimize to tray on close (X)",
     "settings.kill_on_exit": "Clean related processes on exit",
@@ -148,7 +135,6 @@
     "settings.update_channel.desc": "Stable receives official releases only; Beta also receives pre-releases (beta / rc).",
     "settings.update_channel.stable": "Stable",
     "settings.update_channel.beta": "Beta",
-
     "about.title": "About",
     "about.version": "Version",
     "about.python": "Python Version",
@@ -170,15 +156,12 @@
     "about.check_update.available": "New version {version} available",
     "about.check_update.confirm": "Upgrade now?\n\nThe app will close and restart after the upgrade.",
     "about.check_update.no_upgrade_exe": "upgrade.exe not found. Please reinstall the full package.",
-
     "dialog.export.title": "Export Logs",
     "dialog.export.success": "Exported successfully to:\n{path}",
     "dialog.export.failed": "Export failed: {err}",
-
     "tray.show": "Show Window",
     "home.btn.stop": "■ Stop Task",
     "home.btn.stopping": "Stopping...",
-
     "tray.stop": "Stop Task",
     "tray.quit": "Quit MaaAuto",
     "tray.stopped": "Task stopped.",
@@ -186,11 +169,9 @@
     "tray.settings": "Settings",
     "tray.restart": "Restart",
     "tray.minimized": "Minimized to tray, running in background.",
-
     "settings.accent_color": "Accent Color",
     "settings.accent_color.desc": "Used by buttons, switches, sliders and selections",
     "settings.accent_color.custom": "Custom…",
-
     "common.ok": "OK",
     "common.cancel": "Cancel",
     "common.save": "Save",
@@ -226,23 +207,17 @@
     "settings.min_emulator_runtime": "Minimum emulator runtime (s)",
     "settings.min_emulator_runtime.desc": "If the emulator exits within this time it counts as a startup/connection failure instead of a finished task. 0 disables the check",
     "settings.retry_interval.desc": "Interval between retries (seconds)",
-
     "settings.enable_system_notify": "Enable system notification on task finish",
     "settings.enable_system_notify.desc": "Shows only the result, no log content",
-
     "notify.task_success": "Task completed successfully",
     "notify.task_failed": "Task failed, please check the log",
     "notify.task_stopped": "Task was stopped",
-
     "serverchan.test.success": "Push succeeded",
     "serverchan.test.failed": "Push failed",
     "serverchan.test.empty_key": "Please enter your SendKey first",
-
     "upgrade.pending_after_task": "New version {version} detected, will upgrade after the task finishes",
     "upgrade.available": "New version {version} available. Check About page.",
-
     "common.got_it": "Got it",
-
     "update.title": "New version available",
     "update.subtitle": "{latest} (current {current})",
     "update.channel.stable": "Stable",
@@ -256,10 +231,8 @@
     "update.latest.text": "Version {current} is already the latest.",
     "update.failed.title": "Update check failed",
     "update.apply_failed": "Could not start upgrade.exe. Please download and run the full installer again.",
-
     "announce.title": "Announcements",
     "announce.subtitle": "App updates and usage reminders",
-
     "tutorial.button": "Beginner tutorial",
     "tutorial.title": "Beginner tutorial",
     "tutorial.subtitle": "First time here? Follow these 7 steps (about 3 minutes)",
@@ -280,5 +253,17 @@
     "tutorial.s7.title": "7. Schedule and notifications (optional)",
     "tutorial.s7.body": "Settings → Schedule & Notifications: run daily at a fixed time and push results to your phone via ServerChan / Webhook.\nWhen something breaks: About → “Export logs”, and send the zip plus MAA's debug\\asst.log if the run got stuck in the MAA stage.",
     "tutorial.footer": "Finish steps 2 and 3 before pressing “Run now” — that's what makes the first run succeed.",
-    "tutorial.close": "Got it, let's start"
+    "tutorial.close": "Got it, let's start",
+    "settings.schedule.times": "Run times (multiple allowed)",
+    "settings.schedule.times.desc": "Runs the task at these times; add several, e.g. 08:00 and 20:30",
+    "settings.schedule.every_day": "Every day",
+    "settings.schedule.add": "Add time…",
+    "settings.schedule.remove": "Remove",
+    "weekday.1": "Mo",
+    "weekday.2": "Tu",
+    "weekday.3": "We",
+    "weekday.4": "Th",
+    "weekday.5": "Fr",
+    "weekday.6": "Sa",
+    "weekday.7": "Su"
 }

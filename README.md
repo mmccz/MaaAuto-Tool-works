@@ -6,7 +6,7 @@
 
 **MAA & MaaEnd 的定时自动化调度台**
 
-[![Version](https://img.shields.io/badge/version-1.1.1-2f81f7.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.3.0-2f81f7.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#环境要求)
@@ -108,8 +108,8 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 
 | 文件 | 说明 |
 | --- | --- |
-| `MaaAuto_Setup_v1.1.1-Windows-x64.exe` | **完整包（约 56 MB）**，内嵌预构建程序，断网也能装 |
-| `MaaAuto_Online_v1.1.1-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
+| `MaaAuto_Setup_v1.3.0-Windows-x64.exe` | **完整包（约 56 MB）**，内嵌预构建程序，断网也能装 |
+| `MaaAuto_Online_v1.3.0-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
 
 双击后 30 秒左右装完，**不需要 Python、不联网、不需要管理员权限**：默认装到 `%LOCALAPPDATA%\Programs\MaaAuto`；向导里也可以选「为所有用户安装」，装到 `Program Files`（这一步会弹 UAC）。
 「选择附加任务」页可以选**是否创建开始菜单快捷方式**（默认创建）与桌面图标。
@@ -181,8 +181,10 @@ python main.py
 | `pc_game_proc` | PC 端游戏进程名 | `Endfield.exe` |
 | `foreground_action` | 前台策略：`none` / `kill_all` / `blacklist` | `none` |
 | `blacklist_apps` | 黑名单进程名，逗号分隔 | `""` |
-| `enable_schedule` | 启用每日定时 | `false` |
-| `execute_time` | 每日执行时间（`HH:mm`） | `08:00` |
+| `enable_schedule` | 启用定时执行 | `false` |
+| `schedule_times` | 执行时段列表（如 `["08:00", "20:30"]`）；空 = 用 `execute_time` | `[]` |
+| `schedule_weekdays` | 执行日（1=周一…7=周日）；空 = 每天 | `[]` |
+| `execute_time` | **旧字段**：单时段时间（`HH:mm`），仅兼容老配置 | `08:00` |
 | `last_trigger_date` | 上次触发日期（内部防重复） | `""` |
 | `serverchan_key` | Server酱 SendKey | `""` |
 | `webhook_url` | 通用 Webhook 地址 | `""` |
@@ -254,7 +256,7 @@ Content-Type: application/json
 
 ## 🔄 升级与版本
 
-当前版本 **1.1.1**，变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 **1.3.0**，变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 任何已安装的 1.x 都可以在程序内一键升级：下载 `MaaAuto_payload_v{版本}.zip` 替换程序文件，十几秒完成，失败自动回滚。
 

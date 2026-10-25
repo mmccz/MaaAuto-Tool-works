@@ -34,7 +34,9 @@ DEFAULT_CONFIG = {
     "maaend_path": "",
     "serverchan_key": "",
     "webhook_url": "",
-    "execute_time": "08:00",
+    "execute_time": "08:00",           # 旧字段：单时段（保留兼容，1.3.0 起由 schedule_times 接管）
+    "schedule_times": [],              # 多时段，如 ["08:00", "20:30"]；空=用 execute_time
+    "schedule_weekdays": [],           # 1=周一…7=周日；空=每天
     "enable_schedule": False,
     "wait_timeout": 60,
     "game_start_timeout": 120,
@@ -50,6 +52,7 @@ DEFAULT_CONFIG = {
     "foreground_action": "none",
     "blacklist_apps": "",
     "last_trigger_date": "",
+    "last_trigger_key": "",            # "YYYY-MM-DD HH:MM"：多时段去重（比日期更精确）
     "run_count": 0,
     # ---- 新增键 ----
     "emulator_proc": "MuMuPlayer.exe",
@@ -127,6 +130,7 @@ RUNTIME_CONFIG_KEYS = (
     "run_count",
     "last_run_time",
     "last_trigger_date",
+    "last_trigger_key",
     "window_geometry",
 )
 

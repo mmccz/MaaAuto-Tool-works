@@ -314,3 +314,24 @@ QPushButton#GhostButtonHot {
     font-weight: 600;
 }
 QPushButton#GhostButtonHot:hover { background: rgba({accent_rgb}, 0.26); }
+
+/* ---- 定时编辑器（1.3.0）：星期按钮 + 时段列表 ---- */
+QToolButton#WeekdayButton {
+    border: 1px solid #3a4453;
+    border-radius: 6px;
+    padding: 3px 0;
+    background: transparent;
+    color: #b6c2d2;
+}
+QToolButton#WeekdayButton:hover { background: rgba(255, 255, 255, 0.06); }
+QToolButton#WeekdayButton:checked {
+    background: rgba(96, 165, 250, 0.20);
+    border-color: rgba(96, 165, 250, 0.55);
+    color: #dbeafe;
+}
+QListWidget#ScheduleTimeList {
+    border: 1px solid #3a4453;
+    border-radius: 8px;
+    background: transparent;
+    padding: 2px;
+}

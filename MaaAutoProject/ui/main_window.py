@@ -217,7 +217,7 @@ class MainWindow(QMainWindow):
         self._pending_upgrade_info = None
 
         # 定时撞上运行中任务时，记下"已提示过顺延"的日期，避免每 10s 刷日志
-        self._schedule_deferred_date = ""
+        self._schedule_deferred_key = ""
 
         # 更新检查线程句柄
         self._update_check_worker = None
@@ -231,6 +231,7 @@ class MainWindow(QMainWindow):
         self._ann_cache = None
         self._announcements_worker = None
         self._announcements_shown_this_run = False
+        self._announcements_dialog = None
         self._tutorial_open = False
         self._refresh_announcement_badge()
 
@@ -383,29 +384,24 @@ class MainWindow(QMainWindow):
         if not self.config.get("enable_schedule", False):
             self.home_page.set_next_run("")
             return
-        time_str = self.config.get("execute_time", "08:00")
-        target = QTime.fromString(time_str, "HH:mm")
-        if not target.isValid():
+        import datetime as _dt
+        import schedule_utils as su
+        times = su.effective_times(self.config)
+        weekdays = su.effective_weekdays(self.config)
+        now = _dt.datetime.now()
+        when = su.next_run(times, weekdays, now)
+        if when is None:
             self.home_page.set_next_run("")
             return
-        now = QTime.currentTime()
-        now_sec = now.hour() * 3600 + now.minute() * 60 + now.second()
-        tgt_sec = target.hour() * 3600 + target.minute() * 60
-        if tgt_sec <= now_sec:
-            diff = 24 * 3600 - now_sec + tgt_sec
-            is_tomorrow = True
-        else:
-            diff = tgt_sec - now_sec
-            is_tomorrow = False
-        hours = diff // 3600
-        minutes = (diff % 3600) // 60
+        hours, minutes, not_today = su.humanize_next(when, now)
+        time_text = when.strftime("%H:%M")
         if hours == 0 and minutes == 0:
             text = self.i18n.t("home.next_run.now")
         else:
-            text = self.i18n.t("home.next_run.in",
-                               hours=hours, minutes=minutes, time=time_str)
-        if is_tomorrow and hours >= 12:
-            text = self.i18n.t("home.next_run.tomorrow", time=time_str)
+            text = self.i18n.t("home.next_run.in", hours=hours,
+                               minutes=minutes, time=time_text)
+        if not_today and hours >= 12:
+            text = self.i18n.t("home.next_run.tomorrow", time=time_text)
         self.home_page.set_next_run(text)
 
     # ==================================================================
@@ -414,24 +410,27 @@ class MainWindow(QMainWindow):
     def _check_schedule(self):
         if not self.config.get("enable_schedule", False):
             return
-        now = QTime.currentTime()
-        target = QTime.fromString(self.config.get("execute_time", "08:00"), "HH:mm")
-        today = QDate.currentDate().toString("yyyy-MM-dd")
-        if not (now >= target and self.config.get("last_trigger_date") != today):
+        import datetime as _dt
+        import schedule_utils as su
+
+        times = su.effective_times(self.config)
+        weekdays = su.effective_weekdays(self.config)
+        now = _dt.datetime.now()
+        last_key = self.config.get("last_trigger_key") or ""
+        key = su.due_slot(times, weekdays, now, last_key)
+        if not key:
             return
 
-        # 任务还在跑：**不要**写 last_trigger_date，等它结束后当天的下一次
-        # 10s 检查再补跑。旧实现先写日期再调 manual_run()，而 manual_run()
-        # 发现已有任务在跑只打一行日志就返回 —— 结果当天永远不补跑。
+        # 任务还在跑：**不要**写 last_trigger_key，等它结束后的下一次检查补跑
         if self._is_running():
-            if self._schedule_deferred_date != today:
-                self._schedule_deferred_date = today
+            if self._schedule_deferred_key != key:
+                self._schedule_deferred_key = key
                 self.logger.info("定时时间已到，但任务仍在执行；结束后会自动补跑一次。")
             return
 
-        self.logger.info(
-            f"定时触发：当前 {now.toString('HH:mm')} >= 设定 {target.toString('HH:mm')}")
-        self.config["last_trigger_date"] = today
+        self.logger.info(f"定时触发：{key}")
+        self.config["last_trigger_key"] = key
+        self.config["last_trigger_date"] = now.date().isoformat()   # 兼容旧字段
         save_config(self.config)
         self._update_next_run()
         self.manual_run()
@@ -669,13 +668,17 @@ class MainWindow(QMainWindow):
     def _on_remote_announcements(self, result):
         if not result:
             return
-        updated, items = result
-        from ui.announcements import save_cache
+        remote_updated, remote_items = result
+        from ui.announcements import pick_best, save_cache
+        local_updated, local_items = self._announcements_data()
+        # 合并而不是覆盖：jsDelivr 有缓存，可能返回更旧的 JSON
+        updated, items = pick_best(local_updated, local_items,
+                                   remote_updated, remote_items)
         save_cache(updated, items)
         old_updated = (self._ann_cache or ("", []))[0]
         self._ann_cache = (updated, items)
-        if updated != old_updated:
-            self.logger.info(f"在线公告已更新：{updated}（{len(items)} 条）")
+        if len(items) != len(local_items) or updated != old_updated:
+            self.logger.info(f"在线公告已同步：{updated}（{len(items)} 条）")
         self._refresh_announcement_badge()
         self._maybe_show_announcements()
 
@@ -684,11 +687,33 @@ class MainWindow(QMainWindow):
         updated, items = self._announcements_data()
         if not items:
             return
+        # 已经开着就不要叠第二个：把现有窗口提到前面
+        existing = getattr(self, "_announcements_dialog", None)
+        if existing is not None:
+            try:
+                existing.raise_()
+                existing.activateWindow()
+                return
+            except RuntimeError:
+                self._announcements_dialog = None
+
         self._announcements_shown_this_run = True
+        # 先落盘已读：窗口开着时用户可能直接关掉程序/被升级进程结束，
+        # 旧实现把写入放在 exec() 之后，于是下次启动又提示"有新公告"。
+        self._mark_announcements_seen(updated, items)
+
         dlg = AnnouncementDialog(self.i18n, items, self.i18n.current_lang,
                                  self, updated=updated)
-        dlg.exec()
-        # 打开过就全部标记已读；同时记下 updated，内容更新时才会重新提示
+        self._announcements_dialog = dlg
+        try:
+            dlg.exec()
+        finally:
+            self._announcements_dialog = None
+            # 期间可能又拉到了新公告，关闭时再记一次
+            latest_updated, latest_items = self._announcements_data()
+            self._mark_announcements_seen(latest_updated, latest_items)
+
+    def _mark_announcements_seen(self, updated, items):
         self.config["announcements_seen"] = [it.get("id") for it in items
                                             if it.get("id")]
         self.config["announcements_seen_updated"] = updated or ""

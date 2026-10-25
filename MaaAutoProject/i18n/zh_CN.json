@@ -1,13 +1,10 @@
 {
     "_meta.name": "简体中文",
-
     "app.title": "MaaAuto 控制台",
     "app.description": "MAA & MaaEnd 自动化控制台",
-
     "nav.home": "首页",
     "nav.settings": "设置",
     "nav.about": "关于",
-
     "home.status.label": "当前状态",
     "home.status.idle": "空闲",
     "home.status.running": "执行中",
@@ -23,13 +20,11 @@
     "home.log.title": "运行日志",
     "home.log.clear": "清空",
     "home.log.export": "导出日志",
-
     "settings.title": "设置",
     "settings.jump": "跳转分组",
     "settings.saved": "已保存",
     "settings.reset": "恢复默认",
     "settings.reset.confirm": "确定要恢复默认设置吗？",
-
     "settings.group.paths": "路径设置",
     "settings.group.process": "进程与超时",
     "settings.group.foreground": "前台处理",
@@ -37,7 +32,6 @@
     "settings.group.appearance": "外观",
     "settings.group.general": "常规",
     "settings.group.vision": "找图与点击",
-
     "settings.search_scope": "搜索范围",
     "settings.search_scope.desc": "只在目标窗口内找图，速度更快、也不会点到别处；按钮画在独立窗口里时改用整个屏幕",
     "settings.search_scope.window": "目标窗口",
@@ -75,7 +69,6 @@
     "settings.ui_scale.applied.title": "界面缩放已应用",
     "settings.ui_scale.applied.text": "界面缩放已切换为 {scale}%，并已立即重绘。\n\n若侧栏、日志等个别窗口尺寸仍不合适，重启一次会按新比例完整重建。\n\n是否现在重启 MaaAuto？",
     "settings.restart.failed": "无法启动新实例，重启失败。\n\n请手动关闭 MaaAuto 后重新打开。",
-
     "capture.title": "截取模板",
     "capture.name": "文件名（存到模板目录，可覆盖内置模板）",
     "capture.custom": "自定义文件名…",
@@ -88,13 +81,11 @@
     "capture.saved": "已保存模板 {file}，自检相似度 {score}。",
     "capture.saved_detail": "已保存：{file}（{size}）\n路径：{dir}\n自检相似度：{score}\n\n低于 0.85 说明框得不够准，建议只框按钮本身再截一次。",
     "capture.again": "再截一次",
-
     "settings.maa_path": "MAA 路径",
     "settings.maa_path.desc": "MAA.exe 的完整路径，留空则跳过 MAA 阶段",
     "settings.maaend_path": "MaaEnd 路径",
     "settings.maaend_path.desc": "MaaEnd 可执行文件的完整路径，留空则跳过 MaaEnd 阶段",
     "settings.browse": "浏览",
-
     "settings.emulator_proc": "模拟器进程名",
     "settings.emulator_proc.desc": "例如 MuMuPlayer.exe",
     "settings.pc_game_proc": "PC 端游戏进程名",
@@ -104,21 +95,18 @@
     "settings.game_exit_timeout": "游戏关闭等待(秒)",
     "settings.retry_times": "失败重试次数",
     "settings.retry_interval": "重试间隔(秒)",
-
     "settings.foreground_action": "启动前的前台处理",
     "settings.foreground_action.none": "不做任何操作（推荐）",
     "settings.foreground_action.kill_all": "关闭所有前台程序",
     "settings.foreground_action.blacklist": "仅关闭黑名单程序",
     "settings.blacklist_apps": "黑名单进程名",
     "settings.blacklist_apps.desc": "多个进程名用逗号分隔，例如 chrome.exe,notepad.exe,qq",
-
     "settings.enable_schedule": "启用每日定时启动",
     "settings.execute_time": "每日执行时间",
     "settings.serverchan_key": "Server酱 SendKey",
     "settings.webhook_url": "通用 Webhook",
     "settings.webhook_url.desc": "向该 URL POST JSON: {title, content}",
     "settings.test": "测试",
-
     "settings.theme": "主题",
     "settings.theme.light": "浅色",
     "settings.theme.dark": "深色",
@@ -135,7 +123,6 @@
     "settings.background.mode.tile": "平铺",
     "settings.background.clear": "清除背景",
     "settings.show_animation": "启用页面切换动画",
-
     "settings.auto_start": "开机自启",
     "settings.minimize_to_tray": "关闭(X)时最小化到托盘",
     "settings.kill_on_exit": "退出程序时清理所有相关进程",
@@ -148,7 +135,6 @@
     "settings.update_channel.desc": "稳定版只接收正式版；测试版会同时接收预发布（beta / rc）",
     "settings.update_channel.stable": "稳定版",
     "settings.update_channel.beta": "测试版",
-
     "about.title": "关于",
     "about.version": "软件版本",
     "about.python": "Python 版本",
@@ -170,11 +156,9 @@
     "about.check_update.available": "发现新版本 {version}",
     "about.check_update.confirm": "是否现在升级？\n\n升级将关闭主程序，完成后自动重启。",
     "about.check_update.no_upgrade_exe": "未找到 upgrade.exe，请重新下载完整安装包。",
-
     "dialog.export.title": "导出日志",
     "dialog.export.success": "已成功导出到：\n{path}",
     "dialog.export.failed": "导出失败：{err}",
-
     "home.btn.stop": "■ 结束任务",
     "home.btn.stopping": "正在结束...",
     "tray.show": "显示主界面",
@@ -185,11 +169,9 @@
     "tray.settings": "设置",
     "tray.restart": "重启程序",
     "tray.minimized": "已最小化到托盘，继续后台运行。",
-
     "settings.accent_color": "强调色",
     "settings.accent_color.desc": "影响按钮、开关、滑块、选中项的主题色",
     "settings.accent_color.custom": "自定义…",
-
     "common.ok": "确定",
     "common.cancel": "取消",
     "common.save": "保存",
@@ -203,7 +185,7 @@
     "common.confirm": "确认",
     "common.restart_now": "立即重启",
     "common.later": "稍后",
-    "..." : "...",
+    "...": "...",
     "home.next_run.in": "{hours}小时{minutes}分钟后 ({time})",
     "home.next_run.now": "即将执行",
     "home.next_run.today": "今天 {time}",
@@ -225,23 +207,17 @@
     "settings.min_emulator_runtime": "模拟器最短运行时长（秒）",
     "settings.min_emulator_runtime.desc": "模拟器在这个时间内就退出，判定为启动/连接失败（不再是「任务完成」）。0 = 关闭判定",
     "settings.retry_interval.desc": "每次重试之间的间隔秒数",
-
     "settings.enable_system_notify": "启用系统通知（任务结束时弹窗提醒）",
     "settings.enable_system_notify.desc": "仅提示任务结果，不包含日志内容",
-
     "notify.task_success": "任务执行成功",
     "notify.task_failed": "任务执行失败，请查看日志",
     "notify.task_stopped": "任务已被中止",
-
     "serverchan.test.success": "推送成功",
     "serverchan.test.failed": "推送失败",
     "serverchan.test.empty_key": "请先填写 SendKey",
-
     "upgrade.pending_after_task": "检测到新版本 {version}，将在任务结束后自动升级",
     "upgrade.available": "发现新版本 {version}，可在「关于」页升级",
-
     "common.got_it": "知道了",
-
     "update.title": "发现新版本",
     "update.subtitle": "{latest}（当前 {current}）",
     "update.channel.stable": "稳定版",
@@ -255,10 +231,8 @@
     "update.latest.text": "当前版本 {current} 已是最新，无需升级。",
     "update.failed.title": "检查更新失败",
     "update.apply_failed": "无法启动升级器 upgrade.exe，请重新下载完整安装包后再试。",
-
     "announce.title": "公告",
     "announce.subtitle": "程序更新与使用提醒",
-
     "tutorial.button": "新手教程",
     "tutorial.title": "新手教程",
     "tutorial.subtitle": "第一次使用，按下面 7 步走一遍即可（约 3 分钟）",
@@ -279,5 +253,17 @@
     "tutorial.s7.title": "7. 定时与推送（可选）",
     "tutorial.s7.body": "设置 → 定时与推送：可以设每天定时执行，并用 Server 酱 / Webhook 把任务结果推到手机。\n出问题时：关于 → 「导出日志」，把导出的 zip 和（若卡在 MAA 阶段）MAA 的 debug\\asst.log 一起发出来。",
     "tutorial.footer": "把第 2、3 步做完再点「立即执行」，第一次就跑通的概率最高。",
-    "tutorial.close": "我知道了，开始使用"
+    "tutorial.close": "我知道了，开始使用",
+    "settings.schedule.times": "执行时间（可多个）",
+    "settings.schedule.times.desc": "到点自动执行任务；可以加多个时段（如早 8 点、晚 8 点半）",
+    "settings.schedule.every_day": "每天",
+    "settings.schedule.add": "添加时间…",
+    "settings.schedule.remove": "删除",
+    "weekday.1": "一",
+    "weekday.2": "二",
+    "weekday.3": "三",
+    "weekday.4": "四",
+    "weekday.5": "五",
+    "weekday.6": "六",
+    "weekday.7": "日"
 }

@@ -6,13 +6,14 @@ from PySide6.QtWidgets import (
     QLineEdit, QSlider,
     QFileDialog, QMessageBox, QFrame,
 )
-from PySide6.QtCore import Qt, Signal, QTime
+from PySide6.QtCore import Qt, Signal, QTime, QTimer
 
 from ui.components import (SettingItem, SettingGroup, Switch, SegmentedControl,
                            AccentColorPicker)
 from ui.pages.process_picker import ProcessPickerDialog
 from ui.no_wheel import NoWheelComboBox, IntLineEdit
 from ui.flow_layout import FlowLayout
+from ui.schedule_editor import ScheduleEditor
 from ui.wheel_time_picker import WheelTimePicker
 from notifier import send_webhook, HAS_SERVERCHAN
 from utils import AsyncWorker
@@ -316,9 +317,12 @@ class SettingsPage(QWidget):
         self.sys_notify_sw = self._add_switch(g, "settings.enable_system_notify",
                                              "settings.enable_system_notify.desc",
                                              "enable_system_notify", True)
-        self.time_edit = WheelTimePicker()
-        self.time_edit.setTime(QTime.fromString(self.config.get("execute_time", "08:00"), "HH:mm"))
-        self._add_item(g, "settings.execute_time", None, self.time_edit)
+        self.schedule_editor = ScheduleEditor(
+            self.i18n,
+            times=self.config.get("schedule_times") or [self.config.get("execute_time", "08:00")],
+            weekdays=self.config.get("schedule_weekdays") or [])
+        self._add_item(g, "settings.schedule.times",
+                       "settings.schedule.times.desc", self.schedule_editor)
 
         self.sc_edit = QLineEdit(self.config.get("serverchan_key", ""))
         self.sc_edit.setEchoMode(QLineEdit.Password)
@@ -620,7 +624,7 @@ class SettingsPage(QWidget):
                 sw.set_ui_scale(scale)
             except Exception as e:
                 logger.warning(f"缩放开关尺寸失败: {e}")
-        for widget in (self.time_edit, self.accent_picker):
+        for widget in (self.schedule_editor, self.accent_picker):
             try:
                 widget.set_ui_scale(scale)
             except Exception as e:
@@ -645,14 +649,22 @@ class SettingsPage(QWidget):
             w.valueChanged.connect(emit_config)
         for sw, _key in self._switches:
             sw.toggled.connect(emit_config)
-        self.time_edit.timeChanged.connect(emit_config)
+        self.schedule_editor.changed.connect(emit_config)
         self.channel_combo.currentIndexChanged.connect(emit_config)
         self.fg_seg.selection_changed.connect(emit_config)
         self.scope_seg.selection_changed.connect(emit_config)
         self.click_mode_combo.currentIndexChanged.connect(emit_config)
         self.ui_scale_combo.currentIndexChanged.connect(self._on_ui_scale_changed)
-        self.bg_opacity_slider.valueChanged.connect(emit_config)
-        self.bg_blur_slider.valueChanged.connect(emit_config)
+        # 滑条拖动会连续发 valueChanged；原来每一格都触发「整图高斯模糊 + 写配置」，
+        # 表现为拖动很卡。这里改成：文字实时更新，重绘/落盘防抖 180ms，松手立刻生效。
+        self._bg_apply_timer = QTimer(self)
+        self._bg_apply_timer.setSingleShot(True)
+        self._bg_apply_timer.setInterval(180)
+        self._bg_apply_timer.timeout.connect(emit_config)
+        self.bg_opacity_slider.valueChanged.connect(self._on_bg_slider_changed)
+        self.bg_blur_slider.valueChanged.connect(self._on_bg_slider_changed)
+        for slider in (self.bg_opacity_slider, self.bg_blur_slider):
+            slider.sliderReleased.connect(emit_config)
         self.bg_mode_combo.currentIndexChanged.connect(emit_config)
         self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         self.lang_combo.currentIndexChanged.connect(self._on_lang_changed)
@@ -691,6 +703,11 @@ class SettingsPage(QWidget):
     # ==================================================================
     # 交互
     # ==================================================================
+
+    def _on_bg_slider_changed(self, *_):
+        """背景两个滑条：值变了先刷文字，再防抖更新背景与配置。"""
+        self.bg_blur_value.setText(str(self.bg_blur_slider.value()))
+        self._bg_apply_timer.start()
     def _browse_exe(self, line_edit):
         path, _ = QFileDialog.getOpenFileName(
             self, self.i18n.t("settings.browse"), "",
@@ -882,7 +899,10 @@ class SettingsPage(QWidget):
         c["retry_interval"] = self.retry_interval_spin.value()
         c["min_emulator_runtime"] = self.min_emu_runtime_spin.value()
         c["log_retention_days"] = self.log_retention_spin.value()
-        c["execute_time"] = self.time_edit.time().toString("HH:mm")
+        sched_times, sched_days = self.schedule_editor.values()
+        c["schedule_times"] = sched_times
+        c["schedule_weekdays"] = sched_days
+        c["execute_time"] = sched_times[0] if sched_times else "08:00"
         c["serverchan_key"] = self.sc_edit.text().strip()
         c["webhook_url"] = self.webhook_edit.text().strip()
         c["blacklist_apps"] = self.blacklist_edit.text()
@@ -937,6 +957,8 @@ class SettingsPage(QWidget):
             if i < self.bg_mode_combo.count():
                 self.bg_mode_combo.setItemText(i, self.i18n.t(key))
         self.bg_mode_combo.blockSignals(False)
+
+        self.schedule_editor.retranslate()
 
         self.channel_combo.blockSignals(True)
         for i, val in enumerate(self._channel_values):

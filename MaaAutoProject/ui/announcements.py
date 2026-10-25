@@ -107,11 +107,48 @@ def save_cache(updated, items, config_dir=None):
         return False
 
 
+def merge_announcements(base_items, extra_items):
+    """按 id 合并公告：``extra`` 中同 id 的条目覆盖 ``base``，顺序按日期倒序。
+
+    为什么要合并而不是直接替换：raw.githubusercontent 失败时会回退 jsDelivr，
+    而 jsDelivr 对 ``@main`` 有缓存，可能返回**更旧**的 JSON（条目更少、
+    ``updated`` 更早）。直接覆盖会让列表里的旧版本公告"消失"，用户看到
+    「公告看一会就没了，重启又回来」。
+    """
+    merged = {}
+    order = []
+    for item in list(base_items or []) + list(extra_items or []):
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        ident = item["id"]
+        if ident not in merged:
+            order.append(ident)
+        merged[ident] = item          # 后出现的覆盖先出现的
+
+    def sort_key(ident):
+        date = str(merged[ident].get("date") or "")
+        return (date, ident)
+
+    ids = sorted(merged, key=sort_key, reverse=True)
+    return [merged[i] for i in ids]
+
+
+def pick_best(local_updated, local_items, remote_updated, remote_items):
+    """本地 + 在线取"更完整"的那份：``updated`` 取较新，条目取并集。"""
+    merged = merge_announcements(local_items, remote_items)
+    updated = max(str(local_updated or ""), str(remote_updated or "")) or ""
+    return updated, merged
+
+
 def initial_announcements(config_dir=None):
     """启动时用的内容：缓存与内置取 updated 更新的那个。"""
     cached_updated, cached_items = load_cached_announcements(config_dir)
     bundled_updated, bundled_items = load_bundled_announcements()
-    if cached_items and cached_updated >= bundled_updated:
+    if cached_items and bundled_items:
+        # 两边都做过合并：既不会因为缓存旧而丢新公告，也不会因为内置旧而丢新缓存
+        return pick_best(bundled_updated, bundled_items,
+                         cached_updated, cached_items)
+    if cached_items:
         return cached_updated, cached_items
     return bundled_updated, bundled_items
 
@@ -191,14 +228,18 @@ def localize(item, lang):
 
 
 class AnnouncementDialog(QDialog):
-    """左侧列表 + 右侧正文的公告板。"""
+    """左侧目录 + 右侧**连续滚动**的全部公告（1.3.0）。
+
+    以前右侧一次只渲染一条，用户以为"旧版本公告看不到"。现在把全部条目拼成
+    一篇长文，左侧列表点击即跳转到对应小节，滚轮可以一路看完所有版本更新。
+    """
 
     def __init__(self, i18n, items, lang="zh_CN", parent=None, updated=""):
         super().__init__(parent)
         self.i18n = i18n
         self.setWindowTitle("MaaAuto")
-        self.resize(760, 520)
-        self.setMinimumSize(620, 420)
+        self.resize(820, 560)
+        self.setMinimumSize(660, 460)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(22, 18, 22, 16)
@@ -229,20 +270,10 @@ class AnnouncementDialog(QDialog):
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         body_row.addWidget(self.list)
 
-        right = QVBoxLayout()
-        right.setSpacing(6)
-        self.item_title = QLabel("")
-        self.item_title.setObjectName("SectionTitle")
-        self.item_title.setWordWrap(True)
-        right.addWidget(self.item_title)
-        self.item_meta = QLabel("")
-        self.item_meta.setObjectName("DialogSubtitle")
-        right.addWidget(self.item_meta)
         self.browser = QTextBrowser()
         self.browser.setObjectName("AnnouncementBody")
         self.browser.setOpenExternalLinks(True)
-        right.addWidget(self.browser, 1)
-        body_row.addLayout(right, 1)
+        body_row.addWidget(self.browser, 1)
         root.addLayout(body_row, 1)
 
         btns = QHBoxLayout()
@@ -260,19 +291,52 @@ class AnnouncementDialog(QDialog):
             node.setToolTip(f"{item['date']} · {item['tag']}")
             node.setData(Qt.UserRole, idx)
             self.list.addItem(node)
-        self.list.currentRowChanged.connect(self._show_item)
+
+        self.browser.setHtml(self._build_html())
+        self.list.currentRowChanged.connect(self._jump_to)
         if self._items:
             self.list.setCurrentRow(0)
 
-    def _show_item(self, row):
-        if row < 0 or row >= len(self._items):
-            return
-        item = self._items[row]
-        self.item_title.setText(item["title"])
-        self.item_meta.setText(f"{item['date']}  ·  {item['tag']}")
+    # ------------------------------------------------------------------ #
+    def _markdown_to_html(self, text):
+        """把 Markdown 正文转成 HTML 片段（保留链接样式）。"""
+        from PySide6.QtGui import QTextDocument
+        doc = QTextDocument()
         try:
-            self.browser.setMarkdown(item["body"])
-            from ui.update_dialog import colorize_links
-            colorize_links(self.browser)
+            doc.setMarkdown(text or "")
+            return doc.toHtml()
         except Exception:
-            self.browser.setPlainText(item["body"])
+            return f"<pre>{text}</pre>"
+
+    @staticmethod
+    def _strip_doc_wrapper(html):
+        """QTextDocument.toHtml() 会带 <html><body>；取 body 内容拼长文。"""
+        lower = html.lower()
+        begin = lower.find("<body")
+        if begin >= 0:
+            end = lower.rfind("</body>")
+            inner = html[begin:end] if end > begin else html[begin:]
+            close = inner.find(">")
+            return inner[close + 1:] if close >= 0 else inner
+        return html
+
+    def _build_html(self):
+        parts = []
+        for idx, item in enumerate(self._items):
+            title = item["title"]
+            meta = f"{item['date']}  ·  {item['tag']}" if item["date"] or item["tag"] else ""
+            parts.append(
+                f'<a name="ann{idx}"></a>'
+                f'<h2 style="margin-top:18px;">{title}</h2>'
+                f'<p style="color:#8b97a8;margin-top:-6px;">{meta}</p>'
+                + self._strip_doc_wrapper(self._markdown_to_html(item["body"]))
+                + '<hr style="border:none;border-top:1px solid #e2e8f0;margin:22px 0;">')
+        return "".join(parts)
+
+    def _jump_to(self, row):
+        if row < 0:
+            return
+        try:
+            self.browser.scrollToAnchor(f"ann{row}")
+        except Exception:
+            pass

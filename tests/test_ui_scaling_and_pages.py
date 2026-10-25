@@ -336,7 +336,9 @@ def test_settings_page_scales_painted_widgets(qapp):
     try:
         for sw, _key in page._switches:
             assert sw.minimumWidth() == 66 and sw.minimumHeight() == 36
-        assert page.time_edit._hour_col.minimumHeight() == 39
+        # 定时编辑器（星期按钮 + 时段列表）按比例放大
+        assert page.schedule_editor._day_buttons[0][1].width() == 51
+        assert page.schedule_editor.list.height() == 132
         assert page.accent_picker._swatches
     finally:
         page.deleteLater()

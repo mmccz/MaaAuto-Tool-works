@@ -103,9 +103,12 @@ def test_cache_roundtrip_and_newer_wins(tmp_path):
     assert save_cache("2999-01-01", items, config_dir=str(tmp_path))
     updated, got = load_cached_announcements(str(tmp_path))
     assert updated == "2999-01-01" and got == items
-    # 缓存比内置新 → initial 用缓存
+    # 缓存比内置新 → updated 取缓存；条目取「内置 + 缓存」的并集
+    # （1.3.0 起不再整体替换，否则旧镜像会把新公告顶掉）
     u2, items2 = initial_announcements(str(tmp_path))
-    assert u2 == "2999-01-01" and items2 == items
+    assert u2 == "2999-01-01"
+    ids2 = {it["id"] for it in items2}
+    assert {"remote-1"} <= ids2 and len(items2) >= len(items)
 
 
 def test_remote_urls_point_at_github():
@@ -125,10 +128,12 @@ def test_announcement_dialog_shows_first_item(qapp, i18n):
     try:
         assert dlg.list.count() == len(items)
         assert "2026-10-24" in dlg.subtitle_label.text()
-        dlg.list.setCurrentRow(1)
+        # 1.3.0：右侧是所有公告拼成的长文，左侧列表用于跳转
+        text = dlg.browser.toPlainText()
+        for item in items:
+            assert item["title"]["zh_CN"] in text
+        dlg.list.setCurrentRow(1)     # 跳转不应抛异常
         qapp.processEvents()
-        assert dlg.item_title.text() == items[1]["title"]["zh_CN"]
-        assert dlg.browser.toPlainText().strip()
     finally:
         dlg.deleteLater()
 
@@ -477,3 +482,58 @@ def test_background_blur_is_slider(qapp, i18n):
         assert page.get_config()["background_blur"] == 30
     finally:
         page.deleteLater()
+
+
+def test_announcements_marked_read_when_opened(qapp, i18n, tmp_path, monkeypatch):
+    """1.3.0：打开公告就落盘「已读」，而不是等窗口关掉。
+
+    旧实现把写入放在 exec() 之后：用户开着窗口时直接结束程序/被升级进程结束，
+    下次启动又会提示「有新公告」——这正是反馈里说的「重启后又提示」。
+    """
+    import config_manager
+    from themes import ThemeManager
+    from ui.main_window import MainWindow
+    from utils import resource_path
+
+    monkeypatch.setattr(config_manager, "CONFIG_FILE",
+                        str(tmp_path / "config.json"))
+    cfg = dict(config_manager.DEFAULT_CONFIG)
+    cfg.update({"kill_on_exit": False, "auto_check_update": False,
+                "minimize_to_tray": False, "minimize_on_task": False,
+                "show_animation": False, "auto_start": False,
+                "announcements_seen": [], "announcements_seen_updated": ""})
+    config_manager.save_config(cfg)
+
+    tm = ThemeManager(resource_path("themes"))
+    tm.apply_theme("light", qapp, ui_scale=1.0)
+
+    win = MainWindow(i18n, tm)
+    try:
+        for timer in (win.schedule_timer, win.countdown_timer,
+                      win._upgrading_check_timer):
+            timer.stop()
+
+        import ui.announcements as ann_module
+
+        class FakeDialog:
+            def __init__(self, *a, **kw):
+                pass
+
+            def exec(self):
+                # 模拟「窗口还开着时进程就被结束」：此时已读就应该已经落盘
+                saved = config_manager.load_config()
+                assert saved["announcements_seen"], "打开时就该标记已读"
+                assert saved["announcements_seen_updated"]
+                return 0
+
+        monkeypatch.setattr(ann_module, "AnnouncementDialog", FakeDialog)
+        win.show_announcements()
+
+        assert win._announcements_dialog is None          # 关闭后释放引用
+        assert config_manager.load_config()["announcements_seen_updated"]
+    finally:
+        win.is_quitting = True
+        win.hide()
+        win.tray.hide()
+        win.deleteLater()
+        qapp.processEvents()
