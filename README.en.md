@@ -6,7 +6,7 @@
 
 **A scheduling console for MAA & MaaEnd**
 
-[![Version](https://img.shields.io/badge/version-1.4.5-2f81f7.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.6-2f81f7.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.15%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#requirements)
@@ -72,8 +72,8 @@ Download from [Releases](https://github.com/mmccz/MaaAuto-Tool-works/releases):
 
 | File | Purpose |
 | --- | --- |
-| `MaaAuto_Setup_v1.4.5-Windows-x64.exe` | **Full installer (~59 MB)**, embeds the app, works offline |
-| `MaaAuto_Online_v1.4.5-Windows-x64.exe` | Online bootstrap (~2 MB), downloads the full installer |
+| `MaaAuto_Setup_v1.4.6-Windows-x64.exe` | **Full installer (~59 MB)**, embeds the app, works offline |
+| `MaaAuto_Online_v1.4.6-Windows-x64.exe` | Online bootstrap (~2 MB), downloads the full installer |
 
 Installs in about 30 seconds, needs no Python and no network; per-user install goes to `%LOCALAPPDATA%\Programs\MaaAuto`, and "install for all users" (Program Files) is offered in the wizard — that one shows UAC.
 
@@ -185,7 +185,7 @@ Content-Type: application/json
 
 ## 🔄 Updates and versions
 
-Current version **1.4.5**; see [CHANGELOG.md](CHANGELOG.md).
+Current version **1.4.6**; see [CHANGELOG.md](CHANGELOG.md).
 
 Any installed 1.x can update in-app: the delta package `MaaAuto_delta_v{old}_to_{new}.zip` is preferred (usually under 1 MB; skipping versions chains deltas automatically), falling back to the full `MaaAuto_payload_v{version}.zip`; failures roll back.
 

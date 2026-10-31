@@ -11,7 +11,7 @@ APP_DISPLAY_NAME = "MaaAuto"
 # Cross-repo contract: the installer / upgrader parses this line.
 # Accepted version syntax (aligned with the upgrader's parser):
 #   X.Y.Z / X.Y.ZaN / X.Y.ZbN / X.Y.ZrcN / X.Y.Z.postN
-APP_VERSION = "1.4.5"
+APP_VERSION = "1.4.6"
 APP_ORG = "MaaAuto"
 APP_GITHUB = "https://github.com/mmccz/MaaAuto-Tool-works"
 APP_EMAIL = "Frank010700@outlook.com"

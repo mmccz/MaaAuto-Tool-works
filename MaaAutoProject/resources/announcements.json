@@ -1,7 +1,20 @@
 {
-    "updated": "2026-10-31",
+    "updated": "2026-11-01",
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
+        {
+            "id": "v1.4.6",
+            "date": "2026-11-01",
+            "tag": "问题修复",
+            "title": {
+                "zh_CN": "1.4.6：修深色主题下弹窗看不清；弹窗样式统一",
+                "en_US": "1.4.6: dark-theme dialogs are readable; dialog styling unified"
+            },
+            "body": {
+                "zh_CN": "**弹窗看不清（深色主题）**：以前深色模式下「提示 / 警告 / 确认」这类弹窗是黑底黑字，按钮还是系统灰白样式，几乎没法读。原因是主题只给了弹窗深色背景，没给文字颜色和按钮样式。\n\n1.4.6 给所有弹窗补了文字色与按钮样式（圆角、与主界面同一套视觉），时间选择弹窗改成中文「确定 / 取消」，进程选择表格的表头在深色下也不再是一条白带，各弹窗的留白也统一了。\n\n**另外**：新增中英文使用者手册（仓库 `docs/guide/`）和英文 README。",
+                "en_US": "**Dialogs unreadable in the dark theme**: message/confirm dialogs used to be black text on a near-black background with native grey buttons, so they were hard to read at all. The theme painted the dialog background but never the text or button colours.\n\n1.4.6 gives every dialog a readable text colour and the app's own button style, switches the time picker to localized buttons, stops the process-picker header from turning into a white band in dark mode, and unifies the padding across dialogs.\n\n**Also**: a Chinese/English user guide (`docs/guide/`) and an English README."
+            }
+        },
         {
             "id": "v1.4.5",
             "date": "2026-10-31",

@@ -1,6 +1,6 @@
 # MaaAuto User Guide (English)
 
-> Applies to **v1.4.5** (2026-10-31)｜[简体中文](zh-CN.md)｜[Back to README](../../README.en.md)
+> Applies to **v1.4.6** (2026-11-01)｜[简体中文](zh-CN.md)｜[Back to README](../../README.en.md)
 > This guide is written for users: install, first-run setup, daily unattended runs, and troubleshooting — follow it step by step.
 
 ---
@@ -298,7 +298,7 @@ No. Config and logs live in `config\` and `logs\` inside the install folder and 
 | Stuck on "waiting for window" | Wrong process name | Re-pick it with "Pick process" |
 | Clicks do nothing | Window covered / not foreground | Enable click verification, keep "Minimize during runs" on |
 | No autostart after sign-in | Scheduled task blocked by policy | Use the installed build, or start manually |
-| Dialogs hard to read in dark theme | Defect in 1.4.5 and older | Fixed on the development branch; ships with the next version |
+| Dialogs hard to read in dark theme | Defect in 1.4.5 and older | Fixed in 1.4.6 |
 | Update fails | Network drop / outdated installer | Retry; when told the installer is too old, download the full installer |
 
 When in doubt, run "About → Export logs" and attach the archive to the issue.
