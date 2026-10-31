@@ -10,6 +10,33 @@
 
 ---
 
+## [1.4.3] - 2026-10-31
+
+**修复：自动升级后「设置 → 应用」里的版本号不更新。**
+
+### 现象
+
+程序已经升级，但「设置 → 应用」里 MaaAuto 仍显示安装时的旧版本号
+（例如程序是 1.4.2，列表里仍写着 1.4.1）。
+
+### 根因
+
+自动升级只替换程序文件、不运行 Inno 安装器；卸载注册表项里的 `DisplayVersion`
+只在安装时写入，升级过程没有任何人刷新它。
+
+### 修复
+
+- 新增 `apps_registry.py`：主程序启动时扫描 `HKCU` 卸载项，**仅当**
+  `InstallLocation` 正好指向自身时，更新 `DisplayVersion`、`DisplayIcon`、
+  `VersionMajor` / `VersionMinor`；写失败只记 DEBUG，不影响启动。
+- 开发工具加固：`verify_release` / `smoke_install` / `repair_integration` 在
+  Microsoft Store 版 Python（MSIX）下改用 PowerShell 读写真实 `%APPDATA%`
+  （此前的「开始菜单还原」会写进 LocalCache，属于假成功）；`verify_release`
+  增加「开始菜单 / 桌面已按快照还原」断言，`restore()` 在现有登记指向仍在的
+  正式安装时不再误删。
+
+测试：主程序 158 → 167。
+
 ## [1.4.2] - 2026-10-25
 
 **修复：升级后桌面图标、开始菜单、「设置→应用」条目消失。**

@@ -1,7 +1,20 @@
 {
-    "updated": "2026-10-25",
+    "updated": "2026-10-31",
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
+        {
+            "id": "v1.4.3",
+            "date": "2026-10-31",
+            "tag": "问题修复",
+            "title": {
+                "zh_CN": "1.4.3：修「设置 → 应用」里的版本号不跟着升级",
+                "en_US": "1.4.3: the Settings > Apps version now follows upgrades"
+            },
+            "body": {
+                "zh_CN": "**现象**：自动升级到新版本后，「设置 → 应用」里 MaaAuto 的版本号还停在安装时的旧值（例如程序已经是 1.4.2，列表里仍写着 1.4.1）。\n\n**原因**：自动升级只替换程序文件、不跑 Inno 安装器；那条记录是安装时写的，升级过程没有任何人刷新它。\n\n**修复**：主程序每次启动检查一次——只有登记的安装目录正好指向自己时，才把版本号、图标、主/次版本字段更新到当前版本；失败只记调试日志，不影响启动。装上 1.4.3 后第一次启动就会自动改正。\n\n另外加固了发布校验工具：在 Microsoft Store 版 Python（MSIX）下，`%APPDATA%` 会被重定向，以前的「开始菜单修复/还原」其实是假动作，现在改由 PowerShell 写真实路径。",
+                "en_US": "**Symptom**: after an automatic update, the MaaAuto version shown under Settings > Apps stayed at the value from when you originally installed (e.g. the app was 1.4.2 but the list still said 1.4.1).\n\n**Cause**: auto-update replaces program files without running the Inno installer, and that uninstall entry is only written during installation.\n\n**Fix**: at every startup the app checks the entry and - only when its install location points at this installation - refreshes the version, icon and major/minor fields. Failures are logged at debug level only. The first launch of 1.4.3 fixes it automatically.\n\nRelease tooling was also hardened for Microsoft Store Python (MSIX), where `%APPDATA%` writes are redirected and earlier Start Menu repairs were no-ops."
+            }
+        },
         {
             "id": "v1.4.2",
             "date": "2026-10-25",

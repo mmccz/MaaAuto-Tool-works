@@ -14,6 +14,7 @@ from utils import resource_path
 from config_manager import (load_config, save_config, setup_logger,
                             cleanup_old_logs, CONFIG_DIR, LOG_DIR)
 from upgrade_guard import resolve_upgrade_flag
+from apps_registry import sync_display_version
 from i18n import init_i18n
 from themes import ThemeManager
 from ui.main_window import MainWindow
@@ -285,6 +286,15 @@ def main():
     # 5) i18n + 配置
     i18n = init_i18n(resource_path("i18n"))
     config = load_config()
+
+    # 5.1) 「设置→应用」版本号自愈：自动升级不跑 Inno，卸载项版本会一直停在
+    #      安装时的值（D-2）。只有登记目录正好指向自己时才改，失败静默。
+    try:
+        from app_info import APP_VERSION
+        if sync_display_version(APP_VERSION, os.path.dirname(CONFIG_DIR)):
+            logger.info("已把「设置→应用」里的版本号更新到当前版本")
+    except Exception as e:
+        logger.debug(f"同步应用列表版本号失败: {e}")
 
     # 清理过期任务日志（按目录名里的日期判断，默认保留 90 天；0=不清理）
     try:
