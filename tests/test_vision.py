@@ -87,6 +87,16 @@ def test_find_scaled_template(scene, tmp_path, monkeypatch, factor):
     assert match.center[1] == pytest.approx(105, abs=6)
 
 
+def test_one_percent_scale_error_still_matches(scene, tmp_path, monkeypatch):
+    """缩放比只差 1%（132px 按钮差 1px）时不能掉分：这是 1.4.4 的回归点。"""
+    tpl = scene[80:80 + 60, 120:120 + 90].copy()
+    tpl = vision.cv2.resize(tpl, None, fx=1.01, fy=1.01,
+                            interpolation=vision.cv2.INTER_CUBIC)
+    match = match_against(scene, tmp_path, tpl, monkeypatch, threshold=0.8)
+    assert match is not None
+    assert match.score > 0.9
+
+
 def test_find_rejects_unrelated(scene, tmp_path, monkeypatch):
     other = make_scene(seed=999)
     tpl = other[40:40 + 60, 40:40 + 60].copy()
@@ -95,12 +105,12 @@ def test_find_rejects_unrelated(scene, tmp_path, monkeypatch):
 
 
 def test_threshold_filters_weak_match(scene, tmp_path, monkeypatch):
-    # 缩放过的模板得分只有 ~0.9（重采样会损失细节），用它来测阈值最稳
+    # 1.4.4 起匹配前会做 3×3 模糊，重采样/噪声都能被容忍（0.96 以上），
+    # 所以这里用「被压扁的模板」制造一个稳定的中低分（约 0.74）来测阈值。
     base = scene[70:70 + 70, 100:100 + 100].copy()
-    tpl = vision.cv2.resize(base, None, fx=0.75, fy=0.75,
-                            interpolation=vision.cv2.INTER_AREA)
+    tpl = vision.cv2.resize(base, (100, 40), interpolation=vision.cv2.INTER_AREA)
 
-    assert match_against(scene, tmp_path, tpl, monkeypatch, threshold=0.99) is None
+    assert match_against(scene, tmp_path, tpl, monkeypatch, threshold=0.8) is None
     assert match_against(scene, tmp_path, tpl, monkeypatch, threshold=0.6) is not None
 
 

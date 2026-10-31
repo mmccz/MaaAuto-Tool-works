@@ -215,15 +215,24 @@ def _resize(gray, scale):
 
 
 MIN_TEMPLATE_PX = 16        # 缩放后小于这个尺寸的模板不参与匹配（噪声会长得像）
+BLUR_KSIZE = 3              # 匹配前柔和一下：对 1px 笔画与半像素错位不敏感
 
 
 def _match_one(screen, tpl, scale):
-    """在 screen 里按给定缩放比找一次，返回 (score, x, y, w, h) 或 None。"""
+    """在 screen 里按给定缩放比找一次，返回 (score, x, y, w, h) 或 None。
+
+    匹配前对画面和模板做同样的 3×3 高斯模糊。不模糊时，文字按钮只要缩放比
+    差 1%（132px 宽差 1px），1px 笔画就整体错位，相关系数从 0.99 掉到 0.83——
+    明明在屏幕上却「找不到」；模糊后同样的错位仍有 0.96。
+    """
     t = _resize(tpl, scale)
     th, tw = t.shape[:2]
     sh, sw = screen.shape[:2]
     if th > sh or tw > sw or th < MIN_TEMPLATE_PX or tw < MIN_TEMPLATE_PX:
         return None
+    if BLUR_KSIZE >= 3:
+        screen = cv2.GaussianBlur(screen, (BLUR_KSIZE, BLUR_KSIZE), 0)
+        t = cv2.GaussianBlur(t, (BLUR_KSIZE, BLUR_KSIZE), 0)
     res = cv2.matchTemplate(screen, t, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, max_loc = cv2.minMaxLoc(res)
     return float(max_val), int(max_loc[0]), int(max_loc[1]), tw, th
