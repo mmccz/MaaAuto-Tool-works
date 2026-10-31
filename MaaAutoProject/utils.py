@@ -8,11 +8,12 @@ logger = logging.getLogger("MaaAuto")
 
 
 def resource_path(relative_path):
-    """返回资源的绝对路径。
+    """Absolute path of a resource.
 
-    打包态（PyInstaller）从 ``sys._MEIPASS`` 取；
-    开发态从**本文件所在目录**取，而不是 CWD —— 否则从别处启动、
-    或走开机自启（Run 键没有工作目录）时会找不到 resources/themes/i18n。
+    Frozen (PyInstaller) builds read it from ``sys._MEIPASS``; a source checkout reads it
+    from **the directory of this file**, not the CWD - otherwise starting from elsewhere,
+    or via autostart (a Run-key launch has no working directory), fails to find
+    resources/themes/i18n.
     """
     base_path = getattr(sys, "_MEIPASS", None)
     if not base_path:
@@ -21,22 +22,21 @@ def resource_path(relative_path):
 
 
 # =========================================================================== #
-# 通用异步任务：把同步函数扔到后台线程，避免 UI 冻结
+# Generic async task: run a sync function on a background thread so the UI never freezes
 # =========================================================================== #
 class AsyncWorker(QThread):
-    """
-    用法：
+    """Usage:
         self._worker = AsyncWorker(sc_send, key, title, desp, options)
         self._worker.finished.connect(self._on_done)
         self._worker.error.connect(self._on_error)
         self._worker.start()
 
-    注意：
-      - 必须把 worker 保存到实例属性（self._worker），否则会被 GC 掉
-      - 信号在主线程接收，可以安全更新 UI
+    Notes:
+      - keep the worker on an instance attribute (self._worker) or the GC eats it
+      - signals arrive on the main thread, so updating the UI is safe
     """
-    finished = Signal(object)   # 返回值
-    error = Signal(str)         # 异常字符串
+    finished = Signal(object)   # return value
+    error = Signal(str)         # error string
 
     def __init__(self, fn, *args, **kwargs):
         super().__init__()

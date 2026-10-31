@@ -1,7 +1,8 @@
-"""input_driver 的单元测试。
+"""Unit tests for input_driver.
 
-只测「坐标换算 / 调用顺序 / 失败回退」这类纯逻辑；
-真实鼠标注入不能也不该在 CI 上跑，所以 move_cursor 与 _send_mouse 都被替换。
+Only pure logic is covered: coordinate conversion / call order / failure fallback.
+Real mouse injection cannot and should not run on CI, so move_cursor and _send_mouse
+are both replaced.
 """
 
 import input_driver
@@ -10,7 +11,7 @@ import input_driver
 def test_make_lparam_packs_signed_coords():
     assert input_driver.make_lparam(0, 0) == 0
     assert input_driver.make_lparam(10, 20) == (20 << 16) | 10
-    # 负坐标按 16 位补码截断，不能把高位带进 y
+    # Negative coordinates truncate as 16-bit two's complement; the high bits must not leak into y
     lparam = input_driver.make_lparam(-1, -1)
     assert lparam == ((-1 & 0xFFFF) << 16) | (-1 & 0xFFFF)
 
@@ -36,7 +37,7 @@ def test_click_sendinput_moves_and_restores(monkeypatch):
     assert sent == [input_driver.MOUSEEVENTF_LEFTDOWN,
                     input_driver.MOUSEEVENTF_LEFTUP]
     assert moved[0] == (100, 200)
-    assert moved[-1] == (5, 6)          # 还原到原位
+    assert moved[-1] == (5, 6)          # restored to the original position
 
 
 def test_click_without_restore_leaves_cursor(monkeypatch):
@@ -114,7 +115,7 @@ class _Pt:
 
 
 def _set_pt(ptref, x, y):
-    """模拟 ScreenToClient 把 pt 改成客户区坐标（ptref 是 ctypes.byref 对象）。"""
+    """Make ScreenToClient rewrite pt to client coordinates (ptref is a ctypes.byref object)."""
     import ctypes
     from ctypes import wintypes
 

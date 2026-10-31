@@ -1,13 +1,16 @@
-"""找图失败时给出「下一步怎么办」，以及窗口离屏时快速失败（1.4.4）。
+"""Next-step hints when template matching fails, and fast-fail for off-screen windows (1.4.4).
 
-两个真实事故（2026-10-31 仿真测试）：
+Two real incidents (2026-10-31 simulation test):
 
-* BUG-01：MAA 6.21 改了 Link Start 按钮的渲染，旧内置模板最高只有 0.74，
-  三次 60 秒全部超时；日志只有一句「找图超时，未能找到: maa_start.png」，
-  测试者不知道「按钮明明在屏幕上」时要重新截模板。
-* RUN-08：窗口被拖到所有显示器之外，截图只有黑边，找图白等满超时。
+* BUG-01: MAA 6.21 changed how the Link Start button renders; the old bundled template
+  peaked at 0.74, so all three 60-second attempts timed out. The log only said
+  "template search timed out: maa_start.png", so the tester had no idea that a button
+  plainly visible on screen still needed its template re-captured.
+* RUN-08: the window was dragged off every monitor, captures were all black borders,
+  and matching waited out the full timeout for nothing.
 
-这里不截真实屏幕、不做真实点击：区域、匹配结果、屏幕矩形全部替换。
+No real screen capture or real clicks here: regions, match results and screen rects
+are all replaced.
 """
 
 import json
@@ -26,14 +29,14 @@ RES = os.path.join(APP_DIR, "resources")
 
 
 # --------------------------------------------------------------------------- #
-# visible_ratio：屏幕外判定
+# visible_ratio: off-screen detection
 # --------------------------------------------------------------------------- #
 def test_visible_ratio_fully_inside():
     assert process_utils.visible_ratio((100, 100, 500, 400), (0, 0, 1920, 1080)) == 1.0
 
 
 def test_visible_ratio_half_out():
-    # 宽 400，只有 200 在屏幕内
+    # Width 400, only 200 inside the screen
     assert process_utils.visible_ratio((-200, 0, 200, 100), (0, 0, 1920, 1080)) == 0.5
 
 
@@ -42,19 +45,19 @@ def test_visible_ratio_completely_outside():
 
 
 def test_visible_ratio_negative_secondary_monitor_is_inside():
-    # 副屏在左侧（负坐标）时不能被误判成「屏幕外」
+    # A secondary monitor on the left (negative coords) must not be misjudged as off-screen
     screen = (-1920, 0, 2560, 1440)
     assert process_utils.visible_ratio((-1800, 100, -1000, 900), screen) == 1.0
 
 
 def test_visible_ratio_unknown_screen_does_not_block(monkeypatch):
-    # 拿不到屏幕尺寸时保持旧行为（1.0），不能因为 API 失败就拦下任务
+    # With no screen size available, keep the old behavior (1.0); an API failure must not block the task
     monkeypatch.setattr(process_utils, "virtual_screen_rect", lambda: None)
     assert process_utils.visible_ratio((3000, 3000, 3300, 3400)) == 1.0
 
 
 # --------------------------------------------------------------------------- #
-# find_and_click：三种失败各自给出明确原因
+# find_and_click: three failure kinds, each with a clear reason
 # --------------------------------------------------------------------------- #
 def _no_click(monkeypatch):
     import input_driver
@@ -86,7 +89,7 @@ def test_offscreen_window_fails_fast(monkeypatch):
 
     with pytest.raises(automation.TargetWindowNotVisible) as ei:
         automation.find_and_click("maa_start.png", {}, timeout=5)
-    assert searched == []                    # 没有白等，一次都没去搜索
+    assert searched == []                    # no pointless waiting: the search never ran
     assert "屏幕外" in str(ei.value)
 
 
@@ -102,12 +105,12 @@ def test_timeout_message_tells_user_to_recapture(monkeypatch):
     msg = str(ei.value)
     assert "设置 → 模板" in msg
     assert "界面样式变了" in msg
-    # 新异常仍按 TimeoutError 处理，旧调用方不受影响
+    # The new exception is still a TimeoutError, so existing callers are unaffected
     assert isinstance(ei.value, TimeoutError)
 
 
 def test_minimized_window_is_restored_before_judging(monkeypatch):
-    """最小化窗口在 Windows 里坐标是 -32000，不能直接报「在屏幕外」。"""
+    """On Windows a minimized window sits at -32000, so it must not be reported as off-screen right away."""
     _no_click(monkeypatch)
     regions = [((3000, 3000, 3300, 3400), 77), ((10, 10, 500, 400), 77)]
     monkeypatch.setattr(automation, "_search_region",
@@ -129,7 +132,7 @@ def test_minimized_window_is_restored_before_judging(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# execute_workflow：失败类型写进 last_failure，界面据此弹提示
+# execute_workflow: the failure kind lands in last_failure, the UI shows a hint from it
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def quiet_workflow(monkeypatch):
@@ -167,7 +170,7 @@ def test_workflow_records_offscreen_without_retry(monkeypatch, quiet_workflow):
         {"maa_path": "MAA.exe", "retry_times": 3, "retry_interval": 0},
         automation.logger)
     assert status == "报错"
-    assert len(attempts) == 1                 # 环境问题不重试
+    assert len(attempts) == 1                 # environment problems are not retried
     assert automation.last_failure()["kind"] == automation.FAILURE_OFFSCREEN
 
 
@@ -183,7 +186,7 @@ def test_workflow_success_clears_previous_failure(monkeypatch, quiet_workflow):
 
 
 # --------------------------------------------------------------------------- #
-# 内置模板：MAA 6.21 的按钮尺寸（旧模板 144×68 已经匹配不上）
+# Bundled template: MAA 6.21 button size (the old 144×68 template no longer matches)
 # --------------------------------------------------------------------------- #
 def test_builtin_maa_template_matches_new_ui():
     import cv2
@@ -193,12 +196,12 @@ def test_builtin_maa_template_matches_new_ui():
     assert img is not None, "内置模板缺失"
     h, w = img.shape[:2]
     assert (w, h) == (132, 66)
-    assert os.path.getsize(path) > 3000      # 不是 LFS 指针/空壳
+    assert os.path.getsize(path) > 3000      # not an LFS pointer / empty stub
     assert os.path.getsize(os.path.join(RES, "maaend_start.png")) > 3000
 
 
 # --------------------------------------------------------------------------- #
-# 托盘提示文案：两种失败都要在中英文里存在
+# Tray hint strings: both failure kinds must exist in Chinese and English
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("key", ["notify.task_failed_template",
                                  "notify.task_failed_offscreen"])

@@ -1,20 +1,20 @@
-"""鼠标点击：真实点击（SendInput）与后台点击（PostMessage）。
+"""Mouse clicking: a real click (SendInput) and a background click (PostMessage).
 
-两种方式各有适用场景：
+Each mode has its own use case:
 
-``sendinput``（默认）
-    移动光标 → 注入真实的鼠标按下/抬起事件。**最可靠**：游戏和 Qt 程序都认，
-    因为对它们来说这就是一次真的鼠标操作。代价是必须占用光标，且目标窗口
-    在前台才点得中（否则点到别的窗口上），所以默认先 ``activate_window``。
+``sendinput`` (default)
+    Move the cursor, then inject real mouse down/up events. **Most reliable**: games
+    and Qt apps accept them as a genuine mouse action. Cost: it occupies the cursor,
+    and the target must be in the foreground, so ``activate_window`` runs first.
 
-``postmessage``（实验性）
-    直接把 ``WM_LBUTTONDOWN`` / ``WM_LBUTTONUP`` 投递到目标窗口的客户区，
-    **不移动光标、不需要窗口在前台**，可以在后台点。但它绕过系统的输入队列，
-    游戏（尤其是 DirectInput / 独占全屏）通常收不到；Qt 程序大多可以。
-    所以这是「后台跑任务、同时还能用鼠标干别的」的选项，不是默认。
+``postmessage`` (experimental)
+    Post ``WM_LBUTTONDOWN`` / ``WM_LBUTTONUP`` straight to the target client area:
+    **no cursor movement, no foreground needed**, so it clicks in the background.
+    It bypasses the system input queue though, so games (DirectInput / exclusive
+    fullscreen) usually miss it while most Qt apps take it. Hence an option, not the default.
 
-坐标约定：全部是屏幕物理像素（进程已声明 per-monitor-v2 DPI 感知），
-与 ``vision`` 的返回值一致，可直接传入。
+Coordinates: always screen physical pixels (the process declares per-monitor-v2 DPI
+awareness), identical to what ``vision`` returns, so pass them straight through.
 """
 
 import ctypes
@@ -31,7 +31,7 @@ CLICK_MODES = (CLICK_SENDINPUT, CLICK_POSTMESSAGE)
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 
-# ---- 鼠标事件常量 ----
+# ---- mouse event constants ----
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 INPUT_MOUSE = 0
@@ -50,7 +50,7 @@ GA_ROOT = 2
 
 
 # --------------------------------------------------------------------------- #
-# SendInput 结构体
+# SendInput structures
 # --------------------------------------------------------------------------- #
 class MOUSEINPUT(ctypes.Structure):
     _fields_ = [
@@ -81,7 +81,7 @@ def _send_mouse(flags):
         raise OSError("SendInput 注入鼠标事件失败（可能有更高权限的窗口在前台）")
 
 
-# 64 位下必须显式声明参数类型，否则句柄/指针会被截断成 32 位
+# On 64-bit the argument types must be declared, or handles / pointers are truncated to 32 bits
 user32.SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 user32.SendInput.restype = wintypes.UINT
 user32.GetCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
@@ -112,7 +112,7 @@ user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
 
 
 # --------------------------------------------------------------------------- #
-# 光标
+# Cursor
 # --------------------------------------------------------------------------- #
 def cursor_pos():
     pt = wintypes.POINT()
@@ -126,13 +126,14 @@ def move_cursor(x, y):
 
 
 # --------------------------------------------------------------------------- #
-# 窗口
+# Windows
 # --------------------------------------------------------------------------- #
 def activate_window(hwnd):
-    """尽量把窗口提到前台。
+    """Bring a window to the foreground as far as possible.
 
-    ``SetForegroundWindow`` 有个老规矩：非前台进程调用时系统可能直接忽略。
-    绕法是把自己临时 attach 到当前前台窗口的输入队列上。
+    ``SetForegroundWindow`` has an old rule: the system may ignore it when called by a
+    non-foreground process. The workaround is to attach temporarily to the input queue
+    of the current foreground window.
     """
     if not hwnd:
         return False
@@ -162,7 +163,7 @@ def activate_window(hwnd):
 
 
 def wait_foreground(hwnd, timeout=1.0):
-    """等目标窗口真的变成前台（最多 timeout 秒）。"""
+    """Wait until the target window really is foreground (at most timeout seconds)."""
     deadline = time.time() + max(0.0, timeout)
     while time.time() < deadline:
         if user32.GetForegroundWindow() == hwnd:
@@ -172,7 +173,7 @@ def wait_foreground(hwnd, timeout=1.0):
 
 
 def root_window(hwnd):
-    """取顶层窗口（点在同级子窗口上时用来激活/投递）。"""
+    """Top-level window (used for activation / posting when the hit is on a child control)."""
     if not hwnd:
         return 0
     try:
@@ -183,19 +184,21 @@ def root_window(hwnd):
 
 
 def ensure_foreground(hwnd, timeout=2.0):
-    """尽最大努力把窗口变成前台，并**确认**结果；返回是否成功。
+    """Force a window to the foreground and **verify** it; returns whether that worked.
 
-    为什么不能只调一次 SetForegroundWindow
-    --------------------------------------
-    Windows 有一条老规则：只有「当前前台进程」或刚收到用户输入的进程才能
-    抢前台，否则 ``SetForegroundWindow`` 被静默忽略。实测在本项目里，
-    从后台线程直接调用时经常失败——而一旦失败，随后注入的点击就会落到
-    **别的窗口**上（比如我们自己的主界面），表现为「点了没反应」。
+    Why one SetForegroundWindow call is not enough
+    ----------------------------------------------
+    Windows keeps an old rule: only the current foreground process, or one that just
+    received user input, may steal the foreground - otherwise ``SetForegroundWindow`` is
+    silently ignored. Called from a background thread in this project it often fails,
+    and once it fails the injected click lands on **another window** (our own main
+    window, say), which looks like "the click did nothing".
 
-    这里按「代价从低到高」依次尝试，每步都验证 GetForegroundWindow：
-      1. 常规 SetForegroundWindow（附 AttachThreadInput）；
-      2. TOPMOST 顶一下再取消（process_utils.bring_process_to_front 的招）；
-      3. 最小化 → 还原（系统会把它提到前台）。
+    So the attempts run from cheapest to most expensive, each verified with
+    GetForegroundWindow:
+      1. the usual SetForegroundWindow (plus AttachThreadInput);
+      2. flash TOPMOST and drop it again (process_utils.bring_process_to_front's trick);
+      3. minimise, then restore (the system brings it forward).
     """
     if not hwnd:
         return False
@@ -235,16 +238,16 @@ def window_at_point(x, y):
 
 
 # --------------------------------------------------------------------------- #
-# 点击
+# Clicking
 # --------------------------------------------------------------------------- #
 def click(x, y, mode=CLICK_SENDINPUT, restore_cursor=True, move_delay_ms=80,
           hwnd=None):
-    """在屏幕坐标 (x, y) 点击一次。
+    """Click once at screen coordinates (x, y).
 
     :param mode: ``sendinput`` / ``postmessage``
-    :param restore_cursor: sendinput 模式下点完把光标放回原处
-    :param move_delay_ms: 移过去之后停一下再按下，给目标程序 hover 反应时间
-    :param hwnd: postmessage 模式的目标窗口；为空则取该点所在的窗口
+    :param restore_cursor: in sendinput mode, put the cursor back afterwards
+    :param move_delay_ms: pause after moving and before pressing, so the target reacts to hover
+    :param hwnd: target window for postmessage; defaults to the window under the point
     """
     x, y = int(round(x)), int(round(y))
 
@@ -274,14 +277,15 @@ def click(x, y, mode=CLICK_SENDINPUT, restore_cursor=True, move_delay_ms=80,
 
 
 def make_lparam(x, y):
-    """把客户区坐标打包成鼠标消息的 lParam（各 16 位，负坐标按补码截断）。"""
+    """Pack client coordinates into a mouse-message lParam (16 bits each, negatives truncated)."""
     return ((int(y) & 0xFFFF) << 16) | (int(x) & 0xFFFF)
 
 
 def post_click(hwnd, screen_x, screen_y, message_only=False):
-    """把一次左键点击投递到 hwnd 的客户区（不移动光标、不需要前台）。
+    """Post one left click to hwnd's client area (no cursor movement, no foreground needed).
 
-    返回 False 说明该窗口不吃 post 消息（常见于游戏），调用方应该退回 sendinput。
+    False means the window ignores posted messages (common for games); the caller should
+    fall back to sendinput.
     """
     pt = wintypes.POINT(int(screen_x), int(screen_y))
     if not user32.ScreenToClient(hwnd, ctypes.byref(pt)):

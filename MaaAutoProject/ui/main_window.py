@@ -27,17 +27,17 @@ from ui.animations import theme_transition, clear_transition_overlay
 
 
 # =========================================================================== #
-# 界面缩放 / 重启（模块级，便于单测，不依赖 MainWindow 实例）
+# UI scale / restart (module-level so it is unit-testable without a MainWindow instance)
 # =========================================================================== #
 def build_restart_command(argv=None, frozen=None, executable=None):
-    """构造「重启自己」的 (program, args)。
+    """Build the (program, args) pair for restarting ourselves.
 
-    * 打包态：``sys.executable`` 就是 MaaAuto.exe，其余参数原样透传；
-    * 开发态：``sys.executable`` 是 python.exe，必须把脚本路径补回第一个参数，
-      否则新进程会变成「启动解释器」然后立刻退出。
+    * Frozen: ``sys.executable`` is MaaAuto.exe; pass the remaining args through as-is.
+    * Dev: ``sys.executable`` is python.exe, so the script path must go back as the first
+      argument, or the new process just starts an interpreter and exits at once.
 
-    ``--upgrading`` / ``--autostart`` 一律剥掉：重启是用户主动点出来的，
-    期望看到主窗口，而不是静默进托盘。
+    ``--upgrading`` / ``--autostart`` are always stripped: a restart is user-initiated,
+    so they expect the main window, not a silent tray start.
     """
     argv = list(sys.argv if argv is None else argv)
     frozen = bool(getattr(sys, "frozen", False)) if frozen is None else bool(frozen)
@@ -52,19 +52,20 @@ def build_restart_command(argv=None, frozen=None, executable=None):
 
 def apply_ui_scale_live(theme_manager, app, scale, theme=None,
                         accent_color=None, sidebar=None):
-    """即时应用界面缩放，不必重启。
+    """Apply the UI scale immediately, without a restart.
 
-    1.0.4 只把 ``ui_scale`` 存进配置，界面毫无反应——用户以为功能没做。
-    这里做三件真正看得见的事：
+    1.0.4 only stored ``ui_scale`` in the config; nothing on screen changed, so users
+    assumed the feature was not implemented. Three visible things happen here:
 
-    * 重写 QSS 里的 px 长度（字号 + ``min-width`` / ``min-height`` / padding；
-      QSS 的 ``* { font-size: 13px }`` 会覆盖 ``QApplication.setFont()``，
-      只改 app 字体等于没改）；
-    * 侧栏宽度/边距/图标按比例重排（它是构造时 ``setFixedWidth`` 定死的）；
-    * 自绘控件（开关、色块、滚轮时间）由调用方 ``SettingsPage.apply_ui_scale``
-      同步。
+    * px lengths in the QSS are rewritten (font size + ``min-width`` / ``min-height`` /
+      padding; QSS ``* { font-size: 13px }`` overrides ``QApplication.setFont()``, so
+      changing only the app font is a no-op);
+    * sidebar width/margins/icons are re-laid out proportionally (pinned by
+      ``setFixedWidth`` at construction);
+    * custom-painted widgets (switch, swatches, time wheel) are synced by the caller
+      through ``SettingsPage.apply_ui_scale``.
 
-    返回实际使用的缩放倍数（已夹到 0.75~2.0）。
+    Returns the scale actually used (clamped to 0.75~2.0).
     """
     try:
         scale = max(0.75, min(2.0, float(scale)))
@@ -81,12 +82,13 @@ def apply_ui_scale_live(theme_manager, app, scale, theme=None,
 
 
 def spawn_new_instance(program, args, workdir=""):
-    """拉起一个新进程，返回是否成功。
+    """Start a new process; return whether it succeeded.
 
-    ★ PySide6 的静态 ``QProcess.startDetached(program, args, cwd)`` 返回的是
-    ``(ok, pid)`` 元组，而实例方法 ``startDetached()`` 返回 bool。直接
-    ``if not QProcess.startDetached(...)`` 会把 ``(False, 0)`` 判成成功——
-    非空元组永远为真——重启失败也就不会提示用户。这里统一归一成 bool。
+    ★ PySide6's static ``QProcess.startDetached(program, args, cwd)`` returns an
+    ``(ok, pid)`` tuple, while the instance method returns bool. Testing
+    ``if not QProcess.startDetached(...)`` treats ``(False, 0)`` as success — a
+    non-empty tuple is always truthy — so a failed restart goes unreported. Normalized
+    to a bool here.
     """
     try:
         result = QProcess.startDetached(program, args, workdir)
@@ -108,16 +110,16 @@ class Worker(QThread):
     def run(self):
         logger = logging.getLogger("MaaAuto")
 
-        # 只挂/摘自己的文件 handler，绝不 removeHandler 掉全局 handler。
+        # Attach/detach only our own file handler; never removeHandler the global one.
         #
-        # 旧的实现会在开头摘掉 logger 的所有 handler（包括 main.py 里
-        # setup_logger() 创建、并已 connect 到首页日志的那个），结束时再补
-        # 一个**没有接信号**的 LogHandler。后果：
-        #   - 从第 2 次执行起，主线程日志不再出现在首页；
-        #   - 每次运行多挂一个空 handler。
+        # The old code removed every handler at the start (including the one main.py's
+        # setup_logger() created and connected to the home-page log), then added back a
+        # LogHandler **with no signal connected** at the end. Consequences:
+        #   - from the 2nd run on, main-thread logs stopped showing on the home page;
+        #   - each run leaked one extra empty handler.
         #
-        # 现在界面日志统一走 main.py 的那个 LogHandler：它是 QObject，
-        # 从 worker 线程 emit 会被 Qt 排队到主线程，安全且不会重复。
+        # UI logging now goes through main.py's LogHandler: it is a QObject, so emits from
+        # the worker thread are queued to the main thread — safe and never duplicated.
         file_handler = logging.FileHandler(
             os.path.join(self.run_log_dir, "task.log"), encoding="utf-8")
         file_handler.setFormatter(
@@ -145,9 +147,10 @@ class MainWindow(QMainWindow):
         self.is_quitting = False
         self._hidden_for_task = False
         self._restart_ask_open = False
-        # 重启 / 升级后会自动拉起新实例，这时退出**不能**顺手杀掉 MAA / 模拟器。
-        # 旧实现只靠 kill_on_exit，而 atexit 里还会再调一次 cleanup_on_exit，
-        # 于是「重启程序」会把用户已经开好的 MAA / MuMu 一起关掉（实测）。
+        # A restart / upgrade launches a new instance, so quitting must **not** kill
+        # MAA / the emulator as a side effect. The old code relied on kill_on_exit, and
+        # atexit called cleanup_on_exit again, so "Restart app" also closed a running
+        # MAA / MuMu (measured).
         self._relaunching = False
 
         self.logger = logging.getLogger("MaaAuto")
@@ -217,18 +220,18 @@ class MainWindow(QMainWindow):
         self._pending_upgrade_silent = False
         self._pending_upgrade_info = None
 
-        # 定时撞上运行中任务时，记下"已提示过顺延"的日期，避免每 10s 刷日志
+        # When a scheduled run hits a running task, remember the "already deferred" date to avoid logging every 10s
         self._schedule_deferred_key = ""
 
-        # 更新检查线程句柄
+        # update check thread handle
         self._update_check_worker = None
-        # 同一次运行里只弹一次「发现新版本」，避免托盘重试时反复骚扰
+        # Prompt "new version found" only once per run so tray retries do not nag repeatedly
         self._update_prompt_shown = False
 
         self.home_page.tutorial_clicked.connect(self.show_tutorial)
         self.home_page.announcements_clicked.connect(self.show_announcements)
         self.about_page.announcements_clicked.connect(self.show_announcements)
-        # 公告：内存缓存 + 后台拉在线版本 + 每轮运行最多自动弹一次
+        # Announcements: in-memory cache + background fetch of the online version + at most one auto-show per run
         self._ann_cache = None
         self._announcements_worker = None
         self._announcements_shown_this_run = False
@@ -239,16 +242,16 @@ class MainWindow(QMainWindow):
         if self.config.get("auto_check_update", True):
             QTimer.singleShot(5000, self._auto_check_update)
 
-        # 启动引导：先教程（首次），再公告（有未读/更新时自动弹一次）
+        # Startup prompts: tutorial first (first launch), then announcements (auto-shown once when unread/updated)
         QTimer.singleShot(1200, self._startup_prompts)
-        # 后台拉在线公告（不需要发版就能改公告）
+        # Fetch online announcements in the background (content updates need no release)
         QTimer.singleShot(2500, self._fetch_announcements_async)
-        # 每次启动校一遍自启：旧版本写的是 Run 键（对提权程序无效），
-        # 升级上来的用户要在这里迁移成登录计划任务。
+        # Re-validate autostart on every launch: old versions wrote a Run key (a no-op for
+        # elevated programs), so upgraded users are migrated to a logon scheduled task here.
         QTimer.singleShot(900, self.set_auto_start)
 
     # ==================================================================
-    # 背景
+    # Background
     # ==================================================================
     def _apply_background(self):
         self.bg_root.set_background(
@@ -259,7 +262,7 @@ class MainWindow(QMainWindow):
         )
 
     # ==================================================================
-    # 托盘
+    # Tray
     # ==================================================================
     def _setup_tray(self):
         self.tray = QSystemTrayIcon(self)
@@ -304,7 +307,7 @@ class MainWindow(QMainWindow):
                                   QSystemTrayIcon.Information, 2000)
 
     # ==================================================================
-    # 页面切换
+    # Page switching
     # ==================================================================
     def _on_page_changed(self, index):
         if index == self.stack.currentIndex():
@@ -313,12 +316,13 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(index)
 
     # ==================================================================
-    # 配置 / 主题 / 语言 / 强调色
+    # Config / theme / language / accent color
     # ==================================================================
     def _on_config_changed(self, cfg):
         auto_start_before = self.config.get("auto_start", False)
-        # 设置页的快照里带着启动时的运行时键（tutorial_seen 等），直接 update
-        # 会把它们冲回旧值：实测「教程每次启动都弹」「运行次数被重置」。
+        # The settings page snapshot carries runtime keys from startup (tutorial_seen etc.);
+        # a plain update would push them back to stale values — measured: tutorial on every
+        # start, run count reset.
         runtime = {k: self.config[k] for k in RUNTIME_CONFIG_KEYS
                    if k in self.config}
         self.config.update(cfg)
@@ -329,7 +333,7 @@ class MainWindow(QMainWindow):
         self._update_next_run()
         self.stack.set_animation_enabled(self.config.get("show_animation", True))
 
-        # 开机自启是注册表状态，不能只等退出时才写：用户拨开关就该生效。
+        # Autostart is registry state and cannot wait for exit: toggling the switch should apply at once
         if bool(self.config.get("auto_start", False)) != bool(auto_start_before):
             self.set_auto_start()
 
@@ -341,7 +345,7 @@ class MainWindow(QMainWindow):
         def do_switch():
             self.theme_manager.apply_theme(
                 theme, QApplication.instance(), accent_color=accent)
-            # 富文本链接色不跟 QSS 走，切主题后要手动刷一次
+            # Rich-text link colors do not follow QSS; refresh them once after a theme switch
             self.about_page.refresh_theme_colors()
 
         theme_transition(self, do_switch, duration=260)
@@ -374,7 +378,7 @@ class MainWindow(QMainWindow):
         self.home_page.set_running(self._is_running())
 
     # ==================================================================
-    # 首页状态
+    # Home page state
     # ==================================================================
     def _is_running(self):
         return bool(self.worker and self.worker.isRunning())
@@ -409,7 +413,7 @@ class MainWindow(QMainWindow):
         self.home_page.set_next_run(text)
 
     # ==================================================================
-    # 定时
+    # Schedule
     # ==================================================================
     def _check_schedule(self):
         if not self.config.get("enable_schedule", False):
@@ -425,7 +429,7 @@ class MainWindow(QMainWindow):
         if not key:
             return
 
-        # 任务还在跑：**不要**写 last_trigger_key，等它结束后的下一次检查补跑
+        # Task still running: do **not** write last_trigger_key; the next check after it ends catches up
         if self._is_running():
             if self._schedule_deferred_key != key:
                 self._schedule_deferred_key = key
@@ -434,13 +438,13 @@ class MainWindow(QMainWindow):
 
         self.logger.info(f"定时触发：{key}")
         self.config["last_trigger_key"] = key
-        self.config["last_trigger_date"] = now.date().isoformat()   # 兼容旧字段
+        self.config["last_trigger_date"] = now.date().isoformat()   # legacy field
         save_config(self.config)
         self._update_next_run()
         self.manual_run()
 
     # ==================================================================
-    # 执行
+    # Execution
     # ==================================================================
     def manual_run(self):
         if self._is_running():
@@ -484,8 +488,8 @@ class MainWindow(QMainWindow):
             msg = self.i18n.t("notify.task_stopped")
             icon = QSystemTrayIcon.Warning
         else:
-            # 失败时尽量说清楚「下一步做什么」：找图超时基本等于模板过期，
-            # 窗口在屏幕外则是环境问题，两者的处理方式完全不同。
+            # On failure say what to do next: a search timeout usually means stale templates,
+            # while an off-screen window is an environment problem — the fixes differ completely.
             kind = last_failure().get("kind")
             if kind == FAILURE_TEMPLATE:
                 msg = self.i18n.t("notify.task_failed_template")
@@ -514,12 +518,12 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(2000, lambda: self._trigger_upgrade(info, silent=True))
 
     # ------------------------------------------------------------------
-    # 任务期间隐藏主窗口
+    # Hide the main window while a task runs
     #
-    # 我们的窗口是普通置顶的 1080×720，很容易盖住 MAA / MaaEnd 的按钮。
-    # 一旦被盖住：找图截到的是我们自己的界面（匹配失败或匹配到别的东西），
-    # 或者点击落到了我们自己窗口上——两种都表现为「点了没反应」。
-    # 所以任务开始时自动收进托盘，结束后再还原。
+    # Our window is a plain 1080x720 always-on-top frame and easily covers MAA / MaaEnd
+    # buttons. When covered, image search grabs our own UI (no match or wrong match), or
+    # clicks land on our own window — both look like "clicked, nothing happened". So hide
+    # to the tray when a task starts and restore afterwards.
     # ------------------------------------------------------------------
     def _hide_for_task(self):
         self._hidden_for_task = False
@@ -538,7 +542,7 @@ class MainWindow(QMainWindow):
         self.show_normal()
 
     # ==================================================================
-    # 界面缩放（即时生效）与重启
+    # UI scale (applied live) and restart
     # ==================================================================
     def _current_scale(self):
         try:
@@ -548,10 +552,11 @@ class MainWindow(QMainWindow):
             return 1.0
 
     def _on_ui_scale_changed(self, scale, ask_restart=True):
-        """设置页切换缩放比例：先即时重绘，再问要不要重启。
+        """Settings page changed the scale: repaint live first, then offer a restart.
 
-        1.0.4 的实现只把 ui_scale 写进配置，界面要等下次启动才变、也没有任何
-        提示，实测就是「改了没反应，也没有重启选项」。现在两步都补上。
+        1.0.4 only wrote ui_scale to the config, so the UI changed only after the next
+        start and nothing said so — measured: "changed nothing, no restart option". Both
+        steps are restored here.
         """
         try:
             scale = max(0.75, min(2.0, float(scale)))
@@ -572,8 +577,9 @@ class MainWindow(QMainWindow):
             self.settings_page.apply_ui_scale(scale)
             self._apply_scale_limits()
 
-        # ★ 不能再用「旧画面遮罩淡出」：缩放会改窗口和控件尺寸，遮罩还是旧尺寸，
-        #   淡出时就会看到旧布局残影（实测 150% 下偶发「重影」）。直接重绘。
+        # ★ No more "fade out the old frame overlay": scaling changes window and widget
+        #   sizes, the overlay keeps the old size, and fading shows ghosts of the old layout
+        #   (measured, occasional double image at 150%). Repaint directly.
         clear_transition_overlay(self)
         do_apply()
 
@@ -581,7 +587,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(260, lambda: self._ask_restart(scale))
 
     def _apply_scale_limits(self):
-        """按当前缩放重算最小窗口尺寸，避免大字号在小屏上被裁掉。"""
+        """Recompute the minimum window size for the current scale so large text is not clipped on small screens."""
         avail = self._available_rect()
         if avail is None:
             return
@@ -593,7 +599,7 @@ class MainWindow(QMainWindow):
             self.resize(max(self.width(), min_w), max(self.height(), min_h))
 
     def _confirm_restart(self, scale) -> bool:
-        """询问是否立即重启（拆出来方便单测，不必真的弹模态框）。"""
+        """Ask whether to restart now (split out so tests need no real modal dialog)."""
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Information)
         box.setWindowTitle(self.i18n.t("settings.ui_scale.applied.title"))
@@ -607,8 +613,8 @@ class MainWindow(QMainWindow):
         return box.clickedButton() is btn_now
 
     def _ask_restart(self, scale):
-        # 连续切两次缩放会排两个 260ms 定时器；弹窗是模态嵌套事件循环，
-        # 第二个回调会在弹窗期间执行 —— 加个门闩，别叠两个对话框。
+        # Switching scale twice queues two 260ms timers; the dialog runs a nested modal event
+        # loop, so the second callback fires while it is open — latch it, no stacked dialogs.
         if self._restart_ask_open:
             return
         self._restart_ask_open = True
@@ -619,10 +625,11 @@ class MainWindow(QMainWindow):
             self._restart_ask_open = False
 
     def restart_app(self):
-        """重启自己：先拉起新进程，确认起来了再退出当前进程。
+        """Restart: spawn the new process first, quit this one only once it is up.
 
-        只重建界面，不走「退出」的清理流程——重启不应该顺手把 MAA / 模拟器
-        一起杀掉（那是 ``kill_on_exit`` 的语义）。任务线程仍会先停掉。
+        Only the UI is rebuilt; the "quit" cleanup path is skipped — a restart must not
+        kill MAA / the emulator as a side effect (that is ``kill_on_exit`` semantics). The
+        task thread is still stopped first.
         """
         program, args = build_restart_command()
         ok = spawn_new_instance(program, args, os.path.dirname(program))
@@ -645,14 +652,14 @@ class MainWindow(QMainWindow):
         return True
 
     # ==================================================================
-    # 公告 / 新手教程
+    # Announcements / first-run tutorial
     #
-    # 公告走「内置 + 在线」：启动先用缓存/内置秒开，后台线程拉 GitHub 上的
-    # announcements.json（不需要发版就能改公告），拉到后写缓存、刷新红点。
-    # 「未读」= 没见过的 id；或 id 都见过但 updated 变了（内容有更新）。
-    # ==================================================================
+    # Announcements are bundled + online: startup opens from cache/bundled data at once, a
+    # background thread fetches announcements.json from GitHub (content changes need no
+    # release), then writes the cache and refreshes the badge. "Unread" = unseen id, or a
+    # seen id whose updated changed (content edited).
     def _announcements_data(self):
-        """当前生效的 (updated, items)：优先用内存里拉到的最新版本。"""
+        """Currently effective (updated, items); prefer the newest version fetched into memory."""
         if getattr(self, "_ann_cache", None):
             updated, items = self._ann_cache
             if items:
@@ -673,7 +680,7 @@ class MainWindow(QMainWindow):
         return state
 
     def _fetch_announcements_async(self):
-        """后台拉在线公告；失败静默（继续用缓存/内置）。"""
+        """Fetch online announcements in the background; stay silent on failure (keep cache/bundled)."""
         from ui.announcements import fetch_remote_announcements
 
         self._announcements_worker = AsyncWorker(fetch_remote_announcements)
@@ -688,7 +695,7 @@ class MainWindow(QMainWindow):
         remote_updated, remote_items = result
         from ui.announcements import pick_best, save_cache
         local_updated, local_items = self._announcements_data()
-        # 合并而不是覆盖：jsDelivr 有缓存，可能返回更旧的 JSON
+        # Merge instead of overwrite: jsDelivr caches, so it may return older JSON
         updated, items = pick_best(local_updated, local_items,
                                    remote_updated, remote_items)
         save_cache(updated, items)
@@ -704,7 +711,7 @@ class MainWindow(QMainWindow):
         updated, items = self._announcements_data()
         if not items:
             return
-        # 已经开着就不要叠第二个：把现有窗口提到前面
+        # Do not stack a second window if one is open: raise the existing one instead
         existing = getattr(self, "_announcements_dialog", None)
         if existing is not None:
             try:
@@ -715,8 +722,8 @@ class MainWindow(QMainWindow):
                 self._announcements_dialog = None
 
         self._announcements_shown_this_run = True
-        # 先落盘已读：窗口开着时用户可能直接关掉程序/被升级进程结束，
-        # 旧实现把写入放在 exec() 之后，于是下次启动又提示"有新公告"。
+        # Persist "seen" first: while the window is open the user may quit the app or be
+        # ended by the updater; the old code wrote after exec(), so the next start prompted again.
         self._mark_announcements_seen(updated, items)
 
         dlg = AnnouncementDialog(self.i18n, items, self.i18n.current_lang,
@@ -726,7 +733,7 @@ class MainWindow(QMainWindow):
             dlg.exec()
         finally:
             self._announcements_dialog = None
-            # 期间可能又拉到了新公告，关闭时再记一次
+            # New announcements may have arrived meanwhile; record again on close
             latest_updated, latest_items = self._announcements_data()
             self._mark_announcements_seen(latest_updated, latest_items)
 
@@ -738,10 +745,10 @@ class MainWindow(QMainWindow):
         self._refresh_announcement_badge()
 
     def _maybe_show_announcements(self):
-        """有未读/更新时自动弹一次公告（每轮运行一次；窗口在托盘时不打扰）。
+        """Auto-show announcements once when unread/updated (once per run; tray stays quiet).
 
-        首次安装不自动弹（先看新手教程），只显示红点；老用户（看过公告的）
-        遇到新公告或 updated 变化才自动弹。
+        Fresh installs never auto-open (the tutorial comes first) — only the badge shows;
+        users who have seen announcements before get an auto-show on new ids or updated changes.
         """
         if getattr(self, "_announcements_shown_this_run", False):
             return
@@ -751,7 +758,7 @@ class MainWindow(QMainWindow):
             return
         if not (self.config.get("announcements_seen_updated")
                 or self.config.get("announcements_seen")):
-            return                      # 从没看过公告：留给用户自己点
+            return                      # never opened announcements: let the user click
         state = self._refresh_announcement_badge()
         if state["count"] > 0:
             self.logger.info(f"公告有更新（{state['count']}），自动展示。")
@@ -770,7 +777,7 @@ class MainWindow(QMainWindow):
             save_config(self.config)
 
     def _maybe_show_tutorial(self):
-        """首次启动自动展示新手教程；之后只从首页按钮进入。"""
+        """Show the tutorial automatically on first launch; afterwards only via the home button."""
         if self.config.get("tutorial_seen"):
             return False
         if not self.isVisible() or self.isMinimized():
@@ -780,13 +787,13 @@ class MainWindow(QMainWindow):
         return True
 
     def _startup_prompts(self):
-        """首次启动先弹教程，教程关掉后再考虑公告（避免两个模态叠一起）。"""
+        """On first launch show the tutorial, then consider announcements after it closes (no stacked modals)."""
         shown = self._maybe_show_tutorial()
         delay = 400 if shown else 200
         QTimer.singleShot(delay, self._maybe_show_announcements)
 
     # ==================================================================
-    # 升级
+    # Upgrading
     # ==================================================================
     def _check_upgrading_flag(self):
         flag = os.path.join(CONFIG_DIR, ".upgrading")
@@ -804,8 +811,8 @@ class MainWindow(QMainWindow):
 
     def _auto_check_update(self):
         """
-        启动 5 秒后检查更新 —— 后台线程执行，绝不阻塞 UI。
-        无论成功/失败/无更新，都通过信号回主线程处理。
+        Check for updates 5 seconds after launch — on a background thread, never blocking the UI.
+        Success / failure / no update all come back to the main thread through signals.
         """
         try:
             from update_checker import check_update
@@ -813,7 +820,7 @@ class MainWindow(QMainWindow):
             self.logger.warning(f"无法导入 update_checker: {e}")
             return
 
-        # 后台线程执行网络请求
+        # run the network request on a background thread
         channel = self.config.get("update_channel", "stable")
         self._update_check_worker = AsyncWorker(check_update, channel)
         self._update_check_worker.finished.connect(self._on_update_checked)
@@ -837,8 +844,9 @@ class MainWindow(QMainWindow):
                 return
             self._trigger_upgrade(info, silent=True)
         else:
-            # 手动升级：不再只弹托盘气泡，直接给「版本对比 + 发布说明」的新弹窗。
-            # 任务运行中 / 窗口在托盘里时不打扰，仍然只发气泡。
+            # Manual update: no longer just a tray balloon — show the new version-comparison +
+            # release-notes dialog instead. While a task runs or the window sits in the tray, do
+            # not interrupt; still a balloon only.
             if self._update_prompt_shown:
                 return
             self._update_prompt_shown = True
@@ -858,7 +866,7 @@ class MainWindow(QMainWindow):
         self.logger.info(f"触发升级: silent={silent}, channel={channel} → {info.get('latest')}")
         if apply_update(self, silent=silent, channel=channel):
             self.is_quitting = True
-            # 升级完会自动重启：退出时别把 MAA / 模拟器一起杀掉
+            # Upgrading restarts afterwards: do not kill MAA / the emulator on the way out
             self._relaunching = True
             try:
                 self._save_geometry()
@@ -868,15 +876,15 @@ class MainWindow(QMainWindow):
             QApplication.quit()
 
     # ==================================================================
-    # 自启 / 退出
+    # Autostart / quit
     # ==================================================================
     def set_auto_start(self):
-        """开关开机自启（1.4.5 起：打包态用登录计划任务，开发态用 Run 键）。
+        """Toggle autostart (1.4.5+: logon scheduled task when frozen, Run key in dev).
 
-        MaaAuto.exe 要求管理员权限，而 Windows 不会用 ``HKCU\\...\\Run`` 拉起
-        需要提权的程序——任务管理器里开关亮着，登录时却什么都不发生。
-        计划任务用 ``/RL HIGHEST`` 在登录时直接给管理员令牌，不弹 UAC。
-        详见 :mod:`autostart`。
+        MaaAuto.exe requires admin rights, and Windows will not launch an elevated program
+        from ``HKCU\\...\\Run`` — the switch looks on in Task Manager yet nothing happens at
+        logon. The scheduled task uses ``/RL HIGHEST`` to get an admin token at logon without
+        a UAC prompt. See :mod:`autostart`.
         """
         enabled = bool(self.config.get("auto_start", False))
         frozen = getattr(sys, "frozen", False)
@@ -912,7 +920,7 @@ class MainWindow(QMainWindow):
             self.worker.wait(1000)
 
     def _wait_async_workers(self, timeout_ms=800):
-        """退出前等一下后台线程（更新检查 / 在线公告），避免 QThread 被析构时还在跑。"""
+        """Wait for background threads (update check / online announcements) before exit, so no QThread is destroyed while running."""
         for name in ("_update_check_worker", "_announcements_worker"):
             worker = getattr(self, name, None)
             if worker is None:
@@ -927,8 +935,9 @@ class MainWindow(QMainWindow):
         self._shutdown_worker()
         self._wait_async_workers()
         if self._relaunching:
-            # 重启 / 自动升级会紧接着拉起新实例，MAA、模拟器与游戏跟这次退出
-            # 完全无关；旧实现照 kill_on_exit 杀了一遍，实测「点重启，MAA 也没了」。
+            # A restart / auto-upgrade launches a new instance right away; MAA, the emulator and
+            # the game are unrelated to this exit. The old code still killed by kill_on_exit — measured:
+            # "clicked restart, MAA was gone too".
             self.logger.info("即将重启/升级，跳过结束 MAA / 模拟器等外部进程。")
             return
         if self.config.get("kill_on_exit", True):
@@ -958,10 +967,10 @@ class MainWindow(QMainWindow):
             QApplication.quit()
 
     # ==================================================================
-    # 尺寸适配（小屏幕 / 高 DPI）
+    # Size adaptation (small screens / high DPI)
     # ==================================================================
     def _available_rect(self):
-        """当前屏幕的可用区域（已扣掉任务栏），单位是逻辑像素。"""
+        """Available area of the current screen (taskbar excluded), in logical pixels."""
         from PySide6.QtGui import QGuiApplication
         screen = self.screen() or QGuiApplication.primaryScreen()
         if screen is None:
@@ -969,11 +978,11 @@ class MainWindow(QMainWindow):
         return screen.availableGeometry()
 
     def _preferred_size(self):
-        """按屏幕可用区域收缩默认 1080×720。
+        """Shrink the default 1080x720 to the screen's available area.
 
-        1080×720 在 125% 缩放的 1366×768 笔记本上会被任务栏吃掉一截，
-        窗口底部按钮点不到；这里直接按可用区域留 80px 边距。
-        界面缩放放大字号后内容更占地方，默认尺寸同步放大，仍受可用区域限制。
+        On a 1366x768 laptop at 125% scaling the taskbar eats into 1080x720 and the bottom
+        buttons become unreachable, so leave an 80px margin inside the available area.
+        A larger UI scale makes content bigger; the default size grows with it, still capped.
         """
         avail = self._available_rect()
         scale = self._current_scale()
@@ -993,7 +1002,7 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(base64.b64decode(data.encode("ascii")))
         except Exception:
             return
-        # 上次可能是在更大的显示器/不同缩放下关的窗口：恢复后要保证还在屏幕内
+        # The window may have been closed on a larger display or at a different scale: keep it on-screen after restore
         avail = self._available_rect()
         if avail is None:
             return

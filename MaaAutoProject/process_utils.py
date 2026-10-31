@@ -11,21 +11,20 @@ logger = logging.getLogger("MaaAuto")
 
 
 class TaskInterrupted(Exception):
-    """用户主动中止任务。"""
+    """The user aborted the task."""
     pass
 
 
 def check_interrupt():
-    """在长循环中定期调用，被要求中断时抛出 TaskInterrupted。"""
+    """Call periodically in long loops; raises TaskInterrupted once an abort is requested."""
     t = QThread.currentThread()
     if t is not None and t.isInterruptionRequested():
         raise TaskInterrupted("用户中止")
 
 
 def interruptible_sleep(seconds, chunk=0.5):
-    """
-    分段睡眠，每 chunk 秒检查一次中断。
-    用于替代裸 time.sleep()，让用户中止能得到及时响应。
+    """Sleep in slices, checking for an interrupt every chunk seconds.
+    Replaces a bare time.sleep() so a user abort is noticed promptly.
     """
     remaining = float(seconds)
     while remaining > 0:
@@ -41,9 +40,9 @@ WHITE_LIST = [
     "system", "registry", "idle", "searchindexer.exe", "securityhealthsystray.exe",
     "mumupalyer.exe", "mumuplayer.exe", "nemuplayer.exe", "dnplayer.exe",
     "maa.exe", "maacore.exe", "maa-cli.exe",
-    "maaend.exe",          # 进程匹配是「包含」比较，"maaend" 已能覆盖带版本号的名字
+    "maaend.exe",          # process matching is a substring test, so "maaend" also covers versioned names
     "python.exe", "pythonw.exe", "maa_auto.exe",
-    # ---- 升级/卸载（与 MaaAutoInstaller 对齐，2026-09 冻结）----
+    # ---- upgrade / uninstall (aligned with MaaAutoInstaller, frozen 2026-09) ----
     "upgrade.exe", "uninstall.exe",
 ]
 
@@ -78,16 +77,15 @@ def kill_foreground_apps():
 
 
 def is_process_running(process_names):
-    """
-    判断进程是否在运行。
-    支持模糊匹配：传入 ["maaend"] 只要进程名包含 "maaend" 即视为运行中。
+    """Whether any of the processes is running.
+    Fuzzy matching: with ["maaend"], any process name containing "maaend" counts.
     """
     process_names = [p.lower() for p in process_names]
     for proc in psutil.process_iter(['name']):
         try:
             proc_name = proc.info['name'].lower()
             for target_name in process_names:
-                if target_name in proc_name:  # 包含匹配
+                if target_name in proc_name:  # substring match
                     return True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
@@ -95,7 +93,7 @@ def is_process_running(process_names):
 
 
 def wait_for_process_start(process_names, timeout=120, check_interval=3):
-    """等待进程启动。超时抛出 TimeoutError。"""
+    """Wait for the process to start; raises TimeoutError on timeout."""
     start_time = time.time()
     process_names = [p.lower() for p in process_names]
     logger.info(f"等待进程启动: {process_names} (超时 {timeout} 秒)")
@@ -107,7 +105,7 @@ def wait_for_process_start(process_names, timeout=120, check_interval=3):
             logger.info(f"检测到目标进程已成功启动: {process_names}")
             return True
 
-        # 分段 sleep，1 秒响应中断
+        # sleep in slices so an abort is noticed within a second
         for _ in range(check_interval):
             check_interrupt()
             time.sleep(1)
@@ -116,7 +114,7 @@ def wait_for_process_start(process_names, timeout=120, check_interval=3):
 
 
 def wait_for_process_exit(process_names, timeout=7200, check_interval=15):
-    """等待进程退出。超时抛出 TimeoutError。长等待时输出心跳日志。"""
+    """Wait for the process to exit; raises TimeoutError. Logs a heartbeat on long waits."""
     start_time = time.time()
     last_log_time = time.time()
     process_names = [p.lower() for p in process_names]
@@ -129,13 +127,13 @@ def wait_for_process_exit(process_names, timeout=7200, check_interval=15):
             logger.info(f"目标进程已退出: {process_names}")
             return True
 
-        # 每60秒输出一次心跳日志，证明程序仍在正常运行
+        # a heartbeat every 60 s proves the app is still alive
         elapsed = int(time.time() - start_time)
         if elapsed > 60 and time.time() - last_log_time > 60:
             logger.info(f"持续等待进程关闭中... 已等待 {elapsed // 60} 分钟")
             last_log_time = time.time()
 
-        # 分段 sleep，1 秒响应中断
+        # sleep in slices so an abort is noticed within a second
         for _ in range(check_interval):
             check_interrupt()
             time.sleep(1)
@@ -158,7 +156,7 @@ def kill_process_by_name(process_names):
 
 
 def kill_all_related_processes():
-    """退出程序时清理"""
+    """Cleanup when the app exits."""
     targets = ["maa.exe", "maa-cli.exe", "maaend.exe", "mumuplayer.exe", "nemuplayer.exe", "dnplayer.exe"]
     logger.info("正在清理残留进程...")
     for proc in psutil.process_iter(['name']):
@@ -171,7 +169,7 @@ def kill_all_related_processes():
 
 
 def minimize_process_windows(process_names):
-    """将指定进程的窗口最小化（支持模糊匹配）"""
+    """Minimise the windows of the given processes (fuzzy matching)."""
     process_names = [p.lower() for p in process_names]
     minimized_count = 0
     processed_pids = set()
@@ -186,7 +184,7 @@ def minimize_process_windows(process_names):
                 proc = psutil.Process(pid)
                 proc_name = proc.name().lower()
                 for target_name in process_names:
-                    if target_name in proc_name:  # 模糊匹配
+                    if target_name in proc_name:  # fuzzy match
                         win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
                         logger.info(f"已将进程 {proc.name()} 窗口最小化到后台")
                         minimized_count += 1
@@ -202,7 +200,7 @@ def minimize_process_windows(process_names):
 
 
 def bring_process_to_front(process_names):
-    """将指定进程的窗口还原并置于最前面（支持模糊匹配）"""
+    """Restore and raise the windows of the given processes (fuzzy matching)."""
     process_names = [p.lower() for p in process_names]
     brought_count = 0
     processed_pids = set()
@@ -217,7 +215,7 @@ def bring_process_to_front(process_names):
                 proc = psutil.Process(pid)
                 proc_name = proc.name().lower()
                 for target_name in process_names:
-                    if target_name in proc_name:  # 模糊匹配
+                    if target_name in proc_name:  # fuzzy match
                         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                         win32gui.SetWindowPos(
                             hwnd,
@@ -249,8 +247,7 @@ def bring_process_to_front(process_names):
 
 
 def kill_blacklist_apps(blacklist_names):
-    """
-    按用户黑名单关闭前台程序（模糊匹配，例如 "chrome" 可以匹配 "chrome.exe"）。
+    """Kill foreground apps on the user's blacklist (fuzzy, so "chrome" matches "chrome.exe").
     """
     if not blacklist_names:
         logger.info("黑名单为空，无需处理。")
@@ -292,20 +289,21 @@ def kill_blacklist_apps(blacklist_names):
 
 
 # --------------------------------------------------------------------------- #
-# 窗口几何（供找图限定搜索区域、点击定位使用）
+# Window geometry (limits the search area and locates clicks)
 #
-# 坐标一律是**屏幕物理像素**：本进程在 main.py 里声明了 per-monitor-v2 DPI 感知，
-# 所以 win32gui.GetWindowRect / ClientToScreen 返回的坐标与 ImageGrab 截到的像素、
-# SetCursorPos 接受的坐标是同一套，不需要任何换算。
+# Coordinates are always **screen physical pixels**: main.py declares per-monitor-v2
+# DPI awareness, so win32gui.GetWindowRect / ClientToScreen return the same units as
+# ImageGrab pixels and SetCursorPos input - no conversion anywhere.
 # --------------------------------------------------------------------------- #
-MIN_WINDOW_AREA = 200 * 100     # 低于这个面积的窗口当作托盘/提示窗，忽略
+MIN_WINDOW_AREA = 200 * 100     # windows smaller than this area are trays / tooltips and get ignored
 
 
 def find_process_window(process_names, min_area=MIN_WINDOW_AREA):
-    """返回匹配进程中面积最大的可见顶层窗口句柄；找不到返回 0。
+    """Return the largest visible top-level window of a matching process, or 0.
 
-    取「面积最大」而不是「第一个」：MAA 之类程序常常同时有主窗口、日志浮窗、
-    隐藏的辅助窗口，主窗口面积通常最大，用它做搜索区域最稳。
+    Largest rather than first: MAA-style programs have a main window, log popups and
+    hidden helper windows at once; the main window is usually the largest, which makes
+    it the steadiest search area.
     """
     process_names = [p.lower() for p in process_names if p]
     if not process_names:
@@ -344,7 +342,7 @@ def find_process_window(process_names, min_area=MIN_WINDOW_AREA):
 
 
 def get_window_rect_screen(hwnd):
-    """窗口外框的屏幕矩形 (left, top, right, bottom)；失败返回 None。"""
+    """Screen rect of the window frame (left, top, right, bottom); None on failure."""
     if not hwnd:
         return None
     try:
@@ -357,10 +355,10 @@ def get_window_rect_screen(hwnd):
 
 
 def get_client_rect_screen(hwnd):
-    """窗口客户区（去掉标题栏/边框）的屏幕矩形；失败时退回外框矩形。
+    """Screen rect of the client area (no title bar or border); falls back to the frame.
 
-    找图应该用客户区：标题栏里的图标/文字会干扰匹配，而且客户区在不同
-    主题（深色/浅色标题栏）下更稳定。
+    Finding should use the client area: icons and text in the title bar disturb matching,
+    and the client area is steadier across themes (dark / light title bars).
     """
     if not hwnd:
         return None
@@ -375,7 +373,7 @@ def get_client_rect_screen(hwnd):
         return get_window_rect_screen(hwnd)
 
 
-# GetSystemMetrics 的虚拟桌面索引（多显示器时 l/t 可能是负数）
+# GetSystemMetrics virtual-desktop indices (l/t can be negative with several monitors)
 _SM_XVIRTUALSCREEN = 76
 _SM_YVIRTUALSCREEN = 77
 _SM_CXVIRTUALSCREEN = 78
@@ -383,7 +381,7 @@ _SM_CYVIRTUALSCREEN = 79
 
 
 def virtual_screen_rect():
-    """整个虚拟桌面（含所有显示器和负坐标副屏）的屏幕矩形；失败返回 None。"""
+    """Screen rect of the whole virtual desktop, all monitors included; None on failure."""
     try:
         import win32api
         left = win32api.GetSystemMetrics(_SM_XVIRTUALSCREEN)
@@ -398,7 +396,7 @@ def virtual_screen_rect():
 
 
 def intersect_area(a, b):
-    """两个 (l, t, r, b) 矩形的交集面积；无交集返回 0。"""
+    """Area of the intersection of two (l, t, r, b) rects; 0 when they do not overlap."""
     w = min(a[2], b[2]) - max(a[0], b[0])
     h = min(a[3], b[3]) - max(a[1], b[1])
     if w <= 0 or h <= 0:
@@ -407,12 +405,13 @@ def intersect_area(a, b):
 
 
 def visible_ratio(rect, screen=None):
-    """``rect`` 落在虚拟桌面内的面积占比（0~1）。
+    """Fraction of ``rect`` (0..1) that lies inside the virtual desktop.
 
-    窗口被拖到所有显示器之外时，截图只能拿到黑边、点击也点不到，
-    找图会白等满超时。用这个比例提前判断，直接给出明确原因。
+    A window dragged off every monitor only yields black screenshots and unreachable
+    clicks, so finding would wait out the full timeout. This ratio lets the caller give
+    a clear reason up front.
 
-    :return: 0~1；拿不到屏幕尺寸时返回 1.0（不做拦截，保持旧行为）
+    :return: 0..1; 1.0 when the screen size is unknown (no check, previous behaviour)
     """
     if not rect:
         return 1.0

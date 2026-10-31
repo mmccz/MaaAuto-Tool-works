@@ -1,11 +1,14 @@
-"""1.0.6 新增内容的回归测试：升级弹窗、公告、新手教程、重启不杀进程、重影。
+"""Regression tests for content added in 1.0.6: update dialog, announcements,
+tutorial, restart not killing processes, and ghosting.
 
-这里刻意覆盖「用户实测反馈过」的点：
-  * 点「重启程序」把已开的 MAA / MuMu 一起关掉（atexit 又调了一次 cleanup）；
-  * 切换界面缩放偶发重影（旧画面遮罩没在改布局前清掉）；
-  * 深色主题下版本号标签/链接看不清；
-  * 升级弹窗把 GitHub Markdown 原样塞进 QMessageBox，很难看；
-  * 新手教程必须包含 MAA「完成后退出模拟器」与 MaaEnd「最后一条关闭程序」两条。
+Deliberately covers the points users reported after testing:
+  * clicking "restart app" shut down a running MAA / MuMu too (atexit ran cleanup again);
+  * switching UI scale occasionally left a ghost image (the old frame mask was not
+    cleared before the layout change);
+  * the version tag/link was unreadable in the dark theme;
+  * the update dialog dumped raw GitHub Markdown into a QMessageBox, which looked awful;
+  * the tutorial must include both MAA "exit emulator when done" and MaaEnd
+    "close program as the last step".
 """
 
 import json
@@ -42,7 +45,7 @@ def i18n():
 
 
 # --------------------------------------------------------------------------- #
-# 公告
+# Announcements
 # --------------------------------------------------------------------------- #
 def test_bundled_announcements_are_complete():
     from ui.announcements import load_bundled_announcements, localize
@@ -68,15 +71,15 @@ def test_unseen_ids_and_unread_state():
     assert unseen_ids(items, ["a"]) == ["b", "c"]
     assert unseen_ids(items, ["a", "b", "c"]) == []
 
-    # 有新公告：数字 = 新公告条数
+    # New announcements: the number equals how many are new
     st = unread_state(items, "2026-10-24", ["a"], "2026-10-24")
     assert st["count"] == 2 and st["new_ids"] == ["b", "c"]
 
-    # 全部看过、updated 没变 → 0
+    # All seen and updated is unchanged → 0
     st = unread_state(items, "2026-10-24", ["a", "b", "c"], "2026-10-24")
     assert st["count"] == 0
 
-    # 全部看过但公告内容更新（updated 变化）→ 至少 1 条提示
+    # All seen but the content changed (updated moved) → at least one prompt
     st = unread_state(items, "2026-10-25", ["a", "b", "c"], "2026-10-24")
     assert st["count"] == 1 and st["updated_changed"] and st["new_ids"] == []
 
@@ -103,8 +106,9 @@ def test_cache_roundtrip_and_newer_wins(tmp_path):
     assert save_cache("2999-01-01", items, config_dir=str(tmp_path))
     updated, got = load_cached_announcements(str(tmp_path))
     assert updated == "2999-01-01" and got == items
-    # 缓存比内置新 → updated 取缓存；条目取「内置 + 缓存」的并集
-    # （1.3.0 起不再整体替换，否则旧镜像会把新公告顶掉）
+    # Cache newer than bundled → updated comes from the cache; items are the union
+    # of bundled + cache (since 1.3.0 it no longer replaces everything, otherwise a
+    # stale mirror would bump out newer announcements)
     u2, items2 = initial_announcements(str(tmp_path))
     assert u2 == "2999-01-01"
     ids2 = {it["id"] for it in items2}
@@ -128,18 +132,18 @@ def test_announcement_dialog_shows_first_item(qapp, i18n):
     try:
         assert dlg.list.count() == len(items)
         assert "2026-10-24" in dlg.subtitle_label.text()
-        # 1.3.0：右侧是所有公告拼成的长文，左侧列表用于跳转
+        # 1.3.0: the right side holds every announcement as one long text, the left list navigates
         text = dlg.browser.toPlainText()
         for item in items:
             assert item["title"]["zh_CN"] in text
-        dlg.list.setCurrentRow(1)     # 跳转不应抛异常
+        dlg.list.setCurrentRow(1)     # navigation must not raise
         qapp.processEvents()
     finally:
         dlg.deleteLater()
 
 
 # --------------------------------------------------------------------------- #
-# 升级弹窗
+# Update dialog
 # --------------------------------------------------------------------------- #
 INFO = {
     "has_update": True,
@@ -159,7 +163,7 @@ def test_update_dialog_renders_notes_markdown(qapp, i18n):
         text = dlg.notes.toPlainText()
         assert "1.0.6" in text
         assert "重启不再关掉 MAA" in text
-        # 不能把 Markdown 标记原样显示出来（旧版 QMessageBox 的问题）
+        # Markdown markers must not be shown raw (the old QMessageBox bug)
         assert "##" not in text
         assert dlg.btn_update.isDefault()
     finally:
@@ -190,7 +194,7 @@ def test_update_dialog_without_notes(qapp, i18n):
 
     dlg = UpdateDialog(i18n, {**INFO, "notes": ""})
     try:
-        assert not hasattr(dlg.notes, "toPlainText")   # 落到了 QLabel 兜底
+        assert not hasattr(dlg.notes, "toPlainText")   # fell back to a QLabel
     finally:
         dlg.deleteLater()
 
@@ -232,7 +236,7 @@ def test_message_dialog_ok(qapp, i18n):
 
 
 # --------------------------------------------------------------------------- #
-# 新手教程
+# Tutorial
 # --------------------------------------------------------------------------- #
 MANDATORY = [
     ("tutorial.warn_maa", ["完成后退出模拟器"]),
@@ -265,7 +269,7 @@ def test_tutorial_dialog_has_warning_blocks(qapp, i18n):
 
 
 # --------------------------------------------------------------------------- #
-# 版本标签 / 公告红点
+# Version tag / announcement badge
 # --------------------------------------------------------------------------- #
 def test_about_version_tag_uses_qss(qapp, i18n):
     from ui.pages.about_page import AboutPage
@@ -274,7 +278,7 @@ def test_about_version_tag_uses_qss(qapp, i18n):
     try:
         assert page.ver_tag.objectName() == "VersionTag"
         assert page.license_tag.objectName() == "LicenseTag"
-        # 颜色交给 QSS（深浅主题各一套），不能再写内联样式
+        # Colors come from QSS (one set per light/dark theme); no inline style allowed
         assert page.ver_tag.styleSheet() == ""
         assert page.license_tag.styleSheet() == ""
         assert page.ver_tag.text()
@@ -283,8 +287,8 @@ def test_about_version_tag_uses_qss(qapp, i18n):
 
 
 def test_about_system_label_uses_system_info(qapp, i18n):
-    """1.4.1：系统版本必须走 system_info（按构建号纠 Win11），
-    不能再直接拼 ``platform.release()``（Win11 上它返回 "10"）。"""
+    """1.4.1: the system version must come from system_info (build-number fix for Win11),
+    not a hand-built ``platform.release()`` (which returns "10" on Win11)."""
     import system_info
     from ui.pages.about_page import AboutPage
 
@@ -312,7 +316,7 @@ def test_home_announcement_badge(qapp, i18n):
 
 
 # --------------------------------------------------------------------------- #
-# 重启不杀 MAA / 模拟器 + 重影遮罩
+# Restart must not kill MAA / the emulator + ghost overlay
 # --------------------------------------------------------------------------- #
 def _make_window(qapp, tmp_path, monkeypatch):
     import config_manager
@@ -321,8 +325,9 @@ def _make_window(qapp, tmp_path, monkeypatch):
     from ui.main_window import MainWindow
     from utils import resource_path
 
-    # 屏蔽启动引导定时器（教程/公告自动弹 + 在线公告拉取），否则它们会在
-    # 后续测试的事件循环里触发、后台线程被析构时报 QThread 警告。
+    # Disable the startup guide timers (auto-popped tutorial/announcements + online
+    # announcement fetch); otherwise they fire inside later tests' event loops and
+    # their background threads are destroyed with QThread warnings.
     import ui.main_window as mw
     real_single_shot = mw.QTimer.singleShot
 
@@ -373,12 +378,12 @@ def test_restart_does_not_kill_related_processes(qapp, tmp_path, monkeypatch):
                         lambda: calls.append(True))
     win = _make_window(qapp, tmp_path, monkeypatch)
     try:
-        # 正常退出：应该清理
+        # Normal exit: should clean up
         win._relaunching = False
         win.cleanup_on_exit()
         assert calls == [True]
 
-        # 重启/升级：不能动 MAA / 模拟器
+        # Restart/upgrade: must leave MAA / the emulator alone
         calls.clear()
         win._relaunching = True
         win.cleanup_on_exit()
@@ -393,17 +398,17 @@ def test_scale_switch_clears_transition_overlay(qapp, tmp_path, monkeypatch):
 
     win = _make_window(qapp, tmp_path, monkeypatch)
     try:
-        # 模拟「上一次换主题留下的旧截图遮罩」
+        # Simulate the old screenshot overlay left by a previous theme switch
         overlay = QWidget(win)
         overlay.show()
         win._theme_overlay = overlay
         win._on_ui_scale_changed(1.25, ask_restart=False)
         qapp.processEvents()
         assert getattr(win, "_theme_overlay", None) is None, "遮罩没清掉，会留重影"
-        # 缩放确实生效了
+        # The scale change really took effect
         assert win.sidebar.minimumWidth() > 0
         assert "font-size: 16px" in qapp.styleSheet()   # 13 * 1.25 ≈ 16
-        clear_transition_overlay(win)                   # 幂等
+        clear_transition_overlay(win)                   # idempotent
     finally:
         _close_window(win, qapp)
 
@@ -414,7 +419,7 @@ def test_announcement_badge_marks_seen(qapp, tmp_path, monkeypatch):
         state = win._refresh_announcement_badge()
         assert state["count"] > 0
         assert "⦁" in win.home_page.btn_announcements.text()
-        # 直接标记已读并刷新红点（不弹模态窗）
+        # Mark everything read and refresh the badge (no modal dialog)
         updated, items = win._announcements_data()
         win.config["announcements_seen"] = [it.get("id") for it in items]
         win.config["announcements_seen_updated"] = updated
@@ -422,7 +427,7 @@ def test_announcement_badge_marks_seen(qapp, tmp_path, monkeypatch):
         assert state["count"] == 0
         assert "⦁" not in win.home_page.btn_announcements.text()
 
-        # 公告内容更新（updated 变了、id 没变）→ 红点重新出现
+        # Announcement content updated (updated changed, ids unchanged) → badge returns
         win.config["announcements_seen_updated"] = "2000-01-01"
         state = win._refresh_announcement_badge()
         assert state["count"] == 1 and state["updated_changed"]
@@ -432,10 +437,12 @@ def test_announcement_badge_marks_seen(qapp, tmp_path, monkeypatch):
 
 
 def test_settings_snapshot_keeps_runtime_keys(qapp, tmp_path, monkeypatch):
-    """设置页的旧快照不能把 tutorial_seen / 公告已读冲回 False。
+    """A stale settings-page snapshot must not reset tutorial_seen / announcement
+    read state back to False.
 
-    实测 bug：看过教程后随便改一个设置，下次启动教程又弹了 —— 因为设置页
-    保存时把启动时复制的整份配置（tutorial_seen=False）发了回来。
+    Observed bug: after seeing the tutorial, changing any setting made it pop up
+    again on the next start — because the settings page saved back the whole config
+    it had copied at startup (with tutorial_seen=False).
     """
     win = _make_window(qapp, tmp_path, monkeypatch)
     try:
@@ -444,7 +451,7 @@ def test_settings_snapshot_keeps_runtime_keys(qapp, tmp_path, monkeypatch):
         win.config["announcements_seen_updated"] = "2026-10-24"
         win.config["run_count"] = 7
 
-        stale = dict(win.settings_page.config)     # 设置页启动时的旧快照
+        stale = dict(win.settings_page.config)     # snapshot taken at settings-page startup
         stale["tutorial_seen"] = False
         stale["announcements_seen"] = []
         stale["announcements_seen_updated"] = ""
@@ -457,7 +464,7 @@ def test_settings_snapshot_keeps_runtime_keys(qapp, tmp_path, monkeypatch):
         assert win.config["announcements_seen"] == ["v1.0.6"]
         assert win.config["announcements_seen_updated"] == "2026-10-24"
         assert win.config["run_count"] == 7
-        # 普通设置项仍然正常更新
+        # Ordinary settings still update normally
         assert win.config["wait_timeout"] == 99
 
         import config_manager
@@ -500,10 +507,12 @@ def test_background_blur_is_slider(qapp, i18n):
 
 
 def test_announcements_marked_read_when_opened(qapp, i18n, tmp_path, monkeypatch):
-    """1.3.0：打开公告就落盘「已读」，而不是等窗口关掉。
+    """1.3.0: opening the announcements persists them as read immediately, instead of
+    waiting for the window to close.
 
-    旧实现把写入放在 exec() 之后：用户开着窗口时直接结束程序/被升级进程结束，
-    下次启动又会提示「有新公告」——这正是反馈里说的「重启后又提示」。
+    The old code wrote after exec(): if the user quit or the upgrade process killed the
+    app while the window was open, the next start prompted "new announcements" again —
+    exactly the "prompts again after restart" reported by users.
     """
     import config_manager
     from themes import ThemeManager
@@ -535,7 +544,8 @@ def test_announcements_marked_read_when_opened(qapp, i18n, tmp_path, monkeypatch
                 pass
 
             def exec(self):
-                # 模拟「窗口还开着时进程就被结束」：此时已读就应该已经落盘
+                # Simulate "the process is killed while the window is still open":
+                # the read state should already be on disk by now
                 saved = config_manager.load_config()
                 assert saved["announcements_seen"], "打开时就该标记已读"
                 assert saved["announcements_seen_updated"]
@@ -544,7 +554,7 @@ def test_announcements_marked_read_when_opened(qapp, i18n, tmp_path, monkeypatch
         monkeypatch.setattr(ann_module, "AnnouncementDialog", FakeDialog)
         win.show_announcements()
 
-        assert win._announcements_dialog is None          # 关闭后释放引用
+        assert win._announcements_dialog is None          # reference released after close
         assert config_manager.load_config()["announcements_seen_updated"]
     finally:
         win.is_quitting = True
@@ -555,7 +565,7 @@ def test_announcements_marked_read_when_opened(qapp, i18n, tmp_path, monkeypatch
 
 
 def test_announcement_search_filters_index(qapp, i18n):
-    """1.4.0：所有历史更新放在同一个公告区，靠搜索框查找。"""
+    """1.4.0: all past updates live in one announcement area and are found via the search box."""
     from ui.announcements import AnnouncementDialog
 
     def item(ident, title):
@@ -571,7 +581,7 @@ def test_announcement_search_filters_index(qapp, i18n):
         hidden = [i for i in range(dlg.list.count())
                   if dlg.list.item(i).isHidden()]
         assert len(hidden) == 1
-        assert "1" in dlg.count_label.text()          # 匹配 1 条
+        assert "1" in dlg.count_label.text()          # 1 match
         dlg.search.setText("")
         assert not any(dlg.list.item(i).isHidden()
                        for i in range(dlg.list.count()))

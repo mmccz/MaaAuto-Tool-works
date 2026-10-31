@@ -1,9 +1,9 @@
-"""upgrade_guard 的单元测试（原 _self_test 的 pytest 版 + 边界）。
+"""Unit tests for upgrade_guard (pytest port of the old _self_test plus edge cases).
 
-这个模块决定主程序「看到 .upgrading 是退出还是继续启动」，
-判错的两个方向都很糟：
-* 误删标志 → 升级期间主程序被拉起来，文件正在被替换；
-* 不删陈旧标志 → 用户双击主程序毫无反应。
+This module decides whether the main app exits or keeps starting when it sees a
+``.upgrading`` flag. Both wrong answers are bad:
+* deleting the flag too eagerly -> the app starts mid-upgrade while files are being replaced;
+* never clearing a stale flag -> double-clicking the app does nothing at all.
 """
 
 import os
@@ -81,7 +81,7 @@ def test_event_is_logged(flag, log):
 
 
 def test_log_failure_is_silent(flag, log):
-    """日志目录不可写时不能影响启动判定。"""
+    """An unwritable log directory must not affect the start decision."""
     touch(flag)
     bad_log = os.path.join(log, "nested", "..", "\x00bad")
     assert guard.resolve_upgrade_flag(flag, log_path=bad_log,

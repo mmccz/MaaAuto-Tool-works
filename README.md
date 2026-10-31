@@ -7,7 +7,7 @@
 **MAA & MaaEnd 的定时自动化调度台**
 
 [![Version](https://img.shields.io/badge/version-1.4.5-2f81f7.svg)](CHANGELOG.md)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.15%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#环境要求)
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
@@ -55,6 +55,7 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 - **前台处理策略** —— 启动前可选：不做任何操作（默认）/ 关闭所有前台程序 / 仅关闭黑名单程序（带可视化进程选择器）。
 - **重试与超时** —— 重试次数、重试间隔、找图超时、游戏启动 / 关闭超时全部可调。
 - **进程保活与唤醒** —— 任务结束自动最小化 MAA / MaaEnd；下次执行先拉回前台，避免多开。
+- **开机自启（1.4.5 起）** —— 打包版用「登录时运行 + 最高权限」的计划任务拉起（`--autostart` 静默进托盘）；旧的 HKCU Run 项在启动时自动迁移，关闭开关会删掉任务。
 - **随时中止** —— 「结束任务」或托盘菜单中止，长循环 1 秒内响应，不残留子进程。
 
 ### 自动升级
@@ -97,7 +98,7 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 | --- | --- |
 | 操作系统 | Windows 10 / 11（x64） |
 | 屏幕 | 任意分辨率；系统缩放 100% / 125% / 150% 均支持（多尺度匹配，找不到时可用「截取模板」自校准） |
-| Python（仅源码运行） | 3.11+，**建议 [python.org](https://www.python.org/downloads/) 安装版**，不要用 Microsoft Store 版 |
+| Python（仅源码运行） | 3.11+，开发与 CI 用 **3.15**；**建议 [python.org](https://www.python.org/downloads/) 安装版**，不要用 Microsoft Store 版（`%APPDATA%` 会被重定向，模板/日志写到看不见的地方） |
 | 依赖软件 | 自备 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights)、[MaaEnd](https://github.com/MaaEnd/MaaEnd) |
 
 > 用安装包时**不需要** Python，也不需要联网（完整包）。
@@ -108,7 +109,7 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 
 | 文件 | 说明 |
 | --- | --- |
-| `MaaAuto_Setup_v1.4.5-Windows-x64.exe` | **完整包（约 56 MB）**，内嵌预构建程序，断网也能装 |
+| `MaaAuto_Setup_v1.4.5-Windows-x64.exe` | **完整包（约 59 MB）**，内嵌预构建程序，断网也能装 |
 | `MaaAuto_Online_v1.4.5-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
 
 双击后 30 秒左右装完，**不需要 Python、不联网、不需要管理员权限**：默认装到 `%LOCALAPPDATA%\Programs\MaaAuto`；向导里也可以选「为所有用户安装」，装到 `Program Files`（这一步会弹 UAC）。
@@ -120,8 +121,8 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 
 ```powershell
 cd MaaAutoProject
-pip install -r requirements.txt
-python main.py
+py -m pip install -r requirements.txt
+py main.py
 ```
 
 > 必须在 `MaaAutoProject` 目录下启动（`main.py` 的相对路径依赖它）。
@@ -284,9 +285,11 @@ Content-Type: application/json
 漏检就把「相似度阈值」降到 70、把缩放区间放宽；
 命中了但点偏就调「点击偏移」；
 界面语言/主题差异太大就用「截取模板」重截一张（存在 `config/templates/`，优先于内置模板）。
-排查环境可运行 `python diagnose.py`，会打印屏幕物理分辨率、DPI 感知状态与当前找图参数。
+排查环境可运行 `py diagnose.py`，会打印屏幕物理分辨率、DPI 感知状态、当前找图参数与模板来源/尺寸。
 
 **Q2 错过设定时间才开软件，还会执行吗？** 会。每 10 秒检查一次，当天未执行且已过时间点就补跑一次。
+
+**Q2b 开了「开机自启」但登录后没反应？** 1.4.5 起打包版靠任务计划程序里的 `MaaAuto` 任务（「登录时」+「最高权限」）拉起，不再用注册表 Run 键——程序带 `requireAdministrator` 清单，Run 键拉不起提权程序。到「任务计划程序 → 任务计划程序库」确认 `MaaAuto` 存在且「上次运行结果」为 `0x0`；被安全软件拦了就把 `MaaAuto.exe` 加白名单，或者关掉开关再打开让它重建任务。
 
 **Q3 任务结束没有推送？** 检查 SendKey / Webhook 是否正确，用设置页的「测试」按钮验证。
 
@@ -342,9 +345,10 @@ Release 资产：
 | `MaaAuto_Setup_v*.exe` | 完整安装包 |
 | `MaaAuto_Online_v*.exe` | 在线引导包 |
 | `MaaAuto_payload_v*.zip` | 升级器下载的预构建程序包 |
-| `SHA256SUMS.txt` | 上述三个构建产物的校验和（自身也是 Release 资产之一） |
+| `MaaAuto_delta_v{旧}_to_{新}.zip` | 相邻版本的文件级差分包（几百 KB，跳版本会自动串链） |
+| `SHA256SUMS.txt` | 上述构建产物的校验和（自身也是 Release 资产之一） |
 
-> 发版：push 两个仓库后打 `v*` tag，CI 会构建上述 4 个资产并用仓库里的
+> 发版：push 两个仓库后打 `v*` tag，CI 会构建上述资产（Python 3.15）并用仓库里的
 > `RELEASE_NOTES.md` 作正文**直接发布** Release（预发布 tag 自动标 prerelease）。
 
 `app_info.py` 里的 `APP_UPDATE_API`、`APP_MIN_INSTALLER_VERSION`、`APP_PAYLOAD_ASSET_PREFIX` 与安装器 `installer/contract.py` 是**冻结契约**：改任一值等于协议变更，必须两仓库同时发版（`extra` 只在安装时写入，升级不刷新，改了对老用户不生效）。

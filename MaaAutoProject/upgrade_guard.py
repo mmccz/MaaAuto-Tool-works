@@ -1,53 +1,54 @@
-"""升级标志 ``config/.upgrading`` 的陈旧判断与清理。
+"""Staleness test and cleanup for the upgrade flag ``config/.upgrading``.
 
-背景
+Background
+----------
+The upgrader (``upgrade.exe``) writes ``<install>/config/.upgrading`` before stopping the
+app; on startup the app calls ``sys.exit(0)`` as soon as it sees that file (before
+QApplication, with no window and no log). Deliberate: no starting during an upgrade.
+
+Risk
 ----
-升级器（``upgrade.exe``）在停止主程序前写入 ``<install>/config/.upgrading``；
-主程序启动时只要看到该文件就 ``sys.exit(0)``（发生在 QApplication 之前，
-没有任何窗口、也没有日志）。这是刻意的：升级期间不允许再启动主程序。
+If the upgrader crashes, is killed in Task Manager, or returns right after
+``request_main_exit()`` fails, the flag lingers and every double-click "does nothing", with no hint.
 
-风险
-----
-升级器崩溃、被任务管理器结束，或在 ``request_main_exit()`` 失败后直接返回，
-标志就会残留。此后用户每次双击主程序都“毫无反应”，且没有任何提示。
+Decision rules (exit rather than delete by mistake)
+---------------------------------------------------
+=================================  ======================================
+Condition                          Behaviour
+=================================  ======================================
+Flag missing                       start normally
+Age < STALE_SECONDS                treated as upgrading, exit
+Timed out, helper still running    treated as upgrading, exit
+Timed out, no helper process       stale: delete the flag, keep starting
+psutil unavailable / any error     treated as upgrading, exit
+=================================  ======================================
 
-判定规则（保守优先，宁可多退一次，不可误删）
-------------------------------------------
-==============  ==========================  ====================
-条件                                         行为
-==============  ==========================  ====================
-标志不存在                                    正常启动
-写入时间 < STALE_SECONDS                      视为升级中，退出
-超时，但升级器/卸载器/安装器进程仍在           视为升级中，退出
-超时，且没有上述进程                          判定陈旧：删除标志，继续启动
-psutil 不可用 / 判断过程中异常                视为升级中，退出
-==============  ==========================  ====================
-
-约定：``config/.upgrading`` 由升级器写入、由升级器删除；主程序只读，
-正常情况下看到标志就退出。本模块仅负责「升级器已消失但标志还在」的兜底。
+Convention: ``config/.upgrading`` is written and removed by the upgrader; the app only
+reads it and normally exits on sight. This module only covers the case where the
+upgrader is gone but the flag remains.
 """
 
 import os
 import time
 import datetime
 
-# 超过这个秒数且没有升级器进程，才认定为陈旧标志。
-# 取值权衡：升级全程 upgrade.exe 都在运行，所以“超时”本身不影响正常升级；
-# 而用户被锁死的时间不应太长，5 分钟足够覆盖“升级器刚崩溃、用户立刻重开”。
+# a flag older than this, with no upgrader process, counts as stale.
+# Trade-off: upgrade.exe runs for the whole upgrade, so a timeout alone never affects
+# a real upgrade; 5 minutes still covers "the upgrader just crashed, user retries now".
 UPGRADE_FLAG_STALE_SECONDS = 300
 
-# 升级器 / 卸载器：固定进程名。
+# upgrader / uninstaller: fixed process names.
 HELPER_PROCESS_NAMES = ("upgrade.exe", "uninstall.exe")
 
-# 完整安装包（MaaAuto_Online_v*-Windows-x64.exe）与开发态安装器。
+# full installer (MaaAuto_Online_v*-Windows-x64.exe) and the dev-mode installer.
 HELPER_PROCESS_PREFIXES = ("maaauto_online",)
 HELPER_PROCESS_KEYWORDS = ("maaautoinstaller", "maaauto-installer")
 
 
 def _log(log_path, message):
-    """把事件追加到指定日志文件；任何失败都静默忽略。
+    """Append an event to the given log file; any failure is silently ignored.
 
-    该函数运行在日志系统初始化之前，因此不能使用 logging。
+    This runs before the logging system is set up, so it cannot use logging.
     """
     if not log_path:
         return
@@ -63,10 +64,10 @@ def _log(log_path, message):
 
 
 def is_helper_running():
-    """是否有升级器 / 卸载器 / 安装器进程在运行。
+    """Whether an upgrader / uninstaller / installer process is running.
 
-    :return: True 表示“可能正在升级”，调用方应按保守策略处理；
-             无法判断时同样返回 True。
+    :return: True means "an upgrade may be in progress" and the caller should play safe;
+             True as well when that cannot be determined.
     """
     try:
         import psutil
@@ -95,7 +96,7 @@ def is_helper_running():
 
 
 def flag_age_seconds(flag_path):
-    """返回标志文件的年龄（秒）；读不到 mtime 时返回 None。"""
+    """Age of the flag file in seconds; None when its mtime cannot be read."""
     try:
         return time.time() - os.path.getmtime(flag_path)
     except OSError:
@@ -104,15 +105,15 @@ def flag_age_seconds(flag_path):
 
 def resolve_upgrade_flag(flag_path, log_path=None, helper_probe=None,
                          stale_seconds=UPGRADE_FLAG_STALE_SECONDS):
-    """判断主程序是否可以继续启动。
+    """Decide whether the app may continue starting.
 
-    :param flag_path: ``config/.upgrading`` 的完整路径
-    :param log_path:  事件日志路径（通常是 ``logs/upgrading.log``），可为 None
-    :param helper_probe: 进程探测函数，默认 :func:`is_helper_running`；
-                         仅用于测试注入
-    :param stale_seconds: 陈旧阈值，默认 :data:`UPGRADE_FLAG_STALE_SECONDS`
-    :return: True  = 继续启动（没有标志，或已清理陈旧标志）
-             False = 升级进行中，调用方应直接退出
+    :param flag_path: full path of ``config/.upgrading``
+    :param log_path:  event log path (usually ``logs/upgrading.log``), may be None
+    :param helper_probe: process probe, defaults to :func:`is_helper_running`;
+                         injected by tests only
+    :param stale_seconds: staleness threshold, defaults to :data:`UPGRADE_FLAG_STALE_SECONDS`
+    :return: True  = keep starting (no flag, or a stale one was cleared)
+             False = an upgrade is in progress, the caller should exit outright
     """
     if not os.path.exists(flag_path):
         return True
@@ -149,7 +150,7 @@ def resolve_upgrade_flag(flag_path, log_path=None, helper_probe=None,
 
 
 # --------------------------------------------------------------------------- #
-# 自测：python upgrade_guard.py
+# Self-test: python upgrade_guard.py
 # --------------------------------------------------------------------------- #
 def _self_test():
     import tempfile

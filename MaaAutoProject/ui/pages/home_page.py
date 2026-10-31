@@ -8,7 +8,7 @@ from ui.components import StatCard
 
 
 class HomePage(QWidget):
-    """首页：状态卡片 + 立即执行/结束任务按钮 + 实时日志。"""
+    """Home page: status cards + run/stop button + live log."""
 
     run_clicked = Signal()
     stop_clicked = Signal()
@@ -29,7 +29,7 @@ class HomePage(QWidget):
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(18)
 
-        # 顶部标题 + 教程/公告/运行按钮
+        # Header: title + tutorial/announcements/run buttons
         top = QHBoxLayout()
         top.setSpacing(10)
         self.page_title = QLabel(self.i18n.t("nav.home"))
@@ -57,7 +57,7 @@ class HomePage(QWidget):
         top.addWidget(self.run_btn)
         layout.addLayout(top)
 
-        # 4 张状态卡片
+        # 4 status cards
         cards = QHBoxLayout()
         cards.setSpacing(14)
         self.card_status = StatCard(self.i18n.t("home.status.label"),
@@ -72,7 +72,7 @@ class HomePage(QWidget):
             cards.addWidget(c)
         layout.addLayout(cards)
 
-        # 日志标题栏
+        # Log title bar
         log_header = QHBoxLayout()
         self.log_title = QLabel(self.i18n.t("home.log.title"))
         self.log_title.setObjectName("SectionTitle")
@@ -86,7 +86,7 @@ class HomePage(QWidget):
         log_header.addWidget(self.clear_btn)
         layout.addLayout(log_header)
 
-        # 日志视图
+        # Log view
         self.log_text = QTextEdit()
         self.log_text.setObjectName("LogView")
         self.log_text.setReadOnly(True)
@@ -94,11 +94,11 @@ class HomePage(QWidget):
         layout.addWidget(self.log_text, 1)
 
     # ------------------------------------------------------------------
-    # 按钮行为
+    # Button behavior
     # ------------------------------------------------------------------
     def _on_run_btn_clicked(self):
         if self._is_running:
-            # 用户请求结束任务：先把自己禁掉防止重复点，再通知外部
+            # User asked to stop: disable self first to block double clicks, then notify outside
             self.run_btn.setEnabled(False)
             self.run_btn.setText(self.i18n.t("home.btn.stopping"))
             self.stop_clicked.emit()
@@ -106,7 +106,7 @@ class HomePage(QWidget):
             self.run_clicked.emit()
 
     # ------------------------------------------------------------------
-    # 日志
+    # Log
     # ------------------------------------------------------------------
     def append_log(self, text):
         self.log_text.append(self._colorize(text))
@@ -140,7 +140,7 @@ class HomePage(QWidget):
         self.log_text.clear()
 
     # ------------------------------------------------------------------
-    # 动态字段
+    # Dynamic fields
     # ------------------------------------------------------------------
     def set_status(self, status_key):
         self.card_status.set_value(self.i18n.t(status_key))
@@ -166,7 +166,7 @@ class HomePage(QWidget):
             self.run_btn.setObjectName("PrimaryButton")
             self.run_btn.setText(self.i18n.t("home.btn.run"))
 
-        # objectName 变了必须 unpolish/polish 才会重新匹配 QSS
+        # After changing objectName, unpolish/polish is required to re-match QSS
         self.run_btn.style().unpolish(self.run_btn)
         self.run_btn.style().polish(self.run_btn)
 
@@ -180,10 +180,10 @@ class HomePage(QWidget):
             self.card_status.setStyleSheet("")
 
     # ------------------------------------------------------------------
-    # 公告 / 教程
+    # Announcements / tutorial
     # ------------------------------------------------------------------
     def set_announcement_badge(self, unread):
-        """未读公告数：按钮文字后面挂一个红点数字。"""
+        """Unread announcement count: append a badge number to the button text."""
         self._unread_announcements = max(0, int(unread or 0))
         base = self.i18n.t("announce.title")
         if self._unread_announcements:
@@ -192,12 +192,12 @@ class HomePage(QWidget):
         else:
             self.btn_announcements.setText(base)
             self.btn_announcements.setObjectName("GhostButton")
-        # objectName 变了必须重新 polish，否则新 QSS 不生效
+        # After changing objectName, re-polish or the new QSS will not apply
         self.btn_announcements.style().unpolish(self.btn_announcements)
         self.btn_announcements.style().polish(self.btn_announcements)
 
     # ------------------------------------------------------------------
-    # 语言切换
+    # Language switch
     # ------------------------------------------------------------------
     def retranslate(self):
         self.page_title.setText(self.i18n.t("nav.home"))

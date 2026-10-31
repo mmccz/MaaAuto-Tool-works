@@ -1,9 +1,10 @@
-"""系统版本识别测试（1.4.1 修复）。
+"""System version detection tests (1.4.1 fix).
 
-Bug：Windows 11 上「关于」页显示成 ``Windows 10 10.0.22631``。
-根因是 ``platform.release()`` 读的 ``GetVersionEx`` 被兼容层钉死，从
-Windows 8.1 起就对不上品牌名；同时注册表里的 ``ProductName`` 在
-Windows 11 上也仍写着 ``Windows 10``。所以只能按**构建号**纠正。
+Bug: on Windows 11 the "About" page showed ``Windows 10 10.0.22631``.
+Root cause: ``platform.release()`` reads ``GetVersionEx``, which the compatibility layer
+pins, so it has not matched the brand name since Windows 8.1; meanwhile the registry
+``ProductName`` still says ``Windows 10`` on Windows 11. Only the **build number** can
+correct it.
 """
 
 import os
@@ -20,10 +21,10 @@ import system_info  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
-# 品牌名纠正（纯函数）
+# Brand-name correction (pure function)
 # --------------------------------------------------------------------------- #
 def test_win11_registry_name_is_corrected_from_win10():
-    """Win11 注册表 ProductName 依旧是 "Windows 10 专业版"，必须按构建号改。"""
+    """On Win11 the registry ProductName still says "Windows 10 Pro"; the build number must correct it."""
     assert system_info.version_label(
         "Windows 10 专业版", 22631) == "Windows 11 专业版"
     assert system_info.version_label("Windows 10 Pro", 26100) == "Windows 11 Pro"
@@ -37,19 +38,19 @@ def test_win10_stays_win10():
 
 
 def test_win11_build_boundary():
-    """22000 是 Win11 21H2 首个正式版，21999 仍是 Win10。"""
+    """22000 is the first GA build of Win11 21H2; 21999 is still Win10."""
     assert system_info.version_label("Windows 10 Pro", 21999) == "Windows 10 Pro"
     assert system_info.version_label("Windows 10 Pro", 22000) == "Windows 11 Pro"
 
 
 def test_server_is_never_relabelled():
-    """Server 2022 是 20348（10 内核），不能被叫成 Windows 11。"""
+    """Server 2022 is build 20348 (10 kernel) and must not be called Windows 11."""
     assert system_info.version_label(
         "Windows Server 2022 Datacenter", 20348) == "Windows Server 2022 Datacenter"
-    # Server 2025 是 26100，名字本来就是对的，也别动
+    # Server 2025 is build 26100; its name is already right, so leave it alone
     assert system_info.version_label(
         "Windows Server 2025 Standard", 26100) == "Windows Server 2025 Standard"
-    # 即便显式传 is_server，也不改名
+    # Even with is_server passed explicitly, do not rename
     assert system_info.version_label(
         "Windows 10", 22631, is_server=True) == "Windows 10"
 
@@ -66,7 +67,7 @@ def test_missing_product_name_falls_back_to_build():
 
 
 # --------------------------------------------------------------------------- #
-# windows_info / describe_system（打桩注册表）
+# windows_info / describe_system (stubbed registry)
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def fake_machine(monkeypatch):
@@ -103,7 +104,7 @@ def test_describe_system_format(fake_machine):
 
 
 def test_describe_system_has_no_duplicated_version(fake_machine):
-    """老实现会输出 ``Windows 10 10.0.22631 (10.0.22631)``，重复且品牌错。"""
+    """The old implementation emitted ``Windows 10 10.0.22631 (10.0.22631)``: duplicated and with the wrong brand."""
     fake_machine(product_name="Windows 10 Pro", display_version="23H2",
                  build="22631", ubr=100)
     text = system_info.describe_system()
@@ -119,7 +120,7 @@ def test_describe_system_fallback_when_registry_empty(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# 真机冒烟：本机到底是不是 11，显示名必须和构建号一致
+# Live smoke test: whatever this machine is, the display name must agree with the build number
 # --------------------------------------------------------------------------- #
 def test_live_consistency():
     info = system_info.windows_info()

@@ -1,8 +1,7 @@
 #!/usr/bin/env python
-"""
-MaaAuto 诊断脚本：打印运行时关键路径 + 状态
+"""MaaAuto diagnostics: print the key runtime paths plus their state.
 
-用法：
+Usage:
     cd MaaAuto-Tool-works\\MaaAutoProject
     python diagnose.py
 """
@@ -18,7 +17,7 @@ def line():
 
 
 def read_text_safe(path):
-    """用 utf-8-sig 读文件（兼容 BOM）。"""
+    """Read a file with utf-8-sig (tolerates a BOM)."""
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
             return f.read()
@@ -27,8 +26,8 @@ def read_text_safe(path):
 
 
 def main():
-    # 先声明 DPI 感知，否则下面的屏幕尺寸/DIP 都是被系统虚拟化过的值（125% 下会
-    # 显示成 1536x864 而不是 1920x1080），找图排查时非常容易误判。
+    # Declare DPI awareness first, otherwise the screen size / DIP values below come back
+    # virtualised by the system (1536x864 instead of 1920x1080 at 125%), which misleads finding bugs.
     _set_dpi_awareness()
     print("=" * 64)
     print("MaaAuto 诊断")
@@ -168,11 +167,12 @@ def main():
 
 
 def _set_dpi_awareness():
-    """与 main.py 相同的三级回退，保证诊断数值是物理像素。
+    """Same three-level fallback as main.py, so the diagnostics report physical pixels.
 
-    ★ 这三个 API 失败时**返回错误码/0 而不是抛异常**，必须看返回值；
-      只看「没抛异常」就返回，会以为设置成功（进程仍是 DPI 不感知，
-      截图是物理像素、GetWindowRect 是虚拟像素，找图坐标整体错位）。
+    * These three APIs **return an error code / 0 instead of raising**, so the return
+      value must be checked; returning merely because nothing raised leaves the process
+      DPI-unaware (screenshots in physical pixels, GetWindowRect in virtual pixels, and
+      every finding coordinate shifted).
     """
     import ctypes
     user32 = ctypes.windll.user32
@@ -195,9 +195,9 @@ def _set_dpi_awareness():
 
 
 def _is_dpi_aware():
-    """当前进程是否已声明 DPI 感知（未声明时找图坐标会与截图错位）。
+    """Whether this process declared DPI awareness (without it find coordinates shift).
 
-    GetAwarenessFromDpiAwarenessContext: 0=不感知 1=系统级 2=每显示器级。
+    GetAwarenessFromDpiAwarenessContext: 0 = unaware, 1 = system, 2 = per-monitor.
     """
     try:
         import ctypes

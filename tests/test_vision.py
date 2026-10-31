@@ -1,11 +1,11 @@
-"""vision 多尺度找图的单元测试。
+"""Unit tests for vision's multi-scale template matching.
 
-覆盖的核心行为（对应「换分辨率/缩放就找不到按钮」这个 bug）：
-* 同尺寸模板 → 精确命中；
-* 模板被缩小/放大后仍能命中，并且能报出正确的反推缩放比；
-* 绝不误命中无关画面；
-* region 偏移必须加回屏幕坐标；
-* 用户模板目录优先于内置资源。
+Covers the core behavior behind the "buttons not found after a resolution/scale change" bug:
+* same-size template -> exact hit;
+* template shrunk/enlarged still matches, with the correct inferred scale back;
+* never falsely matches an unrelated screen;
+* region offset must be added back to screen coordinates;
+* the user template directory takes precedence over bundled resources.
 """
 
 import numpy as np
@@ -15,7 +15,8 @@ import vision
 
 
 # --------------------------------------------------------------------------- #
-# 合成画面：低频块 + 少量噪声 + 结构，缩放后仍保留足够特征
+# Synthetic scene: low-frequency blocks + light noise + structure, so enough
+# features survive rescaling
 # --------------------------------------------------------------------------- #
 def make_scene(width=400, height=300, seed=7):
     rng = np.random.default_rng(seed)
@@ -23,7 +24,8 @@ def make_scene(width=400, height=300, seed=7):
     scene = np.kron(coarse, np.ones((20, 20), dtype=np.uint8))
     noise = rng.integers(-6, 7, size=(height, width))
     scene = np.clip(scene.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-    # 画几条线，保证有高频细节（纯块状图在缩放后峰值太宽）
+    # Draw a few lines to keep high-frequency detail (pure block images produce
+    # peaks that are too wide after rescaling)
     for i in range(0, width, 37):
         scene[10:height - 10, i:i + 3] = 20
     for j in range(0, height, 29):
@@ -32,7 +34,7 @@ def make_scene(width=400, height=300, seed=7):
 
 
 def save_template(path, gray):
-    """用 cv2 直接写灰度 PNG（vision._template_gray 用 imdecode 读）。"""
+    """Write a grayscale PNG directly via cv2 (vision._template_gray reads it with imdecode)."""
     assert vision.HAS_CV2
     ok = vision.cv2.imwrite(str(path), gray)
     assert ok
@@ -44,7 +46,7 @@ def scene():
 
 
 def match_against(scene, tmp_path, template, monkeypatch, region=None, **kwargs):
-    """在合成画面上跑 vision.find（不截真实屏幕）。"""
+    """Run vision.find on the synthetic scene instead of the real screen."""
     path = tmp_path / "tpl.png"
     save_template(path, template)
 
@@ -73,7 +75,7 @@ def test_find_exact_scale(scene, tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("factor", [0.75, 0.85, 1.25, 1.4])
 def test_find_scaled_template(scene, tmp_path, monkeypatch, factor):
-    """模板与屏幕尺寸不同（等价于 DPI/分辨率不同）时仍能找到。"""
+    """Template and screen differ in size (equivalent to a different DPI/resolution) and still match."""
     base = scene[70:70 + 70, 100:100 + 100].copy()
     tpl = vision.cv2.resize(base, None, fx=factor, fy=factor,
                             interpolation=vision.cv2.INTER_AREA)
@@ -81,14 +83,14 @@ def test_find_scaled_template(scene, tmp_path, monkeypatch, factor):
     match = match_against(scene, tmp_path, tpl, monkeypatch, threshold=0.6)
 
     assert match is not None, f"模板缩放 {factor}x 时未命中"
-    # 匹配时用的是「原尺寸」，所以反推的 scale ≈ 1/factor
+    # Matching runs against the "original size", so the inferred scale is ~1/factor
     assert match.scale == pytest.approx(1.0 / factor, abs=0.12)
     assert match.center[0] == pytest.approx(150, abs=6)
     assert match.center[1] == pytest.approx(105, abs=6)
 
 
 def test_one_percent_scale_error_still_matches(scene, tmp_path, monkeypatch):
-    """缩放比只差 1%（132px 按钮差 1px）时不能掉分：这是 1.4.4 的回归点。"""
+    """A 1% scale error (1px on a 132px button) must not lose score: this is the 1.4.4 regression."""
     tpl = scene[80:80 + 60, 120:120 + 90].copy()
     tpl = vision.cv2.resize(tpl, None, fx=1.01, fy=1.01,
                             interpolation=vision.cv2.INTER_CUBIC)
@@ -105,8 +107,9 @@ def test_find_rejects_unrelated(scene, tmp_path, monkeypatch):
 
 
 def test_threshold_filters_weak_match(scene, tmp_path, monkeypatch):
-    # 1.4.4 起匹配前会做 3×3 模糊，重采样/噪声都能被容忍（0.96 以上），
-    # 所以这里用「被压扁的模板」制造一个稳定的中低分（约 0.74）来测阈值。
+    # Since 1.4.4 matching blurs with a 3x3 kernel first, so resampling/noise are
+    # tolerated (0.96+). A "squashed template" therefore makes a stable mid score
+    # (about 0.74) for testing the threshold.
     base = scene[70:70 + 70, 100:100 + 100].copy()
     tpl = vision.cv2.resize(base, (100, 40), interpolation=vision.cv2.INTER_AREA)
 
@@ -115,23 +118,23 @@ def test_threshold_filters_weak_match(scene, tmp_path, monkeypatch):
 
 
 def test_no_absurdly_small_scales(scene, tmp_path, monkeypatch):
-    """极小缩放比会让噪声也「长得像」模板，必须直接跳过。"""
+    """Tiny scales make noise "look like" the template, so they must be skipped outright."""
     tpl = scene[100:100 + 40, 60:60 + 40].copy()
-    # 强制只搜 0.05~0.15：缩放后只有 2~6 像素，应被 MIN_TEMPLATE_PX 挡掉
+    # Force a 0.05~0.15 search: only 2~6 pixels after scaling, so MIN_TEMPLATE_PX rejects it
     match = match_against(scene, tmp_path, tpl, monkeypatch,
                           threshold=0.3, scale_min=0.05, scale_max=0.15)
     assert match is None
 
 
 def test_region_offset_is_added_back(scene, tmp_path, monkeypatch):
-    """限定窗口区域搜索时，返回的坐标必须是屏幕绝对坐标。"""
+    """When searching a limited window region, returned coordinates must be absolute screen coordinates."""
     region = (200, 60, 400, 300)
     tpl = scene[100:100 + 50, 260:260 + 60].copy()
     match = match_against(scene, tmp_path, tpl, monkeypatch,
                           region=region, threshold=0.8)
 
     assert match is not None
-    # 屏幕绝对坐标 = region 左上角 + 区域内偏移
+    # Absolute screen position = region top-left + offset inside the region
     assert match.left == pytest.approx(260, abs=3)
     assert match.top == pytest.approx(100, abs=3)
 

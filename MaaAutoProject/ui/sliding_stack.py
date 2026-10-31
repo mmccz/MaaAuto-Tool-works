@@ -5,17 +5,17 @@ from PySide6.QtCore import (QPropertyAnimation, QParallelAnimationGroup,
 
 class SlidingStack(QWidget):
     """
-    左右滑动页面容器，替代 QStackedWidget。
-    - 同时显示旧页与新页，做推入/推出动画
-    - 动画结束旧页 hide()，避免渲染残留
-    - 首次 setCurrentIndex 直接显示，无动画
+    Sliding page container, replacing QStackedWidget.
+    - Shows the old and new pages together and animates a push in/out
+    - Hides the old page when the animation ends, so nothing lingers
+    - First setCurrentIndex shows directly, with no animation
 
-    ★ 动画进行中再次切换（用户快速连点侧边栏）曾经会把界面切没：
-      旧实现里 `_busy` 时直接「硬切」，但**没有停掉**正在跑的动画组；
-      等旧动画跑完，它的 done() 会执行 `old.hide()` —— 而 old 此时可能
-      正是刚刚硬切出来的当前页，于是整页被隐藏，界面空白。
-      现在任何一次切换都先 `_abort_anim()`：停动画、把各页归位，
-      再决定是滑动还是硬切；done() 里也只隐藏「已经不是当前页」的那一页。
+    ★ Switching again mid-animation (a user rapidly clicking the sidebar) used to blank
+      the UI: the old code hard-switched while `_busy`, but did **not stop** the running
+      animation. When that animation finished its done() ran `old.hide()` — and old could
+      be the page just hard-switched in, so the whole UI went blank.
+      Now every switch runs `_abort_anim()` first: stop animations, restore each page,
+      then decide slide or hard switch; done() only hides the page that is no longer current.
     """
 
     animation_finished = Signal(int)
@@ -53,10 +53,11 @@ class SlidingStack(QWidget):
 
     # ------------------------------------------------------------------ #
     def _abort_anim(self):
-        """停掉正在进行的动画，归位并只保留当前页可见。
+        """Stop any running animation, restore positions, and leave only the current page visible.
 
-        只把位置挪回 (0,0) 是不够的：滑动中「旧页 + 新页」都是 show 状态，
-        动画被中断时它们谁也等不到 done()，会一直叠着显示。
+        Moving positions back to (0,0) is not enough: while sliding both the old and new
+        pages are visible, and when the animation is interrupted neither gets done(), so
+        they would stay stacked forever.
         """
         group, self._anim_group = self._anim_group, None
         if group is not None:
@@ -88,7 +89,7 @@ class SlidingStack(QWidget):
         if index == self._current and not self._busy:
             return
 
-        # 快速连点时的关键：先收拾残局，再切换
+        # Key for rapid clicks: clean up state first, then switch
         self._abort_anim()
 
         if self._current < 0 or not self._anim_enabled or self._current == index:
@@ -100,7 +101,7 @@ class SlidingStack(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._busy:
-            # 动画中改尺寸会让位移基准失效，直接结束动画按新尺寸归位
+            # Resizing mid-animation invalidates the offset basis; end it and re-place at the new size
             self._abort_anim()
         for w in self._widgets:
             w.setGeometry(self.rect())
@@ -142,7 +143,7 @@ class SlidingStack(QWidget):
         self._current = new_index
 
         def done():
-            # 只隐藏「已经不是当前页」的那一页；否则会把硬切出来的当前页也藏掉
+            # Hide only the page that is no longer current; otherwise the hard-switched page disappears too
             if old is not self._widgets[self._current]:
                 old.hide()
             old.setGeometry(self.rect())

@@ -4,11 +4,11 @@ import colorsys
 from PySide6.QtCore import QObject, Signal
 
 
-DEFAULT_ACCENT = "#3b82f6"     # 默认强调色（蓝）
+DEFAULT_ACCENT = "#3b82f6"     # default accent color (blue)
 
 
 def _normalize_hex(value):
-    """把用户传进来的颜色字符串规整为小写 #rrggbb，非法输入回退到默认色。"""
+    """Normalize the given color string to lowercase #rrggbb; fall back to the default on invalid input."""
     if not isinstance(value, str):
         return DEFAULT_ACCENT
     v = value.strip()
@@ -32,7 +32,7 @@ def _rgb_to_hex(r, g, b):
 
 
 def detect_system_theme():
-    """读注册表判断系统是浅色还是深色；失败按浅色。"""
+    """Read the registry to decide light vs dark; assume light on failure."""
     try:
         import winreg
         key = winreg.OpenKey(
@@ -47,10 +47,10 @@ def detect_system_theme():
 
 
 def resolve_theme(theme):
-    """把 light / dark / system 解析成 light / dark。
+    """Resolve light / dark / system into light / dark.
 
-    独立函数（而不只是 ThemeManager 的方法）：弹窗、富文本这类「没有
-    ThemeManager 引用」的地方也要判断深浅色（比如深色下链接颜色）。
+    A standalone function (not just a ThemeManager method): dialogs and rich text hold
+    no ThemeManager reference but still need the light/dark decision (e.g. link color).
     """
     if theme == "system":
         return detect_system_theme()
@@ -58,7 +58,7 @@ def resolve_theme(theme):
 
 
 def is_dark_theme(theme=None):
-    """当前是否深色主题；theme 为空时读配置（system 会解析）。"""
+    """Whether the current theme is dark; reads config when theme is empty (system is resolved)."""
     if theme is None:
         try:
             from config_manager import load_config
@@ -73,10 +73,10 @@ LINK_COLOR_DARK = "#60a5fa"
 
 
 def link_color(theme=None):
-    """富文本链接颜色（QLabel / QTextBrowser 的 <a> 都不跟 QSS 走）。
+    """Rich-text link color (QLabel / QTextBrowser ``<a>`` does not follow QSS).
 
-    Qt 给富文本锚点的默认色是纯蓝 #0000ff —— 深色主题下贴在 #0f1115 背景上
-    几乎看不见（1.0.5 实测：关于页的 GitHub / 邮箱链接、升级公告里的链接）。
+    Qt's default anchor color is pure blue #0000ff — nearly invisible on the #0f1115
+    dark background (1.0.5: GitHub / mail links on the About page, links in release notes).
     """
     return LINK_COLOR_DARK if is_dark_theme(theme) else LINK_COLOR_LIGHT
 
@@ -87,13 +87,13 @@ class ThemeManager(QObject):
     def __init__(self, themes_dir):
         super().__init__()
         self.themes_dir = themes_dir
-        self.current_theme = "light"      # 解析后的实际主题（light / dark）
-        self._requested_theme = "light"   # 用户请求的主题（可能为 system）
+        self.current_theme = "light"      # resolved theme actually in effect (light / dark)
+        self._requested_theme = "light"   # theme the user requested (may be "system")
         self._accent_color = DEFAULT_ACCENT
-        self._ui_scale = 1.0              # 界面缩放（QSS 里的 font-size 按它放大）
+        self._ui_scale = 1.0              # UI scale (QSS font-size is scaled by it)
 
     # ------------------------------------------------------------------ #
-    # 文件 / 系统主题
+    # Files / system theme
     # ------------------------------------------------------------------ #
     def _load_file(self, name):
         path = os.path.join(self.themes_dir, name)
@@ -111,14 +111,14 @@ class ThemeManager(QObject):
         return theme
 
     # ------------------------------------------------------------------ #
-    # 强调色派生
+    # Accent color derivation
     # ------------------------------------------------------------------ #
     @staticmethod
     def _build_accent_vars(base_hex, resolved_theme):
         """
-        根据基础强调色 + 已解析主题（light / dark），生成一组 QSS 占位符值。
-        浅色主题：直接用用户色，hover / pressed 变深，soft 变浅。
-        深色主题：整体提亮一档，避免在深背景上视觉沉闷。
+        Derive a set of QSS placeholder values from the base accent color + resolved theme.
+        Light theme: use the user color as-is; darken hover / pressed, lighten soft.
+        Dark theme: brighten the whole set one step to avoid a dull look on dark backgrounds.
         """
         base_hex = _normalize_hex(base_hex)
         r, g, b = _hex_to_rgb(base_hex)
@@ -155,8 +155,8 @@ class ThemeManager(QObject):
     @staticmethod
     def _substitute(qss, mapping):
         """
-        只替换 {identifier} 形式的占位符；QSS 规则本身的大括号（无识别符）
-        以及未在 mapping 中的键都会保持原样。
+        Replace only ``{identifier}`` placeholders; brace pairs in the QSS itself (no
+        identifier) and keys missing from mapping are left untouched.
         """
         def repl(m):
             key = m.group(1)
@@ -165,13 +165,13 @@ class ThemeManager(QObject):
 
     @staticmethod
     def _scale_font_sizes(qss, scale):
-        """把 QSS 里所有 ``font-size: Npx`` 按比例缩放。
+        """Scale every ``font-size: Npx`` in the QSS by the given ratio.
 
-        为什么必须改 QSS 而不是只改 QApplication 字体
-        ------------------------------------------------
-        QSS 里的 ``* { font-size: 13px }`` 和一堆具名控件的 ``font-size`` 会
-        **覆盖** ``QApplication.setFont()``。1.0.2 的「界面缩放」只调了 app 字体，
-        结果在真机上完全看不到变化——就是被 QSS 压住了。
+        Why the QSS must change, not just the QApplication font
+        ------------------------------------------------------
+        The QSS ``* { font-size: 13px }`` and the per-widget ``font-size`` rules
+        **override** ``QApplication.setFont()``. 1.0.2's "UI scale" only adjusted the app
+        font, so nothing changed on real machines — the QSS won.
         """
         if abs(scale - 1.0) < 1e-3:
             return qss
@@ -182,20 +182,20 @@ class ThemeManager(QObject):
 
         return re.sub(r"font-size:\s*(\d+(?:\.\d+)?)px", repl, qss)
 
-    # 同时匹配 ``font-size: 13px``（带前缀）和普通长度 ``14px``。
+    # Matches both ``font-size: 13px`` (with prefix) and bare lengths such as ``14px``.
     _PX_RE = re.compile(r"(font-size\s*:\s*)?(\d+(?:\.\d+)?)px")
 
     @classmethod
     def _scale_qss(cls, qss, scale):
-        """按界面缩放重写 QSS 里的 px 长度（字号 + padding / min-width 等）。
+        """Rewrite px lengths in the QSS by the UI scale (font size + padding / min-width etc.).
 
-        只放大字号是不够的：``SegmentItem`` 的 ``min-width: 90px`` 不跟着变，
-        150% 时 18px 字号的「整个屏幕」塞不进 90px 就直接折成两行（实测截图）；
-        输入框的 ``min-height`` / ``padding`` 不放大也会显得局促。
+        Scaling the font size alone is not enough: ``SegmentItem`` has ``min-width: 90px``,
+        and at 150% the 18px "Entire screen" label no longer fits 90px and wraps onto two
+        lines (measured); input ``min-height`` / ``padding`` also look cramped unscaled.
 
-        两条例外：
-          * ``font-size`` 保底 8px（再小就看不清了）；
-          * 1px 及以下的长度不放大——边框/分隔线保持发丝级，否则界面会「发胖」。
+        Two exceptions:
+          * ``font-size`` bottoms out at 8px; anything smaller is unreadable;
+          * lengths of 1px or less are left alone so borders stay hairline, not fat.
         """
         if abs(scale - 1.0) < 1e-3:
             return qss
@@ -212,15 +212,15 @@ class ThemeManager(QObject):
         return cls._PX_RE.sub(repl, qss)
 
     # ------------------------------------------------------------------ #
-    # 应用主题
+    # Apply theme
     # ------------------------------------------------------------------ #
     def apply_theme(self, theme, app, accent_color=None, ui_scale=None):
         """
-        应用主题。
+        Apply the theme.
         :param theme:         light / dark / system
-        :param app:           QApplication 实例
-        :param accent_color:  可选，若提供则更新内部强调色缓存
-        :param ui_scale:      界面缩放倍数（1.0 / 1.25 / 1.5…）；None 表示沿用上次
+        :param app:           QApplication instance
+        :param accent_color:  optional; when given, updates the cached accent color
+        :param ui_scale:      UI scale factor (1.0 / 1.25 / 1.5...); None keeps the last value
         """
         if accent_color is not None:
             self._accent_color = _normalize_hex(accent_color)
@@ -239,7 +239,7 @@ class ThemeManager(QObject):
         qss = self._scale_qss(qss, self._ui_scale)
 
         app.setStyleSheet(qss)
-        # 强制所有顶层窗口重绘（部分 Qt 版本不会自动刷）
+        # Force all top-level windows to repaint (some Qt versions do not refresh on their own)
         for w in app.topLevelWidgets():
             w.style().unpolish(w)
             w.style().polish(w)
@@ -250,7 +250,7 @@ class ThemeManager(QObject):
         self.theme_changed.emit(theme)
 
     def apply_accent(self, accent_color, app):
-        """只重新应用样式表（强调色变化），不切换主题。"""
+        """Re-apply the stylesheet only (accent color changed); do not switch theme."""
         self.apply_theme(self._requested_theme, app, accent_color=accent_color)
 
     def current_accent(self):

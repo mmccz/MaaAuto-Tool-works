@@ -1,12 +1,12 @@
-"""定时规则：多时段 + 工作日（1.3.0）。
+"""Scheduling rules: multiple slots plus weekdays (1.3.0).
 
-数据来源（都放在 config.json）：
+Sources (all in config.json):
 
-* ``schedule_times``     —— 时段列表，如 ``["08:00", "20:30"]``；
-* ``schedule_weekdays``  —— ISO 星期（1=周一 … 7=周日）；空列表 = 每天；
-* ``execute_time``       —— **旧字段**，仅用于兼容老配置（没有 schedule_times 时取它）。
+* ``schedule_times``     - list of slots, e.g. ``["08:00", "20:30"]``;
+* ``schedule_weekdays``  - ISO weekdays (1=Mon ... 7=Sun); empty list = every day;
+* ``execute_time``       - **legacy**, only for old configs (used when schedule_times is absent).
 
-这里只放纯函数，方便单测（不 import Qt，不碰真实时间）。
+Pure functions only, so they are easy to unit-test (no Qt, no real clock).
 """
 
 import datetime as _dt
@@ -16,7 +16,7 @@ DEFAULT_TIME = "08:00"
 
 
 def normalize_times(times: Iterable[str]) -> List[str]:
-    """去重、校验、排序（"8:00" → "08:00"；非法值丢弃）。"""
+    """Deduplicate, validate and sort ("8:00" -> "08:00"; invalid values are dropped)."""
     out = set()
     for raw in times or []:
         text = str(raw or "").strip()
@@ -48,7 +48,7 @@ def normalize_weekdays(days: Iterable[int]) -> List[int]:
 
 
 def effective_times(config: dict) -> List[str]:
-    """当前生效的时段：优先新字段，其次旧 ``execute_time``，最后默认 08:00。"""
+    """Slots in effect: the new field first, then legacy ``execute_time``, then 08:00."""
     times = normalize_times((config or {}).get("schedule_times") or [])
     if times:
         return times
@@ -57,7 +57,7 @@ def effective_times(config: dict) -> List[str]:
 
 
 def effective_weekdays(config: dict) -> List[int]:
-    """生效的星期；空 = 每天。"""
+    """Weekdays in effect; empty = every day."""
     return normalize_weekdays((config or {}).get("schedule_weekdays") or [])
 
 
@@ -73,13 +73,14 @@ def due_slot(times: Sequence[str],
              weekdays: Sequence[int],
              now: _dt.datetime,
              last_key: str) -> Optional[str]:
-    """返回「现在该触发的时段 key」，没有则 None。
+    """The slot key that should fire now, or None.
 
-    语义与旧版一致（**支持补跑**，且在补跑时只跑最近的一次）：
+    Same semantics as before (**catch-up runs** are supported, but only the latest slot):
 
-    * 今天不是选中的星期 → 不触发；
-    * 只考虑 ``<= now`` 的时段，取其中**最晚**的一个（早于它的都算一起错过）；
-    * 该 key 已经触发过（``last_key`` >= 它）→ 不再触发。
+    * today is not a selected weekday -> nothing fires;
+    * consider only slots ``<= now`` and take the **latest** (earlier ones count as
+      missed together with it);
+    * a key already fired (``last_key`` >= it) -> do not fire again.
     """
     if not is_active_day(weekdays, now.date()):
         return None
@@ -99,7 +100,7 @@ def due_slot(times: Sequence[str],
 def next_run(times: Sequence[str],
              weekdays: Sequence[int],
              now: _dt.datetime) -> Optional[_dt.datetime]:
-    """下一次触发时间（最多向后找 8 天覆盖整周）。"""
+    """The next fire time (looks up to 8 days ahead to cover a whole week)."""
     times = normalize_times(times)
     if not times:
         return None
@@ -116,9 +117,11 @@ def next_run(times: Sequence[str],
 
 
 def describe_weekdays(weekdays: Sequence[int], order: Sequence[str]) -> str:
-    """把星期列表转成人话：空=每天，1~5=工作日，6,7=周末，否则逐个列。
+    """Turn a weekday list into words: empty = every day, 1..5 = weekdays, 6-7 = weekend,
+    otherwise list them one by one.
 
-    ``order`` 是 1..7 的本地化短名（由界面传入，函数本身不认识语言）。
+    ``order`` holds localised short names for 1..7 (passed in by the UI; this function
+    knows nothing about languages).
     """
     days = normalize_weekdays(weekdays)
     if not days:
@@ -139,7 +142,7 @@ def parse_hhmm_to_seconds(hhmm: str) -> Optional[int]:
 
 
 def humanize_next(when: Optional[_dt.datetime], now: _dt.datetime) -> Tuple[int, int, bool]:
-    """返回 (小时, 分钟, 是否不是今天)，给首页文案用。"""
+    """Return (hours, minutes, not_today) for the home-page wording."""
     if when is None:
         return 0, 0, False
     diff = int((when - now).total_seconds())

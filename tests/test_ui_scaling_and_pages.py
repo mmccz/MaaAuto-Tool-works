@@ -1,9 +1,10 @@
-"""界面缩放（QSS font-size）与滑动切页的回归测试。
+"""Regression tests for UI scaling (QSS font-size) and sliding page transitions.
 
-两个都是 1.0.2 实测报告里「看起来没做」的功能：
-* 界面缩放：QSS 的 ``* { font-size: 13px }`` 会覆盖 QApplication.setFont()，
-  只改 app 字体等于没改 —— 必须重写 QSS 里的 font-size；
-* 快速切页：动画进行中再切页，旧动画结束后会把当前页 hide 掉，界面空白。
+Both were reported as "looks like it was never implemented" in the 1.0.2 field report:
+* UI scale: the QSS ``* { font-size: 13px }`` overrides QApplication.setFont(), so
+  changing only the app font does nothing — font-size inside the QSS must be rewritten;
+* fast page switching: switching while an animation is running lets the old animation's
+  done() hide the current page, leaving the UI blank.
 """
 
 import os
@@ -23,7 +24,7 @@ import themes as themes_mod  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
-# QSS 缩放
+# QSS scaling
 # --------------------------------------------------------------------------- #
 def test_scale_font_sizes_scales_px_values():
     qss = ("* { font-size: 13px; }\n"
@@ -34,7 +35,7 @@ def test_scale_font_sizes_scales_px_values():
     assert "font-size: 20px" in out        # 13 * 1.5 = 19.5 → 20
     assert "font-size: 33px" in out        # 22 * 1.5 = 33
     assert "font-size: 18px" in out        # 12 * 1.5 = 18
-    # 非 font-size 的 px 不动（padding 等由 Qt 布局负责）
+    # px values outside font-size are untouched (padding etc. is handled by Qt layout)
     assert "padding: 5px 14px" in out
 
 
@@ -44,7 +45,7 @@ def test_scale_one_is_noop():
 
 
 def test_scale_qss_scales_lengths_too():
-    """只缩放字号不够：min-width 不放大时「整个屏幕」会折行。"""
+    """Scaling font size alone is not enough: without a larger min-width "whole screen" wraps."""
     qss = ("* { font-size: 13px; }\n"
            "QPushButton#SegmentItem { padding: 6px 16px; min-width: 90px; }\n"
            "QFrame#Card { border: 1px solid rgba(0, 0, 0, 0.06);"
@@ -57,7 +58,7 @@ def test_scale_qss_scales_lengths_too():
     assert "padding: 9px 24px" in out
     assert "border-radius: 18px" in out
     assert "margin: -8px 0" in out
-    # 发丝边框保持 1px，否则界面会「发胖」
+    # Hairline borders stay 1px, otherwise the UI "bloats"
     assert "border: 1px solid" in out
 
 
@@ -72,7 +73,7 @@ def test_scale_has_floor():
 
 
 def test_theme_manager_remembers_ui_scale(tmp_path, monkeypatch):
-    """apply_accent / 切主题时不能把缩放丢掉。"""
+    """apply_accent / theme switching must not drop the UI scale."""
     (tmp_path / "light.qss").write_text("QLabel { font-size: 10px; }",
                                         encoding="utf-8")
     tm = ThemeManager(str(tmp_path))
@@ -94,13 +95,13 @@ def test_theme_manager_remembers_ui_scale(tmp_path, monkeypatch):
     tm.apply_theme("light", app, ui_scale=1.5)
     assert "font-size: 15px" in app.sheets[-1]
 
-    # 只换强调色，不显式传 ui_scale → 仍按 1.5
+    # Accent color only, ui_scale not passed explicitly → still 1.5
     tm.apply_accent("#ff0000", app)
     assert "font-size: 15px" in app.sheets[-1]
 
 
 # --------------------------------------------------------------------------- #
-# 滑动切页
+# Sliding page transitions
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def qapp():
@@ -128,7 +129,7 @@ def test_rapid_switch_keeps_current_page_visible(qapp):
     assert stack.currentIndex() == 0
     assert pages[0].isVisible()
 
-    # 模拟快速连点：1 → 2 → 1 → 2
+    # Simulate rapid clicking: 1 → 2 → 1 → 2
     stack.setCurrentIndex(1)
     stack.setCurrentIndex(2)
     stack.setCurrentIndex(0)
@@ -136,10 +137,11 @@ def test_rapid_switch_keeps_current_page_visible(qapp):
 
     current = stack.currentIndex()
     assert current == 1
-    # 关键回归：当前页不能被上一次动画的 done() 误隐藏（1.0.2 的「界面消失」）
+    # Key regression: the current page must not be hidden by the previous animation's
+    # done() (the 1.0.2 "UI disappears" bug)
     assert pages[current].isVisible(), "当前页被误隐藏了"
 
-    # 动画跑完后应当只剩当前页可见（否则多页叠在一起）
+    # Once the animation finishes only the current page should be visible (otherwise pages stack)
     deadline = time.time() + 2.0
     while time.time() < deadline:
         qapp.processEvents()
@@ -171,10 +173,11 @@ def test_switching_back_and_forth_no_animation(qapp):
 
 
 # --------------------------------------------------------------------------- #
-# 界面缩放「即时生效」+ 重启入口
+# UI scale takes effect live + restart entry point
 #
-# 1.0.4 的问题：改缩放只写了配置，界面要等下次启动才变，也没有任何重启
-# 提示/按钮——实测就是「改了没反应，也没有重启等选项」。
+# The 1.0.4 problem: changing the scale only wrote the config, the UI changed on the
+# next start, and there was no restart prompt/button — users reported "changed it and
+# nothing happened, and there's no restart option either".
 # --------------------------------------------------------------------------- #
 def test_build_restart_command_frozen():
     from ui.main_window import build_restart_command
@@ -184,7 +187,7 @@ def test_build_restart_command_frozen():
         frozen=True, executable=r"C:\Apps\MaaAuto\MaaAuto.exe")
 
     assert program == r"C:\Apps\MaaAuto\MaaAuto.exe"
-    # --upgrading / --autostart 必须剥掉：重启要看到窗口，而不是静默进托盘
+    # --upgrading / --autostart must be stripped: a restart should show the window, not go silently to tray
     assert args == ["--minimized"]
 
 
@@ -196,13 +199,13 @@ def test_build_restart_command_dev_mode():
         executable=r"C:\Python311\python.exe")
 
     assert program == r"C:\Python311\python.exe"
-    # 开发态必须把脚本路径补回去，否则新进程只是启动了个解释器
+    # In dev mode the script path must be put back, otherwise the new process just starts an interpreter
     assert args[0].endswith("main.py")
     assert args[1:] == ["--debug"]
 
 
 def test_apply_ui_scale_live_repaints_and_widens_sidebar(qapp, tmp_path):
-    """切换缩放后：QSS font-size 立刻按比例重写 + 侧栏立刻加宽。"""
+    """After a scale switch: QSS font-size is rewritten proportionally right away and the sidebar widens."""
     from ui.main_window import apply_ui_scale_live
 
     (tmp_path / "light.qss").write_text(
@@ -257,15 +260,16 @@ def test_sidebar_set_scale_changes_width(qapp):
     bar.set_scale(1.5)
     assert bar.minimumWidth() == int(round(Sidebar.BASE_WIDTH * 1.5))
     assert bar.maximumWidth() == bar.minimumWidth()      # setFixedWidth
-    bar.set_scale(0.5)                                   # 下限 1.0，不会缩得比默认窄
+    bar.set_scale(0.5)                                   # floor is 1.0, never narrower than default
     assert bar.minimumWidth() == Sidebar.BASE_WIDTH
 
 
 def test_time_picker_keeps_value_after_first_tick(qapp):
-    """滚轮时间选择器不能在启动后第一个事件循环把「08:00」重置成 00:00。
+    """The wheel time picker must not reset "08:00" to 00:00 in the first event loop after startup.
 
-    1.0.4 的实测副作用：每次启动定时执行时间都被改成 00:00 并落盘，
-    连带用旧配置快照冲掉同一瞬间写入的其它设置（界面缩放/主题）。
+    1.0.4 side effect observed in the field: on every start the scheduled run time was
+    changed to 00:00 and persisted, which also clobbered other settings written at the
+    same moment (UI scale / theme) with the stale config snapshot.
     """
     from PySide6.QtCore import QTime
     from ui.wheel_time_picker import WheelTimePicker
@@ -275,14 +279,14 @@ def test_time_picker_keeps_value_after_first_tick(qapp):
     emits = []
     picker.timeChanged.connect(lambda t: emits.append(t.toString("HH:mm")))
 
-    qapp.processEvents()          # 让构造时排的 singleShot(0) 跑掉
+    qapp.processEvents()          # let the singleShot(0) queued at construction run
 
     assert picker.time().toString("HH:mm") == "08:00"
     assert emits == [], "初始化对齐滚动条时不应 emit timeChanged"
 
 
 def test_switch_and_swatch_scale_with_ui(qapp):
-    """自绘/固定尺寸控件也得跟着缩放，否则 150% 下开关还是 44×24。"""
+    """Custom-painted / fixed-size controls must scale too, otherwise the switch is still 44×24 at 150%."""
     from ui.components import Switch, AccentColorPicker
 
     sw = Switch()
@@ -308,7 +312,7 @@ def test_wheel_column_scales_and_keeps_value(qapp):
     column.set_ui_scale(1.5)
     assert column.ITEM_HEIGHT == int(round(WheelColumn.BASE_ITEM_HEIGHT * 1.5))
     assert column.minimumHeight() == column.ITEM_HEIGHT
-    # 重算行高后滚动条要重新对齐，值不能丢
+    # After recomputing the item height the scrollbar must realign without losing the value
     assert column.value() == "08"
 
     picker = WheelTimePicker()
@@ -336,7 +340,7 @@ def test_settings_page_scales_painted_widgets(qapp):
     try:
         for sw, _key in page._switches:
             assert sw.minimumWidth() == 66 and sw.minimumHeight() == 36
-        # 定时编辑器（星期按钮 + 时段列表）按比例放大
+        # Schedule editor (weekday buttons + slot list) scales proportionally
         assert page.schedule_editor._day_buttons[0][1].width() == 51
         assert page.schedule_editor.list.height() == 132
         assert page.accent_picker._swatches
@@ -360,7 +364,7 @@ def test_sidebar_live_scale_updates_logo_and_padding(qapp):
 
 
 def test_spawn_new_instance_normalizes_tuple(qapp, monkeypatch):
-    """PySide6 静态 startDetached 返回 (ok, pid)，不能拿元组当真值判断。"""
+    """PySide6's static startDetached returns (ok, pid); a tuple must not be used as a truthy value."""
     import ui.main_window as mw
 
     class FakeQProcess:
@@ -376,12 +380,12 @@ def test_spawn_new_instance_normalizes_tuple(qapp, monkeypatch):
     assert mw.spawn_new_instance("x", []) is False
     FakeQProcess.result = (True, 4242)
     assert mw.spawn_new_instance("x", []) is True
-    FakeQProcess.result = True           # 老接口：直接 bool
+    FakeQProcess.result = True           # older API: plain bool
     assert mw.spawn_new_instance("x", []) is True
 
 
 def test_sidebar_scaled_at_construction(qapp):
-    """启动时 ui_scale 就是 1.5 的话，边距/图标必须一开始就按比例（不是等切一次）。"""
+    """If ui_scale is already 1.5 at startup, margins/icon must be proportional from the start (not only after a switch)."""
     from ui.sidebar import Sidebar
 
     class FakeI18n:
@@ -426,7 +430,7 @@ def test_settings_page_emits_ui_scale_and_restart(qapp):
 
 
 def test_main_window_applies_scale_without_restart(qapp, tmp_path, monkeypatch):
-    """整窗回归：切 150% 后立即重绘、侧栏加宽，并询问是否重启。"""
+    """Whole-window regression: after switching to 150% the UI repaints at once, the sidebar widens, and it asks about restarting."""
     import time
 
     import config_manager
@@ -460,7 +464,7 @@ def test_main_window_applies_scale_without_restart(qapp, tmp_path, monkeypatch):
 
         base_width = win.sidebar._base_width
         win._on_ui_scale_changed(1.5)
-        qapp.processEvents()                   # 让 theme_transition 的 singleShot(0) 跑掉
+        qapp.processEvents()                   # let theme_transition's singleShot(0) run
 
         assert win.config["ui_scale"] == 1.5
         assert "font-size: 20px" in qapp.styleSheet()   # 13 * 1.5 = 19.5 → 20
@@ -483,7 +487,7 @@ def test_main_window_applies_scale_without_restart(qapp, tmp_path, monkeypatch):
 
 
 def test_main_window_restart_confirm_true_restarts(qapp, tmp_path, monkeypatch):
-    """确认「立即重启」时走 restart_app；选「稍后」则什么都不做。"""
+    """Confirming "restart now" goes through restart_app; choosing "later" does nothing."""
     import config_manager
     from i18n import init_i18n
     from themes import ThemeManager
@@ -529,10 +533,11 @@ def test_main_window_restart_confirm_true_restarts(qapp, tmp_path, monkeypatch):
         qapp.processEvents()
 
 def test_settings_page_round_trips_log_retention(qapp):
-    """日志保留天数必须真的进出配置（1.1.1）。
+    """Log retention days must really round-trip through the config (1.1.1).
 
-    这条是防回归用的：1.1.0 的 ``click_activate`` 就是「设置页有开关、配置也写了，
-    但业务代码从不读」，结果开关形同虚设。新设置项至少要有「控件 ↔ get_config」往返。
+    This guards against a past regression: 1.1.0's ``click_activate`` had a settings
+    toggle and wrote the config, but the runtime never read it, so the toggle did
+    nothing. Every new setting needs at least a control ↔ get_config round trip.
     """
     from config_manager import DEFAULT_CONFIG
     from ui.pages.settings_page import SettingsPage
@@ -553,7 +558,7 @@ def test_settings_page_round_trips_log_retention(qapp):
         assert page.log_retention_spin.value() == 30
         emitted = []
         page.config_changed.connect(emitted.append)
-        # IntLineEdit 在「编辑完成」（回车/失焦）时才发 valueChanged
+        # IntLineEdit only emits valueChanged when editing finishes (Enter / focus out)
         page.log_retention_spin.setText("7")
         page.log_retention_spin.editingFinished.emit()
         assert page.get_config()["log_retention_days"] == 7

@@ -1,9 +1,11 @@
 name: tests
 
-# 触发：push / PR 到 main。发版前先在 CI 上把「不依赖桌面的单元测试」跑一遍，
-# 免得把「版本解析错了」「payload 路径穿越」「找图换缩放失效」这类问题带到 Release。
+# Trigger: push / PR to main. Run the "desktop-independent unit tests" in CI before
+# releasing, so problems like "version parsing is wrong", "payload path traversal" or
+# "image finding fails after a scaling change" never reach a Release.
 #
-# 这里只跑纯逻辑测试：不截真实屏幕、不注入真实鼠标、不联网（网络全部被 mock）。
+# Only pure logic tests run here: no real screen capture, no real mouse injection, no
+# network (all network calls are mocked).
 on:
   push:
     branches: [main]
@@ -25,8 +27,8 @@ jobs:
       - name: Checkout main app
         uses: actions/checkout@v4
 
-      # 安装器仓库里也有一套测试（版本解析 / payload 替换回滚 / native_ui）。
-      # 与发版 job 一样按 main 拉取：两边的契约常量必须对得上。
+      # The installer repo has its own test suite (version parsing / payload replace-rollback / native_ui).
+      # It is pulled from main like the release job: the contract constants on both sides must match.
       - name: Checkout installer
         uses: actions/checkout@v4
         with:
@@ -34,10 +36,10 @@ jobs:
           ref: main
           path: installer
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.15
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.15"
           cache: pip
           cache-dependency-path: |
             MaaAutoProject/requirements.txt
@@ -50,7 +52,7 @@ jobs:
           pip install -r installer/MaaAutoInstaller/requirements.txt
           pip install pytest
 
-      # vision.py 依赖 cv2；缺了会「静默变慢/降级」，这里先硬性确认。
+      # vision.py needs cv2; missing it degrades silently, so assert it up front.
       - name: Verify test prerequisites
         shell: pwsh
         run: |

@@ -1,17 +1,18 @@
-"""新手教程：第一次使用时把「怎么配、怎么跑」讲清楚。
+"""Tutorial: explains how to configure and run on first use.
 
-重点（用户明确要求必须让使用者看到的两条）：
-  1. MAA 里一定要勾选「完成后退出模拟器」；
-  2. MaaEnd 任务列表**最后**一定要加「关闭程序」或「关闭模拟器」。
+Emphasis (the two points users explicitly asked to surface):
+  1. In MAA, always tick "Exit emulator when done";
+  2. In the MaaEnd task list, always append "Close program" or "Close emulator" **last**.
 
-这两条单独用 ``TutorialWarning`` 样式块高亮（红底深红字，深色主题下自动换色），
-而不是埋在正文里 —— 它们是整个自动化能不能收尾的前提。
+These two use the ``TutorialWarning`` style block (red background, dark red text; it
+re-colors on dark themes) instead of being buried in the body — they decide whether the
+automation can shut down cleanly at all.
 """
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QScrollArea, QWidget, QFrame)
 
-# (标题 key, 正文 key, 高亮警告 key 或 None)
+# (title key, body key, warning key or None)
 SECTIONS = [
     ("tutorial.s1.title", "tutorial.s1.body", None),
     ("tutorial.s2.title", "tutorial.s2.body", "tutorial.warn_maa"),
@@ -53,8 +54,8 @@ class TutorialDialog(QDialog):
         scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         scroll.viewport().setAutoFillBackground(False)
         container = QWidget()
-        # ★ 不加这两行，深色主题下滚动区会露出默认白底（QWidget 不会自己透明），
-        #   于是白底 + 浅色文字 = 看不见（实测截图）。
+        # ★ Without these two lines the scroll area shows its default white background on
+        #   dark themes (QWidget is not transparent by itself), so white + light text = invisible.
         container.setObjectName("TutorialContainer")
         container.setAttribute(Qt.WA_StyledBackground, True)
         container.setAutoFillBackground(False)

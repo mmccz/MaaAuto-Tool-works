@@ -1,14 +1,17 @@
-"""维护「设置 → 应用」里的 MaaAuto 记录（D-2 自愈）。
+"""Keeps the MaaAuto entry in Settings > Apps up to date (D-2 self-healing).
 
-**为什么要它**：自动升级只替换程序文件、不跑 Inno 安装器，所以卸载项里的
-``DisplayVersion`` 会永远停在**安装时**的版本——用户升到 1.4.2 了，「设置→应用」
-里还写着 1.4.1（2026-10-31 复核发现）。
+**Why this exists**: the auto-updater only replaces program files and never runs
+the Inno installer, so the uninstall entry's ``DisplayVersion`` stays frozen at the
+version that was installed. A user who had upgraded to 1.4.2 still saw 1.4.1 in
+Settings > Apps (found while re-checking on 2026-10-31).
 
-**怎么修**：主程序每次启动时找一次卸载项，只有 ``InstallLocation`` 正好指向
-自己时才把 ``DisplayVersion`` / ``DisplayIcon`` / ``VersionMajor`` / ``VersionMinor``
-更新到当前版本。写入失败只记 DEBUG，绝不影响启动；不是 Windows 直接跳过。
+**How it is fixed**: on every start the main program looks up the uninstall entry
+once, and only when ``InstallLocation`` points at itself does it rewrite
+``DisplayVersion`` / ``DisplayIcon`` / ``VersionMajor`` / ``VersionMinor`` to the
+current version. A failed write is logged at DEBUG and never affects startup; on
+non-Windows platforms this is skipped entirely.
 
-只碰 ``HKCU``（本安装是 per-user 安装），不需要管理员。
+Only ``HKCU`` is touched (this is a per-user install), so no admin rights needed.
 """
 
 import os
@@ -20,7 +23,7 @@ UNINSTALL_ROOT = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
 
 def _norm(path: object) -> str:
-    """路径归一化，用于比较登记目录与实际安装目录。"""
+    """Normalize a path for comparing the registered dir with the install dir."""
     try:
         text = str(path).strip().strip('"')
         if not text:
@@ -45,9 +48,10 @@ def _version_parts(text: str):
 
 def updates_for(values: Dict[str, object], app_version: str,
                 install_dir: str) -> Dict[str, object]:
-    """算出卸载项里需要改写的值；不需要/不是自己这条时返回 ``{}``。
+    """Compute the uninstall-entry values that need rewriting.
 
-    纯函数：不读注册表，方便单测。
+    Returns ``{}`` when nothing needs changing or the entry is not ours.
+    Pure function: it never reads the registry, which keeps it unit-testable.
     """
     if not app_version:
         return {}
@@ -109,9 +113,11 @@ def _read_values(root, path: str):
 
 
 def sync_display_version(app_version: str, install_dir: str) -> bool:
-    """把指向 ``install_dir`` 的卸载项版本号刷成 ``app_version``。
+    """Set the uninstall-entry version to ``app_version`` for the entry pointing at
+    ``install_dir``.
 
-    返回是否真的写了注册表。任何异常都吞掉（这是展示信息，不该影响启动）。
+    Returns whether the registry was actually written. Exceptions are swallowed:
+    this is display-only information and must never affect startup.
     """
     if os.name != "nt":
         return False

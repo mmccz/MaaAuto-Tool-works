@@ -14,8 +14,8 @@ class Sidebar(QWidget):
     def __init__(self, i18n, compact=False, scale=1.0, parent=None):
         super().__init__(parent)
         self.setObjectName("Sidebar")
-        # 窄屏（<1000 逻辑像素）时收窄，把空间留给内容区；
-        # 界面缩放放大字号时同步加宽，否则「MaaAuto 控制台」会被截断。
+        # Narrow below 1000 logical px to give the content area more room;
+        # widen along with ui_scale, otherwise the "MaaAuto console" label is clipped.
         self._base_width = self.BASE_WIDTH_COMPACT if compact else self.BASE_WIDTH
         self._scale = self._normalize_scale(scale)
         self.setFixedWidth(self.scaled_width())
@@ -26,7 +26,7 @@ class Sidebar(QWidget):
         self._setup_ui()
 
     # ------------------------------------------------------------------
-    # 界面缩放
+    # UI scale
     # ------------------------------------------------------------------
     @staticmethod
     def _normalize_scale(scale):
@@ -39,11 +39,11 @@ class Sidebar(QWidget):
         return int(round(self._base_width * self._scale))
 
     def set_scale(self, scale):
-        """界面缩放变化时即时改宽度（不必重启）。
+        """Apply the width immediately when ui_scale changes (no restart).
 
-        宽度是构造时 setFixedWidth 定死的，1.0.4 改缩放后侧栏宽度要等重启
-        才跟着变——也是「界面缩放改了没反应」的一部分。图标、内外边距一起
-        放大，否则 150% 时只剩字变大、图标还是 28px。
+        Width is fixed with setFixedWidth at construction, so in 1.0.4 the sidebar
+        only resized after a restart — part of "UI scale changes do nothing". Scale
+        icons and paddings too, or at 150% only text grows and icons stay 28px.
         """
         self._scale = self._normalize_scale(scale)
         self.setFixedWidth(self.scaled_width())
@@ -106,7 +106,7 @@ class Sidebar(QWidget):
 
         layout.addStretch()
         self._buttons[0].setChecked(True)
-        self._apply_metrics()      # 启动时可能就是 1.25 / 1.5，边距图标要一次对齐
+        self._apply_metrics()      # startup may already be 1.25 / 1.5; align margins and icons once
 
     def _on_click(self, index):
         for i, b in enumerate(self._buttons):

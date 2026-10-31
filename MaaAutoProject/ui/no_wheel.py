@@ -14,7 +14,7 @@ class NoWheelTimeEdit(QTimeEdit):
 
 
 class IntLineEdit(QLineEdit):
-    """替代 QSpinBox：QLineEdit + 整数校验，避开 QSS 按钮错位问题。"""
+    """QSpinBox replacement: QLineEdit + integer validation, avoiding QSS button misalignment."""
     valueChanged = Signal(int)
 
     def __init__(self, minimum=0, maximum=999999, value=0, parent=None):

@@ -1,25 +1,28 @@
-"""公告：安装包内置 + GitHub 在线更新（Pull 拉取 JSON，不发版也能改公告）。
+"""Announcements: bundled with the installer and refreshed online from GitHub
+(a JSON pull at runtime, so announcements can change without a release).
 
-在线源就是本仓库里的 ``MaaAutoProject/resources/announcements.json``：
-改完 push 到 ``main``，客户端下次启动就会拉到，不需要发新版本。
-国内访问 raw.githubusercontent 不稳，所以再带一个 jsDelivr 镜像，逐个尝试。
+The online source is ``MaaAutoProject/resources/announcements.json`` in this repo:
+push the change to ``main`` and clients pick it up on their next start, no new version
+needed. raw.githubusercontent.com is unreliable from mainland China, so a jsDelivr
+mirror is tried as well, one source after another.
 
-加载策略（保证离线可用、不卡界面）：
-  1. 启动时先用**上次拉到的缓存**（``config/announcements_cache.json``），
-     没有缓存则用安装包内置 ``resources/announcements.json`` —— 秒开；
-  2. 后台线程拉在线版本，成功就原子写缓存并刷新首页红点；
-  3. 「未读」判定 = 没见过的 id；或 id 都见过但 ``updated`` 变了（内容更新）。
-     有未读时首页「公告」按钮显示红点；之前已经看过公告的用户会在启动后
-     自动弹一次公告窗口（每轮运行只弹一次）。
+Loading strategy (offline-safe, never blocks the UI):
+  1. On start use the **last fetched cache** (``config/announcements_cache.json``);
+     with no cache, fall back to the bundled ``resources/announcements.json`` — instant;
+  2. A background thread pulls the online copy; on success it atomically writes the
+     cache and refreshes the home-page badge;
+  3. "Unread" = an id never seen before; or all ids seen but ``updated`` changed.
+     Unread items show a badge on the home-page "Announcements" button; users who
+     have read announcements before get one automatic popup after start (once per run).
 
-文件结构::
+File format::
 
     {"updated": "2026-10-24",
      "items": [{"id": "...", "date": "...", "tag": "版本更新",
                 "title": {"zh_CN": "...", "en_US": "..."},
                 "body":  {"zh_CN": "...", "en_US": "..."}}]}
 
-``body`` 是 Markdown，弹窗里用 ``QTextBrowser.setMarkdown`` 渲染。
+``body`` is Markdown, rendered in the dialog with ``QTextBrowser.setMarkdown``.
 """
 import json
 import os
@@ -39,12 +42,12 @@ _UA = "MaaAuto-Announcements/1.0"
 
 
 # --------------------------------------------------------------------------- #
-# 解析 / 读取
+# Parse / load
 # --------------------------------------------------------------------------- #
 def parse_announcements(payload):
-    """把 dict / bytes / JSON 文本解析成 (updated, items)。
+    """Parse a dict / bytes / JSON text into (updated, items).
 
-    任何异常都返回 ``("", [])``，绝不把坏数据抛给界面。
+    Any exception returns ``("", [])``; bad data never reaches the UI.
     """
     try:
         if isinstance(payload, (bytes, bytearray)):
@@ -91,7 +94,7 @@ def load_cached_announcements(config_dir=None):
 
 
 def save_cache(updated, items, config_dir=None):
-    """原子写缓存；失败静默（缓存只是加速，不能影响主流程）。"""
+    """Atomically write the cache; failures are silent (the cache only speeds things up)."""
     path = cache_path(config_dir)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -108,12 +111,12 @@ def save_cache(updated, items, config_dir=None):
 
 
 def merge_announcements(base_items, extra_items):
-    """按 id 合并公告：``extra`` 中同 id 的条目覆盖 ``base``，顺序按日期倒序。
+    """Merge announcements by id: same-id entries in ``extra`` override ``base``, newest first.
 
-    为什么要合并而不是直接替换：raw.githubusercontent 失败时会回退 jsDelivr，
-    而 jsDelivr 对 ``@main`` 有缓存，可能返回**更旧**的 JSON（条目更少、
-    ``updated`` 更早）。直接覆盖会让列表里的旧版本公告"消失"，用户看到
-    「公告看一会就没了，重启又回来」。
+    Why merge instead of replace: when raw.githubusercontent.com fails we fall back to
+    jsDelivr, which caches ``@main`` and may return an **older** JSON (fewer items, earlier
+    ``updated``). Replacing outright makes older announcements "disappear" — reported as
+    "announcements vanish after a while and come back on restart".
     """
     merged = {}
     order = []
@@ -123,7 +126,7 @@ def merge_announcements(base_items, extra_items):
         ident = item["id"]
         if ident not in merged:
             order.append(ident)
-        merged[ident] = item          # 后出现的覆盖先出现的
+        merged[ident] = item          # later entries override earlier ones
 
     def sort_key(ident):
         date = str(merged[ident].get("date") or "")
@@ -134,18 +137,18 @@ def merge_announcements(base_items, extra_items):
 
 
 def pick_best(local_updated, local_items, remote_updated, remote_items):
-    """本地 + 在线取"更完整"的那份：``updated`` 取较新，条目取并集。"""
+    """Pick the "more complete" of local and online: newer ``updated``, union of items."""
     merged = merge_announcements(local_items, remote_items)
     updated = max(str(local_updated or ""), str(remote_updated or "")) or ""
     return updated, merged
 
 
 def initial_announcements(config_dir=None):
-    """启动时用的内容：缓存与内置取 updated 更新的那个。"""
+    """Content used at startup: whichever of cache and bundle has the newer updated."""
     cached_updated, cached_items = load_cached_announcements(config_dir)
     bundled_updated, bundled_items = load_bundled_announcements()
     if cached_items and bundled_items:
-        # 两边都做过合并：既不会因为缓存旧而丢新公告，也不会因为内置旧而丢新缓存
+        # Both sides were merged: a stale cache never drops new items, nor a stale bundle new cache entries.
         return pick_best(bundled_updated, bundled_items,
                          cached_updated, cached_items)
     if cached_items:
@@ -154,7 +157,7 @@ def initial_announcements(config_dir=None):
 
 
 # --------------------------------------------------------------------------- #
-# 在线拉取
+# Online fetch
 # --------------------------------------------------------------------------- #
 def remote_urls():
     urls = list(getattr(app_info, "APP_ANNOUNCEMENTS_URLS", ()) or ())
@@ -162,7 +165,7 @@ def remote_urls():
 
 
 def fetch_remote_announcements(urls=None, timeout=8):
-    """依次尝试在线源，返回 (updated, items) 或 None。"""
+    """Try the online sources in order; return (updated, items) or None."""
     urls = list(urls) if urls else remote_urls()
     for url in urls:
         try:
@@ -179,22 +182,22 @@ def fetch_remote_announcements(urls=None, timeout=8):
 
 
 # --------------------------------------------------------------------------- #
-# 未读判定
+# Unread detection
 # --------------------------------------------------------------------------- #
 def unseen_ids(items, seen_ids):
-    """没见过的公告 id。"""
+    """Announcement ids never seen before."""
     seen = set(seen_ids or [])
     return [item.get("id", "") for item in items
             if item.get("id") and item["id"] not in seen]
 
 
 def unread_state(items, updated, seen_ids, seen_updated):
-    """首页红点状态。
+    """Home-page badge state.
 
-    ``count`` 含义：
-      * >0 且 ``new`` 非空 —— 有新公告（数字 = 新公告条数）；
-      * ``updated_changed`` —— id 都看过了但公告内容更新过，记 1 条提示；
-      * 0 —— 全看过且没更新。
+    ``count`` semantics:
+      * >0 and ``new`` non-empty — new announcements (count = number of new items);
+      * ``updated_changed`` — all ids seen but content was updated; report 1 item;
+      * 0 — everything seen and nothing updated.
     """
     new_ids = unseen_ids(items, seen_ids)
     updated_changed = bool(updated) and bool(seen_updated) and updated != seen_updated
@@ -209,7 +212,7 @@ def unread_state(items, updated, seen_ids, seen_updated):
 
 
 def localize(item, lang):
-    """取当前语言的标题/正文；缺失时回退到中文再回退到英文。"""
+    """Title/body for the current language; fall back to Chinese, then English."""
     def pick(field):
         value = item.get(field)
         if isinstance(value, str):
@@ -228,10 +231,11 @@ def localize(item, lang):
 
 
 class AnnouncementDialog(QDialog):
-    """左侧目录 + 右侧**连续滚动**的全部公告（1.3.0）。
+    """Table of contents on the left, all announcements scrolling continuously on the right (1.3.0).
 
-    以前右侧一次只渲染一条，用户以为"旧版本公告看不到"。现在把全部条目拼成
-    一篇长文，左侧列表点击即跳转到对应小节，滚轮可以一路看完所有版本更新。
+    The right pane used to render one entry at a time, which read as "old announcements
+    are gone". Now every entry is one long document: clicking the left list jumps to that
+    section, and the wheel scrolls through all release notes in a single pass.
     """
 
     def __init__(self, i18n, items, lang="zh_CN", parent=None, updated=""):
@@ -320,7 +324,7 @@ class AnnouncementDialog(QDialog):
                          item["tag"], item["id"]]).lower()
 
     def _apply_filter(self, text):
-        """按关键词过滤左侧目录（正文长文保持完整，便于对照阅读）。"""
+        """Filter the left-hand table of contents by keyword (the body stays complete for reference)."""
         needle = (text or "").strip().lower()
         visible = 0
         first = -1
@@ -343,7 +347,7 @@ class AnnouncementDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def _markdown_to_html(self, text):
-        """把 Markdown 正文转成 HTML 片段（保留链接样式）。"""
+        """Convert the Markdown body to an HTML fragment (keeping link styling)."""
         from PySide6.QtGui import QTextDocument
         doc = QTextDocument()
         try:
@@ -354,7 +358,7 @@ class AnnouncementDialog(QDialog):
 
     @staticmethod
     def _strip_doc_wrapper(html):
-        """QTextDocument.toHtml() 会带 <html><body>；取 body 内容拼长文。"""
+        """QTextDocument.toHtml() wraps output in <html><body>; take the body for the long document."""
         lower = html.lower()
         begin = lower.find("<body")
         if begin >= 0:

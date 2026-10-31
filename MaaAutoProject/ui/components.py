@@ -7,11 +7,11 @@ from PySide6.QtGui import QColor, QPainter
 
 
 # =============================================================================
-# 界面缩放：自绘 / 固定尺寸控件的换算
+# UI scaling: conversion for self-painted / fixed-size widgets
 #
-# QSS 只能缩放 ``font-size``。Switch / 色块 / 滚轮时间这类尺寸写死在代码里的
-# 控件不会跟着变——150% 时字体已经 20px，开关还是 44×24，视觉上明显脱节。
-# 统一用这个函数按 ui_scale 换算。
+# QSS can only scale ``font-size``. Widgets whose size is hardcoded — Switch, color
+# swatches, wheel time — do not follow: at 150% the text is 20px while the switch is
+# still 44×24, which visibly drifts. Use this helper to convert by ui_scale.
 # =============================================================================
 def scale_px(value, scale, minimum=1):
     try:
@@ -21,7 +21,7 @@ def scale_px(value, scale, minimum=1):
 
 
 # =============================================================================
-# Card / StatCard / SettingItem / SettingGroup（保持原样）
+# Card / StatCard / SettingItem / SettingGroup (kept as is)
 # =============================================================================
 class Card(QFrame):
     def __init__(self, parent=None):
@@ -122,12 +122,12 @@ class SettingGroup(QFrame):
 
 
 # =============================================================================
-# Switch：iOS 风格开关
+# Switch: iOS-style toggle
 # =============================================================================
 class Switch(QAbstractButton):
     """
-    自适应主题色的 iOS 风格开关。
-    通过 QSS 的 qproperty-* 注入颜色：
+    iOS-style toggle that adapts to the theme color.
+    Colors are injected through QSS qproperty-*:
         Switch { qproperty-accent: #3b82f6; qproperty-trackOff: #e5e7eb;
                  qproperty-knobColor: #ffffff; }
     """
@@ -152,7 +152,7 @@ class Switch(QAbstractButton):
         self.toggled.connect(self._on_toggled)
 
     def set_ui_scale(self, scale):
-        """开关是自绘的固定尺寸控件，QSS 缩放不到它，这里跟着界面缩放走。"""
+        """The switch is self-painted and fixed-size, so QSS cannot scale it; follow ui_scale here."""
         self.setFixedSize(scale_px(self.BASE_WIDTH, scale),
                           scale_px(self.BASE_HEIGHT, scale))
         self.update()
@@ -205,7 +205,7 @@ class Switch(QAbstractButton):
         self._anim.start()
 
     def setCheckedSilently(self, checked):
-        """初始化时使用，跳过动画、不触发信号。"""
+        """Use at init: skip the animation, emit no signals."""
         self.blockSignals(True)
         self.setChecked(checked)
         self.blockSignals(False)
@@ -213,7 +213,7 @@ class Switch(QAbstractButton):
         self._progress = 1.0 if checked else 0.0
         self.update()
 
-    # -------- 绘制 --------
+    # -------- Painting --------
     def paintEvent(self, _):
             p = QPainter(self)
             p.setRenderHint(QPainter.Antialiasing)
@@ -223,7 +223,7 @@ class Switch(QAbstractButton):
             t = self._progress
 
             if not self.isEnabled():
-                # 禁用态：灰色不透明
+                # Disabled: solid gray
                 track = QColor("#d1d5db" if self._knob_color.lightness() > 128 else "#4b5563")
                 knob = QColor("#f3f4f6" if self._knob_color.lightness() > 128 else "#9ca3af")
                 p.setPen(Qt.NoPen)
@@ -235,7 +235,7 @@ class Switch(QAbstractButton):
                 p.drawEllipse(QRectF(knob_x, 3, knob_d, knob_d))
                 return
 
-            # 悬停：稍微提亮
+            # Hover: slightly brighter
             hover = self.underMouse()
             mix = 0.08 if hover else 0.0
 
@@ -269,13 +269,13 @@ class Switch(QAbstractButton):
 
 
 # =============================================================================
-# SegmentedControl：分段选择器（用于前台处理三选一）
+# SegmentedControl: segmented picker (for the three foreground-action choices)
 # =============================================================================
 class SegmentedControl(QWidget):
     """
-    类似 iOS 的分段控件。
+    iOS-like segmented control.
     items: [(i18n_key_or_text, value), ...]
-    用法：
+    Usage:
         seg = SegmentedControl([("settings.foreground_action.none", "none"),
                                 ("settings.foreground_action.kill_all", "kill_all"),
                                 ("settings.foreground_action.blacklist", "blacklist")],
@@ -353,14 +353,14 @@ class SegmentedControl(QWidget):
 
 
 # =============================================================================
-# AccentColorPicker：强调色选择器（预设色块 + 自定义）
+# AccentColorPicker: accent color picker (presets + custom)
 # =============================================================================
 class AccentColorPicker(QWidget):
     """
-    强调色选择器：
-      - 一排预设色块（互斥），点击后立即发出 colorChanged(str)
-      - 右侧一个「自定义」按钮，打开 QColorDialog
-    用法：
+    Accent color picker:
+      - a row of preset swatches (mutually exclusive); clicking emits colorChanged(str)
+      - a "Custom" button on the right that opens QColorDialog
+    Usage:
         picker = AccentColorPicker(i18n=self.i18n)
         picker.set_color(config.get("accent_color", "#3b82f6"))
         picker.colorChanged.connect(...)
@@ -368,14 +368,14 @@ class AccentColorPicker(QWidget):
     colorChanged = Signal(str)
 
     PRESETS = [
-        "#3b82f6",  # 蓝（默认）
-        "#10b981",  # 绿
-        "#14b8a6",  # 青
-        "#f59e0b",  # 琥珀
-        "#f97316",  # 橙
-        "#ef4444",  # 红
-        "#ec4899",  # 粉
-        "#8b5cf6",  # 紫
+        "#3b82f6",  # blue (default)
+        "#10b981",  # green
+        "#14b8a6",  # teal
+        "#f59e0b",  # amber
+        "#f97316",  # orange
+        "#ef4444",  # red
+        "#ec4899",  # pink
+        "#8b5cf6",  # violet
     ]
 
     def __init__(self, i18n=None, parent=None):
@@ -420,7 +420,7 @@ class AccentColorPicker(QWidget):
 
     @staticmethod
     def _swatch_style(hexv, scale=1.0):
-        """色块的内联样式（颜色是动态的，走不了全局 QSS）。"""
+        """Inline swatch style (the color is dynamic, so global QSS cannot cover it)."""
         radius = scale_px(AccentColorPicker.SWATCH_PX / 2.0, scale)
         border = scale_px(2, scale)
         return f"""
@@ -438,7 +438,7 @@ class AccentColorPicker(QWidget):
         """
 
     def set_ui_scale(self, scale):
-        """色块是固定尺寸 + 内联圆角，跟随界面缩放重排。"""
+        """Swatches are fixed-size with inline radii; re-lay them out on ui_scale change."""
         size = scale_px(self.SWATCH_PX, scale)
         for hexv, btn in self._swatches.items():
             btn.setFixedSize(size, size)
@@ -466,7 +466,7 @@ class AccentColorPicker(QWidget):
             hexv = "#" + hexv
         self._color = hexv
 
-        # 更新预设色块选中态（不触发 idClicked，因为那是用户点击专属信号）
+        # Refresh preset swatch selection (do not emit idClicked; that is for user clicks only)
         for preset, btn in self._swatches.items():
             btn.setChecked(preset == hexv)
 

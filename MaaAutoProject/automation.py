@@ -15,52 +15,53 @@ from process_utils import (kill_foreground_apps, kill_blacklist_apps,
                            visible_ratio,
                            TaskInterrupted, check_interrupt,
                            interruptible_sleep)
-from notifier import send_task_report  # <--- 引入独立的推送模块
+from notifier import send_task_report  # <--- import the standalone notification module
 
 logger = logging.getLogger("MaaAuto")
 
 
 # --------------------------------------------------------------------------- #
-# 找图相关配置（全部有默认值，老配置文件不改也能跑）
+# Template-matching settings (all defaulted, so old config files still work)
 #
-# 背景：1.0.x 用 pyautogui.locateCenterOnScreen 全屏精确尺寸匹配，模板在
-# 125% / 150% 缩放下比屏幕上的按钮小一圈，于是一直「找不到按钮」。现在改为
-# vision.find 多尺度匹配 + 限定目标窗口客户区，参数集中在这里。
+# Background: 1.0.x matched exact sizes full-screen via pyautogui.locateCenterOnScreen,
+# so at 125% / 150% scaling the templates were a size small and never found. Now
+# vision.find does multi-scale matching in the target client area; tuning lives here.
 # --------------------------------------------------------------------------- #
-DEFAULT_MATCH_THRESHOLD = 0.80      # 相关系数阈值
-DEFAULT_SCALE_MIN = 0.60            # 模板缩放搜索下限（60%）
-DEFAULT_SCALE_MAX = 2.00            # 上限（200%）
+DEFAULT_MATCH_THRESHOLD = 0.80      # correlation-coefficient threshold
+DEFAULT_SCALE_MIN = 0.60            # lowest template scale searched (60%)
+DEFAULT_SCALE_MAX = 2.00            # highest (200%)
 DEFAULT_SCALE_STEP = 0.05
-DEFAULT_MATCH_INTERVAL = 1.5        # 两次尝试之间的间隔（秒）
-DEFAULT_VERIFY_DELAY_MS = 900       # 点击后等多久再判断「有没有生效」
-DEFAULT_VERIFY_RETRIES = 1          # 点击无效时再补几次（0=不补）
+DEFAULT_MATCH_INTERVAL = 1.5        # interval between attempts (seconds)
+DEFAULT_VERIFY_DELAY_MS = 900       # wait after clicking before checking whether it took effect
+DEFAULT_VERIFY_RETRIES = 1          # extra clicks when the first did nothing (0 = none)
 
-# 目标窗口可见面积低于这个比例，就认为「窗口在屏幕外」，直接报错而不是白等超时。
+# Below this visible-area ratio the window counts as off-screen: raise at once instead of waiting for the timeout.
 MIN_VISIBLE_RATIO = 0.35
 
 
 class EmulatorStartupFailed(RuntimeError):
-    """模拟器启动/连接失败（环境问题，重试也不会好）。"""
+    """Emulator failed to start or connect (an environment issue; retrying will not help)."""
 
 
 class TemplateNotFound(TimeoutError):
-    """找图超时：按钮可能就在屏幕上，但模板匹配不上。
+    """Template matching timed out: the button may well be on screen, yet no template matches.
 
-    常见于 MAA / MaaEnd 更新后界面样式变化（按钮改版、主题、自定义背景），
-    或内置模板与用户的窗口尺寸 / 缩放比差异过大。继承 ``TimeoutError``
-    以兼容按超时捕获的旧代码。
+    Typically caused by restyling after a MAA / MaaEnd update (new buttons, themes,
+    custom backgrounds), or by bundled templates differing too much from the user's
+    window size / scaling. Subclasses ``TimeoutError`` so older code that catches
+    timeouts keeps working.
     """
 
 
 class TemplateMissing(FileNotFoundError):
-    """模板文件本身不存在（用户模板删了、内置资源缺失）。"""
+    """The template file itself is missing (user template deleted, bundled resource absent)."""
 
 
 class TargetWindowNotVisible(RuntimeError):
-    """目标窗口几乎不在任何显示器内（被拖到屏幕外），找图与点击都不可能成功。"""
+    """The target window is almost entirely off-screen, so finding and clicking cannot work."""
 
 
-# 找图超时后给用户的可操作提示。日志里会带上，界面也用它弹提醒。
+# Actionable advice after a template-match timeout; it goes into the log and the UI reminder.
 TEMPLATE_HINT = (
     "如果按钮明明在屏幕上却一直找不到，通常是 MAA / MaaEnd 更新后界面样式变了"
     "（按钮改版、换主题、自定义背景），或内置模板与当前窗口尺寸 / 缩放比相差太大。\n"
@@ -73,10 +74,10 @@ OFFSCREEN_HINT = (
 )
 
 def _try_restore_window(hwnd):
-    """最小化窗口先还原一次；真的还原了返回 True。
+    """Restore a minimized window once; return True if it really was restored.
 
-    Windows 把最小化窗口的坐标挪到 -32000，不先还原就会把「最小化」
-    误判成「在屏幕外」（提示就会指错方向）。
+    Windows parks minimized windows at -32000, so without restoring first a minimized
+    window is misread as "off-screen" and the hint points the user the wrong way.
     """
     try:
         import win32con
@@ -90,8 +91,8 @@ def _try_restore_window(hwnd):
     return False
 
 
-# 最近一次任务的失败类型，供界面决定弹什么提示。
-# 用模块级状态而不是改 execute_workflow 的返回值，避免破坏已有调用方 / 测试。
+# Failure kind of the last task; the UI uses it to pick which hint to show.
+# Kept as module state rather than an extra execute_workflow return value, to avoid breaking callers / tests.
 _LAST_FAILURE = {"kind": "", "message": ""}
 
 FAILURE_TEMPLATE = "template"
@@ -99,7 +100,7 @@ FAILURE_OFFSCREEN = "window_offscreen"
 
 
 def last_failure():
-    """最近一次任务的失败信息：``{"kind": ..., "message": ...}``（副本）。"""
+    """Failure info of the last task, as a copy: ``{"kind": ..., "message": ...}``."""
     return dict(_LAST_FAILURE)
 
 
@@ -113,24 +114,25 @@ def _clear_failure():
 
 
 # --------------------------------------------------------------------------- #
-# 点击生效判定
+# Click verification
 #
-# 为什么需要它：「点击发出去了」不等于「点到了」。目标窗口若被别的窗口挡住、
-# 或者没抢到前台，注入的点击会落到上层窗口上——日志一切正常，界面毫无反应。
-# 这里在点击点周围取一小块像素，比较点击前后的变化，变化明显才认为生效。
+# Why: "the click was sent" does not mean "the click landed". If the target is covered
+# or never reached the foreground, the click lands on the window above it: the log looks
+# fine, the UI does nothing. So compare a small pixel patch around the click before/after.
 # --------------------------------------------------------------------------- #
 def _patch_region(x, y, half_w=40, half_h=28):
     return (int(x) - half_w, int(y) - half_h, int(x) + half_w, int(y) + half_h)
 
 
 def _patch_diff(before, after):
-    """两块截图的平均像素差。
+    """Mean pixel difference between two patch captures.
 
-    :return: 平均差值；截图缺失或尺寸不一致（锁屏、RDP 断开、窗口最小化）时
-             返回 ``None`` 表示「无法判定」。
+    :return: the mean difference, or ``None`` when a capture is missing or the shapes
+             differ (lock screen, RDP disconnect, minimized window): undecidable.
 
-    1.1.0 及以前这里返回 ``999.0``（一个大到必然超过阈值的数），于是「截图失败」
-    会被当成「画面变了」，日志谎报「点击生效」。缺图就是缺图，必须能表达出来。
+    Up to 1.1.0 this returned ``999.0`` (large enough to always exceed the threshold),
+    so a failed capture read as "the screen changed" and the log falsely claimed the
+    click had taken effect. A missing frame must be able to say so.
     """
     if before is None or after is None or before.shape != after.shape:
         return None
@@ -142,10 +144,10 @@ def _patch_diff(before, after):
 
 
 def _wait_patch_change(region, before, delay_ms, threshold=1.5):
-    """等 delay_ms 后重新截同一块。
+    """Sleep delay_ms, then capture the same patch again.
 
-    :return: ``(changed, diff)``；changed 为 True/False，
-             无法判定时为 ``None``（此时 diff 也是 None）。
+    :return: ``(changed, diff)`` where changed is True/False, or ``None`` when it cannot
+             be decided (diff is None then too).
     """
     time.sleep(max(0, delay_ms) / 1000.0)
     after = vision.grab(region)
@@ -156,7 +158,7 @@ def _wait_patch_change(region, before, delay_ms, threshold=1.5):
 
 
 def _resolve_target_window(hwnd, procs, x, y):
-    """确定要激活/投递的顶层窗口句柄。"""
+    """Resolve the top-level window handle to activate or post to."""
     target = int(hwnd or 0)
     if not target:
         target = int(input_driver.window_at_point(x, y) or 0)
@@ -166,17 +168,21 @@ def _resolve_target_window(hwnd, procs, x, y):
 
 
 def click_match(match, config, procs=None, hwnd=0):
-    """按配置点击一次匹配结果，并尽量确认「真的点到了」。
+    """Click a match once according to config, and try to confirm the click landed.
 
-    流程：
-      1. 坐标 = 命中中心 + 点击偏移；
-      2. ``click_activate=False`` → **只走后台点击**（PostMessage）：绝不激活窗口、
-         也不发真实点击，否则点击会落到当时的前台窗口（可能是别的程序）上；
-      3. ``click_mode=postmessage`` → 直接后台投递；
-      4. 需要真实点击时：先切前台（三级回退 + 校验），**切完之后**才拍「点击前」
-         画面——激活本身会改变那块像素，提前拍会让校验失去意义；
-      5. 前台失败 → 先试后台点击（PostMessage 不受窗口层级影响，Qt 程序可用）；
-      6. 截图失败 → 只警告「无法校验」，不补点、不宣称生效。
+    Flow:
+      1. position = match center + click offset;
+      2. ``click_activate=False`` -> **background post only** (PostMessage): never
+         activate and never send a real click, which would hit whatever window is in
+         the foreground at that moment (possibly another program);
+      3. ``click_mode=postmessage`` -> post to the background directly;
+      4. when a real click is needed: bring the window to the foreground first (three-
+         level fallback, verified), and only **after** that capture the "before"
+         frame - activation itself changes those pixels, so an early capture would
+         make the verification meaningless;
+      5. foreground failed -> try a background click first (PostMessage ignores window
+         stacking and works for Qt apps);
+      6. capture failed -> only warn "cannot verify"; no extra click, no claim of success.
     """
     config = config or {}
     offset_x = int(config.get("click_offset_x", 0) or 0)
@@ -194,10 +200,10 @@ def click_match(match, config, procs=None, hwnd=0):
     patch = _patch_region(x, y)
 
     def _before_frame():
-        """当前这块区域的像素；关闭校验时不截图。"""
+        """Pixels of this patch; nothing is captured when verification is off."""
         return vision.grab(patch) if verify else None
 
-    # ---- 只走后台点击：用户关了前台激活，或本来就是后台模式 ----
+    # ---- Background click only: foreground activation is off, or postmessage is already the mode ----
     if not activate or mode == input_driver.CLICK_POSTMESSAGE:
         if not activate and mode != input_driver.CLICK_POSTMESSAGE:
             logger.info("已关闭「点击前激活窗口」：本次改用后台点击，"
@@ -224,7 +230,7 @@ def click_match(match, config, procs=None, hwnd=0):
                 "继续发真实点击会落到当前前台窗口上。可在设置里重新打开该开关。")
             return False
 
-    # ---- 真实点击路径：先激活，再拍「点击前」画面 ----
+    # ---- Real-click path: activate first, then capture the "before" frame ----
     fg_ok = input_driver.ensure_foreground(target) if target else False
     if target and not fg_ok:
         logger.info("目标窗口未能切到前台，先尝试后台点击（不占用鼠标）")
@@ -241,7 +247,7 @@ def click_match(match, config, procs=None, hwnd=0):
                 return True
             logger.warning(f"后台点击未生效（像素差 {diff:.1f}），继续尝试真实点击")
 
-    # 关键：`before` 必须在上面的激活动作之后取（激活会改变画面）
+    # Important: `before` must be captured after the activation above (activation changes pixels)
     before = _before_frame()
 
     attempt = 0
@@ -284,12 +290,13 @@ def click_match(match, config, procs=None, hwnd=0):
 
 
 def _launch_program(exe_path, logger):
-    """启动外部程序（MAA / MaaEnd）。
+    """Start an external program (MAA / MaaEnd).
 
-    配置项通常是 .exe 的绝对路径，可能带空格（如 Program Files）。
-    旧的写法 `Popen(path, shell=True)` 会在第一个空格处截断，启动失败；
-    这里优先用单元素列表（不经 shell），只有在路径本身不存在、用户实际
-    填的是「exe + 参数」整串命令时，才回退到 shell 保持兼容。
+    The config value is usually the absolute path of an .exe and may contain spaces
+    (e.g. Program Files). The old `Popen(path, shell=True)` cut the path at the first
+    space and failed; here the single-element list (no shell) comes first, and only
+    when the path does not exist - meaning the user typed "exe + arguments" as one
+    command line - do we fall back to the shell for compatibility.
     """
     if os.path.exists(exe_path):
         return subprocess.Popen([exe_path])
@@ -299,7 +306,7 @@ def _launch_program(exe_path, logger):
 
 
 def _user_template_dir(config):
-    """用户模板目录：配置指定，默认 ``config/templates``。"""
+    """User template directory: the configured one, else ``config/templates``."""
     path = (config or {}).get("template_dir", "").strip()
     if path:
         return path
@@ -307,7 +314,7 @@ def _user_template_dir(config):
 
 
 def template_paths(image_name, config=None):
-    """模板候选路径：用户目录优先，其次内置 resources。"""
+    """Candidate template paths: the user directory first, then bundled resources."""
     return vision.template_candidates(
         image_name,
         user_dir=_user_template_dir(config),
@@ -315,9 +322,9 @@ def template_paths(image_name, config=None):
     )
 
 
-# 模板 → 配置里记录它所属进程路径的键。
-# 「测试找图」「截取模板」前要先把对应窗口弄到前面，否则截到的画面里压着
-# 别的窗口（通常就是 MaaAuto 自己），匹配结果永远对不上。
+# Template -> config key holding the path of the process it belongs to.
+# Before "test template" / "capture template" the matching window must be brought to the
+# front; otherwise another window (usually MaaAuto) covers it and matching never works.
 TEMPLATE_TARGETS = {
     "maa_start.png": "maa_path",
     "maaend_start.png": "maaend_path",
@@ -325,7 +332,7 @@ TEMPLATE_TARGETS = {
 
 
 def template_process(image_name, config=None):
-    """模板对应的进程名（如 ``MAA.exe``）；自定义模板返回空串。"""
+    """Process name a template belongs to (e.g. ``MAA.exe``); empty for custom templates."""
     key = TEMPLATE_TARGETS.get(str(image_name or "").strip().lower())
     if not key:
         return ""
@@ -336,12 +343,12 @@ def template_process(image_name, config=None):
 
 
 def _search_region(config, procs):
-    """按配置返回 (搜索矩形, 窗口句柄)。
+    """Return (search rect, window handle) according to config.
 
-    ``search_scope = window``（默认）：限定在目标窗口客户区内找。
-        好处是快（少扫几十倍面积）、不会被别处的相似图误命中。
-    ``search_scope = screen``：整屏找，用于窗口标题/边框遮挡、或目标程序
-        把按钮画在独立无边框窗口里的情况。
+    ``search_scope = window`` (default): search inside the target's client area only.
+        Fast (orders of magnitude less area to scan) and no false hits from look-alikes.
+    ``search_scope = screen``: search the whole screen, for when the title bar / border
+        covers things or the target draws its buttons in a separate borderless window.
     """
     scope = str((config or {}).get("search_scope", "window")).lower()
     if scope == "screen" or not procs:
@@ -352,7 +359,7 @@ def _search_region(config, procs):
     if not rect:
         return None, 0
 
-    # 允许外扩若干像素：按钮贴边或窗口边框半透明时的容错
+    # Allow padding: tolerance for edge-hugging buttons or translucent window borders
     pad = int((config or {}).get("search_padding", 0) or 0)
     if pad:
         rect = (rect[0] - pad, rect[1] - pad, rect[2] + pad, rect[3] + pad)
@@ -360,7 +367,7 @@ def _search_region(config, procs):
 
 
 def _save_failure_screenshot(image_name, region):
-    """找图超时时留一张现场截图，方便用户回报「明明在屏幕上却找不到」。"""
+    """On a template-match timeout, keep an on-site screenshot so users can report"""
     try:
         img = vision.grab(region)
         if img is None:
@@ -376,18 +383,19 @@ def _save_failure_screenshot(image_name, region):
 
 
 def find_and_click(image_name, config=None, procs=None, timeout=None):
-    """寻找目标图像并点击。
+    """Find the target image and click it.
 
-    相比 1.0.x 的 ``pyautogui.locateCenterOnScreen``：
-      * 多尺度匹配 → 125%/150% 缩放、不同分辨率下同样能找到；
-      * 限定在目标窗口客户区搜索 → 快，且不会点到别处；
-      * 支持用户模板覆盖（``config/templates/``）→ 换分辨率后可自行重截；
-      * 点击方式可选：真实点击（默认）或后台 PostMessage 点击。
+    Compared with 1.0.x's ``pyautogui.locateCenterOnScreen``:
+      * multi-scale matching -> still found at 125% / 150% scaling and other resolutions;
+      * search limited to the target's client area -> fast, and never clicks elsewhere;
+      * user template overrides (``config/templates/``) -> re-capture after a
+        resolution change;
+      * selectable click mode: real click (default) or background PostMessage click.
 
-    :param image_name: 模板文件名，如 ``maa_start.png``
-    :param config:     配置字典（读 match_* / click_* 参数）
-    :param procs:      目标进程名列表，用于定位窗口与后台点击
-    :param timeout:    覆盖配置里的 ``wait_timeout``
+    :param image_name: template file name, e.g. ``maa_start.png``
+    :param config:     config dict (reads the match_* / click_* settings)
+    :param procs:      target process names, used to locate the window and post clicks
+    :param timeout:    overrides ``wait_timeout`` from config
     """
     config = config or {}
     procs = procs or []
@@ -484,10 +492,10 @@ def run_maa_phase(config, logger):
         _launch_program(maa_path, logger)
         interruptible_sleep(5)
 
-    # 点击前先看看模拟器在不在。MAA 的「启动后自动开启模拟器」如果没开
-    # （gui.json 里 Start.OpenEmulatorAfterLaunch=False），它会直接去连 ADB，
-    # 而模拟器没起来时连接会被拒绝（MAA 日志里是 10061），任务当场失败——
-    # 但这属于环境问题，先把话说明白，避免用户以为是「点击没生效」。
+    # Check that the emulator is up before clicking. If MAA's "start emulator on launch"
+    # is off (Start.OpenEmulatorAfterLaunch=False in gui.json), MAA goes straight to ADB
+    # and the connection is refused while the emulator is down (10061 in MAA's log); the
+    # task fails at once. That is an environment problem: say so, so the click gets no blame.
     if not is_process_running([emulator_proc]):
         logger.warning(
             f"点击前未检测到模拟器进程（{emulator_proc}）。如果 MAA 的"
@@ -514,11 +522,13 @@ def run_maa_phase(config, logger):
 
 
 def _check_emulator_runtime(uptime, min_runtime):
-    """模拟器「刚启动就退出」几乎都是启动/连接失败，不能算任务成功。
+    """An emulator that quits right after launch almost always failed to start or connect,
+    so it must not count as success.
 
-    1.0.3 及以前只看「模拟器进程退出」就判定成功：MuMu 因为 ADB 连不上
-    （MAA 日志里的 10061）当场退出时，我们会误报「成功」，用户还以为真的挂完了。
-    :raises RuntimeError: 运行时长低于阈值
+    Up to 1.0.3 a plain "emulator process exited" was treated as success: when MuMu
+    died at once because ADB could not connect (10061 in MAA's log) we reported
+    success and the user believed the run had finished.
+    :raises RuntimeError: uptime below the threshold
     """
     try:
         min_runtime = float(min_runtime or 0)
@@ -572,7 +582,7 @@ def run_maaend_phase(config, logger):
 
 
 def _handle_foreground_action(config, logger):
-    """根据配置决定启动前的前台程序处理方式"""
+    """Apply the configured pre-launch handling of foreground programs."""
     action = config.get("foreground_action", "none")
 
     if action == "kill_all":
@@ -581,7 +591,7 @@ def _handle_foreground_action(config, logger):
 
     elif action == "blacklist":
         blacklist_str = config.get("blacklist_apps", "")
-        # 同时兼容中文逗号、英文逗号、换行、分号
+        # Accept Chinese commas, ASCII commas, newlines and semicolons alike
         blacklist = [n.strip() for n in
                      blacklist_str.replace("，", ",").replace("；", ",").replace(";", ",")
                      .replace("\n", ",").split(",") if n.strip()]
@@ -598,7 +608,7 @@ def _handle_foreground_action(config, logger):
 def execute_workflow(config, logger):
     start_time = datetime.datetime.now()
 
-    # ================= 1. 动态捕获本次任务的日志 =================
+    # ================= 1. Capture this task's log records =================
     task_logs = []
 
     class CaptureHandler(logging.Handler):
@@ -617,10 +627,10 @@ def execute_workflow(config, logger):
     _clear_failure()
 
     try:
-        # ================= 启动前的前台处理（按配置） =================
+        # ================= Pre-launch foreground handling (per config) =================
         _handle_foreground_action(config, logger)
 
-        # ================= MAA 阶段 =================
+        # ================= MAA phase =================
         maa_path = config.get("maa_path", "").strip()
         if maa_path:
             for attempt in range(1, retry_times + 1):
@@ -631,13 +641,13 @@ def execute_workflow(config, logger):
                 except TaskInterrupted:
                     raise
                 except TargetWindowNotVisible as e:
-                    # 窗口在屏幕外：重试也不会自己回到屏幕上，直接报错说清楚
+                    # Window is off-screen: retrying will not move it back, so say so plainly
                     logger.error(f"MAA 阶段失败（窗口在屏幕外，不再重试）: {e}")
                     _set_failure(FAILURE_OFFSCREEN, str(e))
                     overall_status = "报错"
                     break
                 except EmulatorStartupFailed as e:
-                    # 环境/配置问题：再点几次 Link Start 也是同样的失败，直接收尾
+                    # Environment / config problem: clicking Link Start again fails the same way, so stop
                     logger.error(f"MAA 阶段失败（环境问题，不再重试）: {e}")
                     overall_status = "报错"
                     break
@@ -647,7 +657,7 @@ def execute_workflow(config, logger):
                         logger.info(f"将在 {retry_interval} 秒后重试 MAA 阶段...")
                         if is_process_running(["maa.exe", "maa-cli.exe"]):
                             bring_process_to_front(["maa.exe", "maa-cli.exe"])
-                        interruptible_sleep(retry_interval)   # ← 可中断
+                        interruptible_sleep(retry_interval)   # <- interruptible
                     else:
                         logger.error("MAA 阶段重试次数已达上限，跳过该阶段。")
                         if isinstance(e, (TemplateNotFound, TemplateMissing)):
@@ -656,7 +666,7 @@ def execute_workflow(config, logger):
         else:
             logger.info("未配置 MAA 启动地址，跳过 MAA 阶段。")
 
-        # ================= MaaEnd 阶段 =================
+        # ================= MaaEnd phase =================
         maaend_path = config.get("maaend_path", "").strip()
         if maaend_path:
             for attempt in range(1, retry_times + 1):
@@ -677,7 +687,7 @@ def execute_workflow(config, logger):
                         logger.info(f"将在 {retry_interval} 秒后重试 MaaEnd 阶段...")
                         if is_process_running(["maaend"]):
                             bring_process_to_front(["maaend"])
-                        interruptible_sleep(retry_interval)   # ← 可中断
+                        interruptible_sleep(retry_interval)   # <- interruptible
                     else:
                         logger.error("MaaEnd 阶段重试次数已达上限。")
                         if isinstance(e, (TemplateNotFound, TemplateMissing)):
@@ -695,9 +705,9 @@ def execute_workflow(config, logger):
     finally:
         logger.removeHandler(capture_handler)
 
-    # ================= 2. 调用独立的推送模块 =================
+    # ================= 2. Hand off to the standalone notification module =================
     end_time = datetime.datetime.now()
     send_task_report(send_key, start_time, end_time, overall_status, task_logs, webhook_url)
 
     logger.info("整个自动化流程结束！")
-    return overall_status          # ← 返回状态
+    return overall_status          # <- overall status

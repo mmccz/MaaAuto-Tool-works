@@ -5,10 +5,10 @@ from PySide6.QtCore import (Qt, Signal, QTimer, QPropertyAnimation,
 
 
 class WheelColumn(QListWidget):
-    """单行滚轮：只显示当前值，滚轮/拖动切换，点击激活。"""
+    """Single-row wheel: shows only the current value; wheel/drag changes it, click activates."""
 
-    ITEM_HEIGHT = 26          # 当前实际行高（随界面缩放变化）
-    BASE_ITEM_HEIGHT = 26     # 100% 时的行高
+    ITEM_HEIGHT = 26          # current actual row height (changes with ui_scale)
+    BASE_ITEM_HEIGHT = 26     # row height at 100%
     BASE_WIDTH = 48
     VISIBLE_ITEMS = 1
 
@@ -25,7 +25,7 @@ class WheelColumn(QListWidget):
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setSelectionMode(QAbstractItemView.NoSelection)   # 不要选中框，避免色块偏移
+        self.setSelectionMode(QAbstractItemView.NoSelection)   # no selection box; keeps swatches from shifting
         self.setFocusPolicy(Qt.StrongFocus)
         self.setFrameShape(QFrame.NoFrame)
         self.setUniformItemSizes(True)
@@ -50,20 +50,20 @@ class WheelColumn(QListWidget):
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
         self.itemClicked.connect(self._on_item_clicked)
 
-        # 首次布局完成后把滚动条对到「当前值」。
+        # Align the scrollbar to the current value after the first layout.
         #
-        # ★ 这里绝不能用 _scroll_to(0)：设置页构造时会 setTime("08:00")，而这条
-        #   定时器要晚一个事件循环才跑，会把小时滚回 00:00 并 emit 一次
-        #   timeChanged。实测（1.0.4）:每次启动「定时执行时间」都会在第一个事件
-        #   循环被改成 00:00 并落盘；顺带把启动瞬间写好的其它配置（界面缩放、
-        #   主题）用旧快照冲掉。必须直接对齐当前值、不 emit。
+        # ★ Never call _scroll_to(0) here: the settings page calls setTime("08:00") during
+        #   construction, while this timer runs one event loop later, which would roll the hour
+        #   back to 00:00 and emit timeChanged. Measured (1.0.4): every start, the scheduled
+        #   time was changed to 00:00 and saved on the first event loop, wiping other config
+        #   written at startup (ui scale, theme) with a stale snapshot. Align to the value, no emit.
         QTimer.singleShot(0, self._scroll_to_current)
 
     # ------------------------------------------------------------------
-    # 界面缩放
+    # UI scale
     #
-    # 行高/宽度是写死的（26/48），QSS 的 font-size 管不到 —— 150% 时字号 21px
-    # 仍塞在 26px 的行里会顶到边。这里按缩放重算行高并同步每个 item。
+    # Row height/width are hardcoded (26/48) and QSS font-size cannot reach them: at 150%
+    # 21px text no longer fits a 26px row. Recompute the row height and sync every item.
     # ------------------------------------------------------------------
     def set_ui_scale(self, scale):
         try:
@@ -92,7 +92,7 @@ class WheelColumn(QListWidget):
             self._snapping = False
 
     # ------------------------------------------------------------------
-    # 焦点 / 拖动
+    # Focus / drag
     # ------------------------------------------------------------------
     def focusInEvent(self, e):
         super().focusInEvent(e)
@@ -131,7 +131,7 @@ class WheelColumn(QListWidget):
         e.accept()
 
     # ------------------------------------------------------------------
-    # 内部
+    # Internals
     # ------------------------------------------------------------------
     def _on_scroll(self, _):
         if self._snapping:
@@ -185,7 +185,7 @@ class WheelColumn(QListWidget):
             self.valueChanged.emit(self._values[real_index])
 
     # ------------------------------------------------------------------
-    # 对外
+    # Public API
     # ------------------------------------------------------------------
     def value(self):
         return self._values[self._current_index]
@@ -198,7 +198,7 @@ class WheelColumn(QListWidget):
 
 
 class WheelTimePicker(QWidget):
-    """小时 + 分钟 单行滚轮。"""
+    """Single-row hour + minute wheel."""
 
     timeChanged = Signal(QTime)
     BASE_COLON_WIDTH = 10
@@ -228,7 +228,7 @@ class WheelTimePicker(QWidget):
         self._min_col.valueChanged.connect(lambda *_: self.timeChanged.emit(self.time()))
 
     def set_ui_scale(self, scale):
-        """两个滚轮列 + 冒号一起按界面缩放重排。"""
+        """Re-lay out both wheel columns plus the colon on ui_scale change."""
         self._hour_col.set_ui_scale(scale)
         self._min_col.set_ui_scale(scale)
         self._colon.setFixedWidth(

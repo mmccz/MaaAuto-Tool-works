@@ -80,8 +80,8 @@ class AboutPage(QWidget):
             k.setFixedWidth(120)
             v = QLabel("-")
             v.setObjectName("SettingTitle")
-            # 版本串（如 "Windows 11 专业版 23H2 (10.0.22631.4317)"）比旧文案长，
-            # 允许折行，免得把整页最小宽度顶大；顺便让用户能选中复制去报 bug
+            # The version string (e.g. "Windows 11 Pro 23H2 (10.0.22631.4317)") is longer than the
+            # old label; allow wrapping so the page minimum width stays small, and let users copy it.
             v.setWordWrap(True)
             v.setTextInteractionFlags(Qt.TextSelectableByMouse)
             row.addWidget(k)
@@ -162,11 +162,11 @@ class AboutPage(QWidget):
         self._refresh_env_info()
 
     def _refresh_link_labels(self):
-        """富文本链接颜色跟着主题走。
+        """Rich-text link color follows the theme.
 
-        QLabel 里的 ``<a>`` 用的是 Qt 默认纯蓝 #0000ff，深色主题下贴在
-        #0f1115 背景上几乎看不见（1.0.5 实测反馈）。QSS 管不到标签内部的
-        锚点，只能把颜色写进 span。
+        ``<a>`` in a QLabel uses Qt's default pure blue #0000ff, which is nearly
+        invisible on the #0f1115 dark background (1.0.5 field feedback). QSS cannot
+        reach anchors inside the label, so the color has to go into a span.
         """
         from themes import link_color
         color = link_color()
@@ -180,7 +180,7 @@ class AboutPage(QWidget):
             f'{app_info.APP_EMAIL}</span></a>')
 
     def refresh_theme_colors(self):
-        """主题切换后调用（链接颜色不会自己跟着 QSS 变）。"""
+        """Call after a theme switch (link colors do not follow QSS on their own)."""
         self._refresh_link_labels()
 
     def _refresh_env_info(self):
@@ -226,10 +226,10 @@ class AboutPage(QWidget):
                                  self.i18n.t("dialog.export.failed", err=str(e)))
 
     # ==================================================================
-    # 检查更新 —— 后台线程执行，绝不阻塞 UI
+    # Update check — runs on a background thread, never blocks the UI
     # ==================================================================
     def _channel(self):
-        """当前更新频道（stable / beta），读配置；失败按 stable。"""
+        """Current update channel (stable / beta) from config; stable on failure."""
         try:
             return load_config().get("update_channel", "stable")
         except Exception:
@@ -279,7 +279,7 @@ class AboutPage(QWidget):
         win = self.window()
         if hasattr(win, "is_quitting"):
             win.is_quitting = True
-        # 升级后会自动重启，别把 MAA / 模拟器一起关掉
+        # Upgrading restarts afterwards; do not kill MAA / the emulator along with it
         if hasattr(win, "_relaunching"):
             win._relaunching = True
         try:

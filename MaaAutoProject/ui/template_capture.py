@@ -1,19 +1,21 @@
-"""截取模板：用户在自己机器上重截按钮图，适配分辨率与缩放。
+"""Template capture: let users re-capture button images on their own machine, matching resolution and scaling.
 
-背景
-----
-内置模板（``resources/maa_start.png``）是在某台机器、某个缩放比下截的。
-虽然 :mod:`vision` 会用多尺度匹配覆盖 60%~200%，但分辨率差异很大、或者
-按钮文案/皮肤改版时，自截模板是最稳的解法。这个对话框就是入口：
+Background
+----------
+The bundled template (``resources/maa_start.png``) was captured on one machine at one
+scale. :mod:`vision` does multi-scale matching over 60%-200%, but with very different
+resolutions, or when button text/skin changes, a self-captured template is the most
+reliable fix. This dialog is the entry point:
 
-1. 选模板名（Link Start / 开始任务 / 自定义）；
-2. 窗口隐藏，抓一张当前屏幕；
-3. 全屏半透明覆盖层上拖框选中按钮；
-4. 按屏幕 DPI 换算成物理像素裁切、存到 ``config/templates/``；
-5. 再抓一张屏幕做自检，报告相似度——低于 0.85 就是框得不准。
+1. Pick a template name (Link Start / Start task / Custom);
+2. Hide the window and grab the current screen;
+3. Drag a box around the button on a full-screen translucent overlay;
+4. Convert by screen DPI, crop at physical pixels, and save to ``config/templates/``;
+5. Grab the screen again for a self-check and report similarity — below 0.85 the box was off.
 
-注意坐标换算：Qt 的控件几何是**逻辑像素**（受 DPI 缩放影响），而
-``vision.grab`` 拿到的是**物理像素**。两者之间差一个 ``devicePixelRatio``。
+Mind the coordinate conversion: Qt widget geometry is in **logical pixels** (affected by
+DPI scaling), while ``vision.grab`` returns **physical pixels**. The difference is one
+``devicePixelRatio``.
 """
 
 import logging
@@ -39,13 +41,13 @@ MIN_SELECT_PX = 8
 
 
 class _Selector(QWidget):
-    """全屏半透明覆盖层：拖框选区，Esc 取消。
+    """Full-screen translucent overlay to drag a selection; Esc cancels.
 
-    背景直接画开始截取时抓到的屏幕截图，所以用户看到的画面是「冻住」的，
-    拖动选框期间目标不会跑。
+    The background paints the screenshot grabbed when capture started, so the image
+    the user sees is frozen and the target cannot move while dragging.
     """
 
-    finished = Signal()        # 选区结束（取消也会发）
+    finished = Signal()        # selection finished (also emitted on cancel)
 
     def __init__(self, screen, captured_bgr):
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -57,7 +59,7 @@ class _Selector(QWidget):
         self._current = QPoint()
         self._dragging = False
         self._done = False
-        self.selection = None      # 逻辑像素 QRect
+        self.selection = None      # logical-pixel QRect
 
         self._pixmap = None
         if captured_bgr is not None:
@@ -69,20 +71,20 @@ class _Selector(QWidget):
         if self._pixmap is not None and not self._pixmap.isNull():
             p.drawPixmap(self.rect(), self._pixmap)
 
-        # 整体压暗，突出选区
+        # Dim the whole screen to highlight the selection
         p.fillRect(self.rect(), QColor(0, 0, 0, 110))
 
         if self._dragging or self.selection is not None:
             sel = self._current_rect()
             cut = sel.normalized()
-            # 把选区里的原图再画一遍（抵消压暗）
+            # Repaint the source inside the selection (undo the dimming)
             if self._pixmap is not None and not self._pixmap.isNull() and cut.width() > 0:
                 p.drawPixmap(cut, self._pixmap, self._source_rect(cut))
             p.setPen(QPen(QColor(59, 130, 246), 2))
             p.drawRect(cut)
 
     def _source_rect(self, logical_rect):
-        """选区（逻辑像素）→ 原图（物理像素）里的对应矩形。"""
+        """Map the selection (logical px) to the matching rect in the source image (physical px)."""
         dpr = max(0.5, float(self._screen.devicePixelRatio()))
         img_w = self._pixmap.width()
         img_h = self._pixmap.height()
@@ -124,7 +126,7 @@ class _Selector(QWidget):
             self.selection = rect
             self._finish()
         else:
-            # 太小的点选当作误触，取消
+            # Treat a tiny click as a misclick and cancel
             self.selection = None
             self.update()
 
@@ -142,7 +144,7 @@ class _Selector(QWidget):
 
 
 def _pixmap_from_bgr(bgr):
-    """BGR ndarray → QPixmap（不经文件，避免临时文件与编码问题）。"""
+    """BGR ndarray -> QPixmap (in memory, avoiding temp files and encoding issues)."""
     if vision.HAS_CV2:
         rgb = vision.cv2.cvtColor(bgr, vision.cv2.COLOR_BGR2RGB)
     else:
@@ -150,11 +152,11 @@ def _pixmap_from_bgr(bgr):
     h, w = rgb.shape[:2]
     from PySide6.QtGui import QImage
     img = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
-    return QPixmap.fromImage(img.copy())      # copy()：底层 buffer 是 np 的
+    return QPixmap.fromImage(img.copy())      # copy(): the backing buffer belongs to numpy
 
 
 class TemplateCaptureDialog(QDialog):
-    """截取模板的主对话框，用法同普通 QDialog。"""
+    """Main template-capture dialog; used like a normal QDialog."""
 
     def __init__(self, i18n, config, parent=None):
         super().__init__(parent)
@@ -268,13 +270,13 @@ class TemplateCaptureDialog(QDialog):
                     QMessageBox.Yes:
                 return
 
-        # 目标窗口先在屏幕上看一眼，免得用户以为「点了没反应」
+        # Flash the target window first so the click does not look like a no-op
         proc = self._target_process(filename)
         if proc:
             self.status_label.setText(
                 self.i18n.t("capture.foreground", process=proc))
 
-        # 先把对话框藏起来，免得它出现在截图里
+        # Hide the dialog first so it does not end up in the screenshot
         self.hide()
         app = QApplication.instance()
         if app is not None:
@@ -282,14 +284,14 @@ class TemplateCaptureDialog(QDialog):
         QTimer.singleShot(260, lambda: self._do_capture(filename, target_dir, target))
 
     # ------------------------------------------------------------------ #
-    # 1.4.5：截取前把 MAA / MaaEnd 窗口弄到最前面
+    # 1.4.5: bring the MAA / MaaEnd window to the front before capturing
     #
-    # 旧实现直接抓当前屏幕：用户从设置页点「截取模板」时，MAA 往往压在
-    # MaaAuto 主窗口后面甚至最小化，抓到的画面里根本没有 Link Start，
-    # 框出来的模板自然对不上。
+    # The old code grabbed the screen directly: when users clicked "Capture template" in
+    # settings, MAA was often behind the MaaAuto window or minimized, so the grab had no
+    # Link Start at all and the cropped template could not match.
     # ------------------------------------------------------------------ #
     def _target_process(self, filename):
-        """模板对应的进程名；自定义模板返回空串（自己负责摆好窗口）。"""
+        """Process name for the template; Custom returns "" (the caller arranges the window)."""
         try:
             import automation
             return automation.template_process(filename, self.config)
@@ -339,15 +341,15 @@ class TemplateCaptureDialog(QDialog):
         if rect is None:
             self.show()
             return
-        # 覆盖层在 finished 之后才真正关闭，稍等它从屏幕上消失再自检，
-        # 否则自检截到的画面里还压着半透明遮罩，分数会莫名其妙偏低。
+        # The overlay closes only after finished; wait for it to leave the screen before
+        # the self-check, or the grab still contains the translucent mask and scores low.
         QTimer.singleShot(
             180, lambda: self._crop_and_save(captured, rect, dpr,
                                              target_dir, target, filename))
 
     def _crop_and_save(self, captured, rect, dpr, target_dir, target, filename):
-        # 整段都包起来：这里是 windowed 程序，异常不会有人看到，
-        # 用户只会看到「什么都没发生」——这正是 1.0.2 的反馈。
+        # Wrap the whole block: this is a windowed app, so exceptions are invisible and
+        # users only see "nothing happened" — exactly the 1.0.2 feedback.
         try:
             x = max(0, int(round(rect.x() * dpr)))
             y = max(0, int(round(rect.y() * dpr)))
@@ -374,7 +376,7 @@ class TemplateCaptureDialog(QDialog):
             self.status_label.setText(self.i18n.t(
                 "capture.saved_detail", file=filename, size=f"{w}×{h}",
                 score=f"{score:.3f}", dir=target_dir))
-            # 不自动关窗：让用户亲眼看到保存路径和自检分数（1.0.2 弹窗一闪即逝）
+            # Do not auto-close: let users see the save path and self-check score (1.0.2 flashed by)
             self.btn_start.setText(self.i18n.t("capture.again"))
             self.btn_close.setText(self.i18n.t("common.close"))
             self.show()
@@ -387,10 +389,10 @@ class TemplateCaptureDialog(QDialog):
                                  self.i18n.t("capture.failed", err=str(e)))
 
     def _self_check(self, path):
-        """再抓一张屏幕验证模板可用：能找回同一个按钮才算成功。
+        """Grab the screen again to verify the template: it must find the same button.
 
-        分数低有两种可能：框得不准，或者目标被本对话框挡住了——所以只报告
-        分数，不做硬性拦截，用户自己判断要不要重截。
+        A low score means either an imprecise box or the dialog itself covering the
+        target, so only report the score and never hard-fail; the user decides.
         """
         try:
             match = vision.find(path, threshold=0.30, scale_min=0.8, scale_max=1.3)

@@ -19,7 +19,7 @@ def fade_in(widget, duration=220):
 
 
 class _SnapshotOverlay(QWidget):
-    """用 QPainter 手绘 pixmap 的遮罩层，不参与 QSS 样式计算。"""
+    """Mask layer that paints onto a pixmap with QPainter; bypasses QSS styling."""
 
     def __init__(self, parent, pixmap):
         super().__init__(parent)
@@ -32,17 +32,18 @@ class _SnapshotOverlay(QWidget):
     def paintEvent(self, event):
         if self._pixmap and not self._pixmap.isNull():
             p = QPainter(self)
-            # 目标矩形铺满整个 overlay，防止 resize 时留白
+            # Target rect spans the whole overlay so no gap shows on resize
             p.drawPixmap(self.rect(), self._pixmap)
 
 
 def clear_transition_overlay(window):
-    """立刻清掉换主题/换缩放时留下的「旧画面遮罩」。
+    """Drop the stale-screen mask left behind by a theme or scale change.
 
-    ★ 这个遮罩是一张旧界面的截图，几何尺寸在创建时就定死了。如果紧接着发生了
-    布局变化（切界面缩放、窗口变大变小），遮罩没跟着变，淡出过程中就会看到
-    旧布局残影 —— 实测 150% 切换时偶尔闪出旧侧栏的一角，点一下对话框又
-    「自己好了」（因为动画跑完、遮罩被删）。所以改变窗口结构前必须先清掉它。
+    ★ The mask is a screenshot of the old UI whose geometry is frozen at creation.
+    If the layout changes right after (scale switch, window resize) the mask no longer
+    matches, and the old layout ghosts through the fade-out — at 150% the old sidebar
+    corner occasionally flashes, and clicking a dialog only seems to "fix" it because the
+    animation finished and the mask was deleted. Drop the mask before changing structure.
     """
     old = getattr(window, "_theme_overlay", None)
     if old is not None:
@@ -65,10 +66,10 @@ def clear_transition_overlay(window):
 def theme_transition(window, switch_callback, duration=260):
     target = window.centralWidget() or window
 
-    # 0) 如果上一次的 overlay 还在，先清掉
+    # 0) Drop any overlay left over from the previous transition
     clear_transition_overlay(window)
 
-    # 1) 抓旧画面
+    # 1) Capture the old frame
     pix = target.grab()
     overlay = _SnapshotOverlay(target, pix)
     overlay.setGeometry(target.rect())
@@ -76,7 +77,7 @@ def theme_transition(window, switch_callback, duration=260):
     overlay.raise_()
     window._theme_overlay = overlay
 
-    # 2) 延后一个 tick：确保 overlay 先稳定显示，再切主题 + 淡出
+    # 2) Defer one tick: let the overlay settle, then switch theme and fade out
     def do_switch_and_fade():
         switch_callback()
         QApplication.processEvents()

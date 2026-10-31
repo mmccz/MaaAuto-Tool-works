@@ -26,7 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# ---------------- 虚拟环境 ----------------
+# ---------------- Virtual environments ----------------
 .venv/
 venv/
 ENV/
@@ -34,7 +34,7 @@ env/
 .python-version
 Pipfile.lock
 
-# ---------------- 测试 / 覆盖率 ----------------
+# ---------------- Tests / coverage ----------------
 .tox/
 .nox/
 .coverage
@@ -49,30 +49,30 @@ coverage.xml
 *.mo
 *.pot
 
-# ---------------- 打包（PyInstaller）----------------
+# ---------------- Packaging (PyInstaller) ----------------
 *.spec
 build/
 dist/
-# 打包产物
+# Build artifacts
 MaaAuto.exe
 MaaAuto_*.zip
 
-# ---------------- 运行时生成 ----------------
-# 用户配置与日志（不应提交）
+# ---------------- Generated at runtime ----------------
+# User config and logs (must not be committed)
 config/
 logs/
-# 但保留目录占位（如需要）
+# But keep directory placeholders (if needed)
 !config/.gitkeep
 !logs/.gitkeep
 
-# ---------------- 图像资源（可选）----------------
-# 如果你的截图不打算开源，取消下面注释
+# ---------------- Image assets (optional) ----------------
+# Uncomment the lines below if your screenshots should not be open-sourced
 # resources/maa_start.png
 # resources/maaend_start.png
-# 图标一般建议提交
+# Icons are usually better committed
 !resources/icon.ico
 
-# ---------------- IDE / 编辑器 ----------------
+# ---------------- IDE / editors ----------------
 .idea/
 .vscode/
 *.swp
@@ -85,7 +85,7 @@ logs/
 *.sublime-workspace
 *.code-workspace
 
-# ---------------- 操作系统 ----------------
+# ---------------- Operating systems ----------------
 # Windows
 Thumbs.db
 Thumbs.db:encryptable
@@ -103,20 +103,20 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 
-# ---------------- 其它 ----------------
-# 临时文件
+# ---------------- Misc ----------------
+# Temporary files
 *.bak
 *.tmp
 *.log
 !logs/.gitkeep
 
-# 环境变量 / 密钥
+# ---------------- Environment variables / secrets ----------------
 .env
 .env.*
 *.key
 secrets.json
 
-# 调试
+# ---------------- Debugging ----------------
 debug/
 *.pdb
 __pycache__/

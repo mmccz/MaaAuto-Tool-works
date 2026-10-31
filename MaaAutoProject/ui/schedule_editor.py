@@ -1,12 +1,12 @@
-"""定时编辑器：多时段 + 工作日（1.3.0）。
+"""Schedule editor: multiple time slots + weekdays (1.3.0).
 
-放在设置页「定时与推送」分组里，替代原来的单个 ``WheelTimePicker``：
+Lives in the settings page "Schedule & push" group, replacing the single ``WheelTimePicker``:
 
-* 星期：7 个可切换按钮（1=周一 … 7=周日），**一个都不选 = 每天**；
-* 时段：一列时间，支持「添加时间…」「删除选中」，内部用 ``WheelTimePicker`` 选时间；
-* 任何改动都发 ``changed()``，设置页照旧自动保存。
+* Weekdays: 7 toggleable buttons (1=Mon ... 7=Sun); **none selected = every day**;
+* Slots: a list of times with "Add time..." / "Remove selected", picking times via ``WheelTimePicker``;
+* Every change emits ``changed()``; the settings page still auto-saves.
 
-控件不直接读写配置，只负责「取值 / 设值」，方便单测。
+The widget never touches config directly, only get/set, which keeps it unit-testable.
 """
 
 from PySide6.QtCore import Qt, QTime, Signal
@@ -21,7 +21,7 @@ WEEKDAY_KEYS = ("weekday.1", "weekday.2", "weekday.3", "weekday.4",
 
 
 class TimePickDialog(QDialog):
-    """选一个时间的小弹窗（复用滚轮）。"""
+    """Small dialog to pick one time (reuses the wheel)."""
 
     def __init__(self, i18n, initial="08:00", parent=None):
         super().__init__(parent)
@@ -51,7 +51,7 @@ class TimePickDialog(QDialog):
 
 
 class ScheduleEditor(QWidget):
-    """星期按钮 + 时段列表。"""
+    """Weekday buttons + time slot list."""
 
     changed = Signal()
 
@@ -63,7 +63,7 @@ class ScheduleEditor(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(8)
 
-        # ---- 星期 ----
+        # ---- Weekdays ----
         week_row = QHBoxLayout()
         week_row.setSpacing(4)
         self._day_buttons = []
@@ -84,7 +84,7 @@ class ScheduleEditor(QWidget):
         week_row.addStretch()
         root.addLayout(week_row)
 
-        # ---- 时段 ----
+        # ---- Time slots ----
         time_row = QHBoxLayout()
         time_row.setSpacing(6)
         self.list = QListWidget()
@@ -137,7 +137,7 @@ class ScheduleEditor(QWidget):
         if row < 0:
             return
         self.list.takeItem(row)
-        if self.list.count() == 0:          # 至少留一个，避免「没有时间」的配置
+        if self.list.count() == 0:          # keep at least one, avoid a "no time" config
             self.list.addItem("08:00")
         self.changed.emit()
 
@@ -169,7 +169,7 @@ class ScheduleEditor(QWidget):
         self.day_hint.setText(text)
 
     def set_ui_scale(self, scale):
-        """跟随界面缩放（自绘/固定尺寸控件不吃 QSS）。"""
+        """Follow UI scale (self-painted / fixed-size widgets ignore QSS)."""
         try:
             scale = max(0.75, min(2.0, float(scale)))
         except (TypeError, ValueError):

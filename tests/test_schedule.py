@@ -1,4 +1,4 @@
-"""定时规则（多时段 + 工作日）与公告合并的回归测试（1.3.0）。"""
+"""Regression tests for schedule rules (multiple slots + weekdays) and announcement merging (1.3.0)."""
 
 import datetime as dt
 
@@ -10,7 +10,7 @@ from ui.announcements import merge_announcements, pick_best
 
 
 # --------------------------------------------------------------------------- #
-# 配置迁移与规范化
+# Config migration and normalization
 # --------------------------------------------------------------------------- #
 def test_defaults_exist():
     assert DEFAULT_CONFIG["schedule_times"] == []
@@ -19,7 +19,7 @@ def test_defaults_exist():
 
 
 def test_effective_times_migrates_legacy_execute_time():
-    """老配置只有 execute_time 时，按单时段处理（不能丢用户设置）。"""
+    """A legacy config with only execute_time becomes a single slot (the user setting must not be lost)."""
     assert su.effective_times({"execute_time": "09:30"}) == ["09:30"]
     assert su.effective_times({"execute_time": "09:30",
                                "schedule_times": ["20:00"]}) == ["20:00"]
@@ -27,7 +27,7 @@ def test_effective_times_migrates_legacy_execute_time():
 
 
 def test_normalize_times():
-    # 8:00 规范成 08:00；20:5 也接受（=20:05）；非法值与越界丢弃
+    # 8:00 normalizes to 08:00; 20:5 is accepted too (=20:05); invalid and out-of-range values drop
     assert su.normalize_times(["8:00", "08:00", "20:5", "bad", "24:00", ""]) == \
         ["08:00", "20:05"]
     assert su.normalize_times(["20:30", "08:00"]) == ["08:00", "20:30"]
@@ -38,9 +38,9 @@ def test_normalize_weekdays_drops_invalid():
 
 
 # --------------------------------------------------------------------------- #
-# 触发判定
+# Trigger decision
 # --------------------------------------------------------------------------- #
-def _at(hour, minute=0, day=dt.date(2026, 10, 26)):      # 2026-10-26 是周一
+def _at(hour, minute=0, day=dt.date(2026, 10, 26)):      # 2026-10-26 is a Monday
     return dt.datetime.combine(day, dt.time(hour, minute))
 
 
@@ -48,21 +48,21 @@ def test_due_slot_basic():
     times = ["08:00", "20:00"]
     now = _at(8, 0)
     assert su.due_slot(times, [], now, "") == "2026-10-26 08:00"
-    # 同一时段不重复触发
+    # The same slot does not fire twice
     assert su.due_slot(times, [], now, "2026-10-26 08:00") is None
-    # 20:00 到了才触发第二个
+    # The second slot fires only once 20:00 arrives
     assert su.due_slot(times, [], _at(20, 0), "2026-10-26 08:00") == \
         "2026-10-26 20:00"
 
 
 def test_due_slot_catch_up_runs_only_latest():
-    """错过多个时段时只补跑最近的一次，避免连着跑两遍。"""
+    """When several slots were missed, catch up on only the latest one, so the task does not run twice back to back."""
     assert su.due_slot(["08:00", "09:00"], [], _at(10, 0), "") == \
         "2026-10-26 09:00"
 
 
 def test_due_slot_respects_weekdays():
-    # 周一勾了，周二没勾
+    # Monday is checked, Tuesday is not
     assert su.due_slot(["08:00"], [1], _at(9, 1), "") is not None
     tuesday = dt.date(2026, 10, 27)
     now = dt.datetime.combine(tuesday, dt.time(9, 1))
@@ -74,7 +74,7 @@ def test_due_slot_before_first_slot():
 
 
 # --------------------------------------------------------------------------- #
-# 下次运行
+# Next run
 # --------------------------------------------------------------------------- #
 def test_next_run_same_day():
     when = su.next_run(["08:00", "20:00"], [], _at(9, 0))
@@ -82,10 +82,10 @@ def test_next_run_same_day():
 
 
 def test_next_run_skips_to_active_weekday():
-    """周五晚上之后，只有周一有任务 → next_run 应该是周一早上。"""
+    """After Friday night with only Monday active → next_run should be Monday morning."""
     friday = dt.date(2026, 10, 30)
     now = dt.datetime.combine(friday, dt.time(21, 0))
-    when = su.next_run(["08:00"], [1], now)          # 仅周一
+    when = su.next_run(["08:00"], [1], now)          # Monday only
     assert when.date() == dt.date(2026, 11, 2)
     assert when.hour == 8
 
@@ -96,7 +96,7 @@ def test_next_run_every_day():
 
 
 # --------------------------------------------------------------------------- #
-# 公告合并（防止旧镜像把新公告顶掉）
+# Announcement merging (a stale mirror must not override newer announcements)
 # --------------------------------------------------------------------------- #
 def _item(ident, date, title=None):
     return {"id": ident, "date": date, "tag": "版本更新",
@@ -105,7 +105,7 @@ def _item(ident, date, title=None):
 
 
 def test_merge_keeps_items_only_present_locally():
-    """在线源更旧（条目更少）时，本地的新条目不能被删掉。"""
+    """When the online source is older (fewer items), local newer items must not be deleted."""
     local = [_item("v1.3.0", "2026-10-25"), _item("v1.2.0", "2026-10-24")]
     stale_remote = [_item("v1.2.0", "2026-10-24")]
     merged = merge_announcements(local, stale_remote)
@@ -133,7 +133,7 @@ def test_pick_best_never_downgrades_updated():
 
 
 # --------------------------------------------------------------------------- #
-# UI：定时编辑器
+# UI: schedule editor
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def qapp():
@@ -158,12 +158,12 @@ def test_schedule_editor_roundtrip(qapp):
         times, days = editor.values()
         assert times == ["08:00", "20:30"]
         assert days == [1, 3, 5]
-        # 至少保留一个时段：删到空会自动补回 08:00
+        # Keep at least one slot: emptying the list auto-adds 08:00 back
         editor.list.setCurrentRow(0)
         editor._remove_time()
         assert editor.times() == ["20:30"]
         editor.list.setCurrentRow(0)
-        editor._remove_time()          # 删掉最后一个 → 自动补 08:00
+        editor._remove_time()          # delete the last one → 08:00 is added back
         assert editor.times() == ["08:00"]
     finally:
         editor.deleteLater()
@@ -177,6 +177,6 @@ def test_schedule_editor_emits_changed(qapp):
         seen = []
         editor.changed.connect(lambda: seen.append(1))
         editor._day_buttons[0][1].setChecked(True)
-        assert seen          # 勾星期要通知设置页保存
+        assert seen          # checking a weekday must notify the settings page to save
     finally:
         editor.deleteLater()

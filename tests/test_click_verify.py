@@ -1,8 +1,9 @@
-"""click_match 的「点击生效校验」逻辑测试。
+"""Tests for the "did the click take effect" verification in click_match.
 
-对应 1.0.2 实测报告的核心问题：点击发出去了、日志正常，界面毫无反应。
-判定依据是「点击点附近的像素有没有变化」，所以这里把 vision.grab 换成
-可控的假画面，精确驱动「有变化 / 没变化」两种分支。
+This targets the core problem in the 1.0.2 field report: the click was sent and the
+log looked fine, yet the UI did not react. The verdict is "did the pixels near the
+click point change", so vision.grab is swapped for controlled fake frames to drive
+the "changed / unchanged" branches precisely.
 """
 
 import numpy as np
@@ -21,7 +22,7 @@ def make_match(center=(300, 200), size=(100, 40)):
 
 
 class FakeScreen:
-    """按顺序返回预设帧；用完后一直返回最后一帧。"""
+    """Return preset frames in order; keep returning the last one once exhausted."""
 
     def __init__(self, frames):
         self._frames = list(frames)
@@ -63,7 +64,7 @@ def click_counter(monkeypatch):
 
 
 def test_click_verified_first_try(monkeypatch, no_sleep, fg_ok, click_counter):
-    """点一下就有效 → 只点一次。"""
+    """One click takes effect → click only once."""
     monkeypatch.setattr(vision, "grab",
                         FakeScreen([blank(100), blank(200)]).grab)
     monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
@@ -77,7 +78,7 @@ def test_click_verified_first_try(monkeypatch, no_sleep, fg_ok, click_counter):
 
 def test_click_retries_when_nothing_changed(monkeypatch, no_sleep, fg_ok,
                                             click_counter):
-    """第一下没反应（典型：窗口未激活，第一下被吃掉）→ 补点一次并成功。"""
+    """First click does nothing (typical: window not active, click swallowed) → retry once and succeed."""
     monkeypatch.setattr(vision, "grab",
                         FakeScreen([blank(100), blank(100), blank(230)]).grab)
     monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
@@ -90,7 +91,7 @@ def test_click_retries_when_nothing_changed(monkeypatch, no_sleep, fg_ok,
 
 
 def test_click_gives_up_after_retries(monkeypatch, no_sleep, fg_ok, click_counter):
-    """补点次数用完后不再纠缠，返回 True（流程继续），但日志会警告。"""
+    """When retries run out, stop pushing and return True (the flow continues), but log a warning."""
     monkeypatch.setattr(vision, "grab", lambda region=None: blank(100))
     monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
 
@@ -102,13 +103,13 @@ def test_click_gives_up_after_retries(monkeypatch, no_sleep, fg_ok, click_counte
                                 {"click_verify": True, "click_retries": 2},
                                 procs=["maa.exe"])
     assert ok is True
-    assert len(click_counter) == 3        # 1 次 + 2 次补点
+    assert len(click_counter) == 3        # 1 initial attempt + 2 retries
     assert any("画面无变化" in w for w in warnings)
 
 
 def test_foreground_failure_uses_background_click(monkeypatch, no_sleep,
                                                   click_counter):
-    """抢不到前台时不盲点，先投递后台点击；成功就不再动鼠标。"""
+    """When the foreground cannot be grabbed, do not click blindly: post a background click first, and if it works, leave the mouse alone."""
     monkeypatch.setattr(input_driver, "ensure_foreground",
                         lambda hwnd, timeout=2.0: False)
     posted = []
@@ -127,7 +128,7 @@ def test_foreground_failure_uses_background_click(monkeypatch, no_sleep,
 
 def test_foreground_failure_falls_back_to_real_click(monkeypatch, no_sleep,
                                                      click_counter):
-    """后台点击也没生效 → 仍然尝试真实点击。"""
+    """The background click had no effect either → still try a real click."""
     monkeypatch.setattr(input_driver, "ensure_foreground",
                         lambda hwnd, timeout=2.0: False)
     monkeypatch.setattr(input_driver, "post_click",
@@ -177,7 +178,7 @@ def test_patch_diff_helpers():
     b = np.full((10, 10, 3), 50, dtype=np.uint8)
     assert automation._patch_diff(a, a) == 0.0
     assert automation._patch_diff(a, b) == pytest.approx(50.0)
-    # 1.1.1：截图缺失不再返回 999.0（那会被当成「画面变了」），改为 None=无法判定
+    # 1.1.1: a missing capture no longer returns 999.0 (that read as "frame changed"); None = cannot tell
     assert automation._patch_diff(a, None) is None
     assert automation._patch_diff(a, b[0:5]) is None
 
@@ -186,10 +187,10 @@ def test_patch_diff_helpers():
 
 
 # --------------------------------------------------------------------------- #
-# 1.1.1 回归：click_activate（关掉前台激活时只允许后台点击）
+# 1.1.1 regression: click_activate (background clicks only when activation is off)
 # --------------------------------------------------------------------------- #
 def test_click_activate_off_uses_background_click_only(monkeypatch, no_sleep):
-    """click_activate=False → 不激活窗口，只发后台点击，绝不发真实点击。"""
+    """click_activate=False → do not activate the window, post background clicks only, never a real click."""
     activated = []
     monkeypatch.setattr(input_driver, "ensure_foreground",
                         lambda hwnd, timeout=2.0: activated.append(hwnd) or True)
@@ -206,13 +207,13 @@ def test_click_activate_off_uses_background_click_only(monkeypatch, no_sleep):
         make_match(), {"click_activate": False, "click_verify": False})
 
     assert ok is True
-    assert activated == []                       # 从未尝试切前台
+    assert activated == []                       # never tried to go foreground
     assert len(clicks) == 1
     assert clicks[0][2]["mode"] == input_driver.CLICK_POSTMESSAGE
 
 
 def test_click_activate_off_gives_up_when_background_fails(monkeypatch, no_sleep):
-    """关了激活、后台点击也失败 → 放弃（绝不能退化成真实点击）。"""
+    """Activation off and the background click also fails → give up (must never degrade to a real click)."""
     monkeypatch.setattr(input_driver, "ensure_foreground",
                         lambda hwnd, timeout=2.0: pytest.fail("不该激活窗口"))
     clicks = []
@@ -228,16 +229,16 @@ def test_click_activate_off_gives_up_when_background_fails(monkeypatch, no_sleep
         make_match(), {"click_activate": False, "click_verify": False})
 
     assert ok is False
-    assert len(clicks) == 1                      # 只尝试过后台投递
+    assert len(clicks) == 1                      # only the background post was attempted
     assert clicks[0][2]["mode"] == input_driver.CLICK_POSTMESSAGE
 
 
 # --------------------------------------------------------------------------- #
-# 1.1.1 回归：截图失败不能被当成「点击生效」
+# 1.1.1 regression: a failed capture must not count as "click took effect"
 # --------------------------------------------------------------------------- #
 def test_grab_failure_is_unknown_not_success(monkeypatch, no_sleep, fg_ok,
                                              click_counter):
-    """截图失败（锁屏/远程断开）→ 只警告无法校验，不宣称生效、不补点。"""
+    """Capture failed (locked screen / remote session gone) → only warn that verification is impossible; do not claim success and do not retry."""
     monkeypatch.setattr(vision, "grab", lambda region=None: None)
     monkeypatch.setattr(automation, "_resolve_target_window", lambda *a: 42)
 
@@ -252,13 +253,13 @@ def test_grab_failure_is_unknown_not_success(monkeypatch, no_sleep, fg_ok,
                                 procs=["maa.exe"])
 
     assert ok is True
-    assert len(click_counter) == 1               # 无法判定时不做无意义补点
+    assert len(click_counter) == 1               # no pointless retries when the outcome cannot be judged
     assert not any("点击生效" in m for m in infos)
     assert any("无法校验" in w for w in warnings)
 
 
 def test_before_frame_is_grabbed_after_activation(monkeypatch, no_sleep):
-    """「点击前」画面必须在激活之后取，否则激活本身就被当成点击生效。"""
+    """The "before" frame must be grabbed after activation, otherwise activation itself looks like the click took effect."""
     order = []
     monkeypatch.setattr(input_driver, "ensure_foreground",
                         lambda hwnd, timeout=2.0: order.append("fg") or True)

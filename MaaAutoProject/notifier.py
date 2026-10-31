@@ -2,9 +2,9 @@ import logging
 import json
 import urllib.request
 
-# serverchan_sdk 是项目本地文件（serverchan_sdk.py），
-# 打包时由 build.py 的 HIDDEN_IMPORTS 保证进 exe。
-# 如果缺失，只禁用 Server 酱推送，不影响主程序启动。
+# serverchan_sdk is a local project file (serverchan_sdk.py),
+# pulled into the exe by build.py's HIDDEN_IMPORTS at packaging time.
+# If it is missing, only Server Chan pushing is disabled; the app still starts.
 try:
     from serverchan_sdk import sc_send
     HAS_SERVERCHAN = True
@@ -16,7 +16,7 @@ logger = logging.getLogger("MaaAuto")
 
 
 def send_webhook(webhook_url, title, content):
-    """发送通用 Webhook（POST JSON: {title, content}）"""
+    """Send a generic webhook (POST JSON: {title, content})."""
     try:
         payload = {
             "title": title,
@@ -35,14 +35,14 @@ def send_webhook(webhook_url, title, content):
 
 
 def send_task_report(send_key, start_time, end_time, status, logs, webhook_url=""):
-    """
-    发送任务报告
-    :param send_key: Server酱 SendKey（为空则跳过）
-    :param start_time: 任务开始时间 (datetime)
-    :param end_time: 任务结束时间 (datetime)
-    :param status: 状态字符串 ("成功" / "中止" / "报错")
-    :param logs: 日志列表 (list) 或 字符串 (str)
-    :param webhook_url: 通用 Webhook 地址（为空则跳过）
+    """Send the task report.
+
+    :param send_key: Server Chan SendKey (empty = skip)
+    :param start_time: task start time (datetime)
+    :param end_time: task end time (datetime)
+    :param status: status string (success / aborted / error)
+    :param logs: log lines (list) or a plain string (str)
+    :param webhook_url: generic webhook URL (empty = skip)
     """
     title = f"{end_time.strftime('%m-%d')} | MaaAuto自动{status}"
 
@@ -55,7 +55,7 @@ def send_task_report(send_key, start_time, end_time, status, logs, webhook_url="
     desp += f"当前日志输出：\n{logs_text}\n\n"
     desp += "MaaAuto 敬上"
 
-    # Server酱推送
+    # Server Chan push
     if send_key:
         if not HAS_SERVERCHAN:
             logger.warning("未加载 serverchan_sdk，跳过 Server 酱推送。")
@@ -67,7 +67,7 @@ def send_task_report(send_key, start_time, end_time, status, logs, webhook_url="
             except Exception as e:
                 logger.error(f"推送发送失败: {e}")
 
-    # 通用 Webhook 推送
+    # Generic Webhook push
     if webhook_url:
         logger.info(f"正在发送通用 Webhook 推送: {webhook_url}")
         send_webhook(webhook_url, title, desp)

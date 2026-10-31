@@ -1,13 +1,13 @@
-"""升级提示弹窗（替代「把 GitHub Release 正文塞进 QMessageBox」）。
+"""Update prompt dialog (replaces piping the GitHub Release body into a QMessageBox).
 
-旧实现的问题（1.0.5 实测反馈）：
-  * QMessageBox 里的正文是纯文本，GitHub 的 Markdown（##、-、表格）原样显示，
-    长链接不换行，窗口被撑得很丑；
-  * 没有「版本 → 版本」的对比，只有一行「发现新版本 x.y.z」；
-  * 「是/否」按钮语义不清。
+Problems with the old implementation (1.0.5 field feedback):
+  * QMessageBox body was plain text, so GitHub Markdown (##, -, tables) showed raw,
+    long links did not wrap, and the window looked stretched and ugly;
+  * no version-to-version comparison, only a single "new version x.y.z found" line;
+  * the Yes/No buttons had unclear meaning.
 
-这里的弹窗跟界面共用主题：标题区 + 发布说明富文本区（Markdown 渲染、可滚动）
-+ 明确的「立即升级 / 稍后 / 查看发布页」按钮。
+This dialog shares the app theme: header area + release-notes rich text (Markdown,
+scrollable) + explicit "Update now / Later / View release" buttons.
 """
 import re
 
@@ -33,11 +33,12 @@ def link_color():
 
 
 def colorize_links(browser, color=None):
-    """把富文本里的链接改成当前主题可见的颜色。
+    """Recolor rich-text links so they stay visible in the current theme.
 
-    ``setMarkdown`` 会给每个链接写死 ``#0000ff``（实测 charFormat 前景色就是
-    纯蓝），既不跟 QSS 也不跟 palette 走 —— 深色主题下几乎看不见。这里渲染完
-    再遍历所有 anchor 片段，统一 merge 一个前景色。
+    ``setMarkdown`` hardcodes ``#0000ff`` on every link (charFormat foreground is
+    plain blue in practice), which follows neither QSS nor the palette — nearly
+    invisible on dark themes. After rendering, walk every anchor fragment and merge
+    one foreground color.
     """
     color = color or link_color()
     doc = browser.document()
@@ -62,7 +63,7 @@ def colorize_links(browser, color=None):
 
 
 def render_notes_browser(notes):
-    """把 Release 正文渲染进 QTextBrowser（优先 Markdown）。"""
+    """Render the release body into a QTextBrowser (Markdown first)."""
     browser = QTextBrowser()
     browser.setObjectName("ReleaseNotes")
     browser.setOpenExternalLinks(True)
@@ -81,7 +82,7 @@ def render_notes_browser(notes):
 
 
 class MessageDialog(QDialog):
-    """统一样式的信息弹窗（替代散落的 QMessageBox.information）。"""
+    """Consistently styled info dialog (replaces scattered QMessageBox.information)."""
 
     def __init__(self, i18n, title, text, parent=None, icon="info"):
         super().__init__(parent)
@@ -128,9 +129,9 @@ class MessageDialog(QDialog):
 
 
 class UpdateDialog(QDialog):
-    """发现新版本：版本对比 + 发布说明 + 升级/稍后/发布页。
+    """New version found: version comparison + release notes + update/later/release page.
 
-    ``chosen`` 取值：``"update"`` / ``"later"`` / ``"open"``。
+    ``chosen`` is one of ``"update"`` / ``"later"`` / ``"open"``.
     """
 
     def __init__(self, i18n, info, parent=None):
@@ -146,7 +147,7 @@ class UpdateDialog(QDialog):
         root.setContentsMargins(24, 20, 24, 18)
         root.setSpacing(14)
 
-        # ---- 头部：图标 + 标题 + 版本对比 ----
+        # ---- header: icon + title + version comparison ----
         head = QHBoxLayout()
         head.setSpacing(14)
         logo = QLabel()
@@ -174,7 +175,7 @@ class UpdateDialog(QDialog):
         head.addLayout(head_text, 1)
         root.addLayout(head)
 
-        # ---- 发布说明 ----
+        # ---- release notes ----
         self.notes_title = QLabel(self.i18n.t("update.notes"))
         self.notes_title.setObjectName("SectionTitle")
         root.addWidget(self.notes_title)
@@ -189,7 +190,7 @@ class UpdateDialog(QDialog):
             self.notes.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         root.addWidget(self.notes, 1)
 
-        # ---- 按钮 ----
+        # ---- buttons ----
         btns = QHBoxLayout()
         btns.setSpacing(8)
         self.btn_open = QPushButton(self.i18n.t("update.btn.open"))
@@ -228,7 +229,7 @@ class UpdateDialog(QDialog):
 
 
 def ask_update(i18n, info, parent=None):
-    """弹窗询问是否升级；返回 True 表示用户选择「立即升级」。"""
+    """Ask whether to update; True means the user chose "Update now"."""
     dlg = UpdateDialog(i18n, info, parent)
     dlg.exec()
     if dlg.chosen == "open":

@@ -1,7 +1,8 @@
-"""automation.py 里「找图 + 点击」编排逻辑的测试。
+"""Tests for the "template match + click" orchestration in automation.py.
 
-不截真实屏幕、不注入真实鼠标：vision.find_any 与 input_driver.* 全部被替换，
-只验证「用哪个区域搜、命中了往哪点、什么时候回退/超时」。
+No real screen grabs, no real mouse injection: vision.find_any and input_driver.* are
+all replaced. Only the orchestration is checked: which region gets searched, where a
+hit is clicked, and when it backs off or times out.
 """
 
 import pytest
@@ -18,7 +19,7 @@ def make_match(left=100, top=50, width=60, height=20, score=0.9, scale=1.0):
 
 @pytest.fixture
 def stub_vision(monkeypatch):
-    """让 find_any 立刻返回预设结果，并记录传给它的 region。"""
+    """Make find_any return preset results immediately and record the region passed in."""
     calls = {"region": "unset", "n": 0}
     queue = []
 
@@ -105,7 +106,7 @@ def test_find_and_click_hits_and_clicks(monkeypatch, stub_vision, fake_click):
            "wait_timeout": 5, "click_verify": False}
     assert automation.find_and_click("maa_start.png", cfg) is True
 
-    # 命中点 = 中心 (130, 60) + 偏移
+    # Click point = center (130, 60) + offset
     x, y, kw = fake_click["clicks"][0]
     assert (x, y) == (133, 56)
     assert kw["mode"] == input_driver.CLICK_SENDINPUT
@@ -142,8 +143,9 @@ def test_find_and_click_timeout(monkeypatch, stub_vision, fake_click):
 
 def test_find_and_click_missing_template(monkeypatch, fake_click):
     monkeypatch.setattr(automation, "template_paths", lambda name, cfg: [])
-    # 1.4.4 起不再静默返回 False（调用方忽略返回值，等于「什么都没点却报成功」），
-    # 而是抛错并告诉用户去哪里补模板。
+    # Since 1.4.4, a missing template no longer silently returns False (callers ignore the
+    # return value, which reads as "clicked nothing but reported success"); it raises
+    # instead and tells the user where to add the template.
     with pytest.raises(automation.TemplateMissing):
         automation.find_and_click("nope.png", {})
     assert fake_click["clicks"] == []
@@ -170,7 +172,7 @@ def test_postmessage_falls_back_to_real_click(monkeypatch, stub_vision):
 
     def fake_click(x, y, **kw):
         modes.append(kw.get("mode"))
-        return len(modes) > 1        # 第一次（postmessage）失败，第二次成功
+        return len(modes) > 1        # first (postmessage) attempt fails, the second succeeds
 
     monkeypatch.setattr(input_driver, "click", fake_click)
     monkeypatch.setattr(input_driver, "activate_window", lambda hwnd: True)

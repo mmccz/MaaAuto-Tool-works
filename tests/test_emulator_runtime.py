@@ -1,7 +1,8 @@
-"""「模拟器刚启动就退出」必须判失败，而不是报成功。
+"""An emulator that exits right after launch must be judged a failure, not a success.
 
-来自 1.0.3 的真实日志：点击是成功的（`点击生效`），但 MAA 连不上 MuMu
-（ADB 10061），MuMu 15 秒后退出，工具却报「成功」——用户以为挂完了。
+From a real 1.0.3 log: the click had taken effect, but MAA could not reach MuMu
+(ADB 10061), MuMu exited after 15 seconds, and the tool still reported "success" — the
+user thought the run had completed.
 """
 
 import pytest
@@ -10,15 +11,15 @@ import automation
 
 
 # --------------------------------------------------------------------------- #
-# 纯判定函数
+# Pure predicate helpers
 # --------------------------------------------------------------------------- #
 def test_short_runtime_raises():
     with pytest.raises(RuntimeError) as ei:
         automation._check_emulator_runtime(uptime=15, min_runtime=60)
     msg = str(ei.value)
     assert "15 秒" in msg
-    assert "16384" in msg          # 给出 MuMu 默认端口提示
-    assert "asst.log" in msg       # 指向 MAA 自己的日志
+    assert "16384" in msg          # hints at MuMu's default port
+    assert "asst.log" in msg       # points at MAA's own log
 
 
 def test_long_runtime_ok():
@@ -39,7 +40,7 @@ def test_runtime_equal_to_threshold_is_ok():
 
 
 # --------------------------------------------------------------------------- #
-# run_maa_phase 的编排
+# run_maa_phase orchestration
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def maa_env(tmp_path, monkeypatch):
@@ -60,7 +61,7 @@ def maa_env(tmp_path, monkeypatch):
     monkeypatch.setattr(automation.time, "time", lambda: clock["now"])
 
     def finish_after(seconds):
-        """模拟 wait_for_process_exit 消耗掉 seconds 秒。"""
+        """Simulate wait_for_process_exit consuming `seconds` seconds."""
         def fake_exit(procs, timeout, check_interval=15):
             clock["now"] += seconds
             return True
@@ -75,7 +76,7 @@ def test_maa_phase_fails_when_emulator_dies_immediately(maa_env):
     with pytest.raises(RuntimeError) as ei:
         automation.run_maa_phase(cfg, automation.logger)
     assert "15 秒" in str(ei.value)
-    assert maa_env["calls"]["clicked"] is True     # 点击本身是成功的
+    assert maa_env["calls"]["clicked"] is True     # the click itself succeeded
 
 
 def test_maa_phase_ok_when_emulator_runs_long(maa_env):
@@ -85,7 +86,7 @@ def test_maa_phase_ok_when_emulator_runs_long(maa_env):
 
 
 def test_workflow_does_not_retry_environment_failure(monkeypatch, maa_env):
-    """模拟器连不上属于环境问题，重试 3 次只会浪费 6 分钟——应当直接收尾报错。"""
+    """An unreachable emulator is an environment problem; retrying 3 times only wastes 6 minutes — it should fail right away."""
     attempts = []
 
     def fake_phase(config, logger):
@@ -99,7 +100,7 @@ def test_workflow_does_not_retry_environment_failure(monkeypatch, maa_env):
     status = automation.execute_workflow(
         {"maa_path": maa_env["maa"], "retry_times": 3}, automation.logger)
     assert status == "报错"
-    assert len(attempts) == 1          # 没有重试
+    assert len(attempts) == 1          # no retries
 
 
 def test_workflow_retries_other_failures(monkeypatch, maa_env):

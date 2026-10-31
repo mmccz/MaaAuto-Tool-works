@@ -8,11 +8,10 @@ from PySide6.QtCore import QObject, Signal
 
 
 def _get_base_dir():
-    """
-    程序基准目录：
-      - 打包后（PyInstaller）：exe 所在目录
-      - 开发模式：config_manager.py 所在目录（项目根目录）
-    无论从哪个 CWD 启动，config/ 和 logs/ 都在同一个位置。
+    """Base directory of the program:
+      - frozen (PyInstaller): the directory holding the exe
+      - dev mode: the directory holding config_manager.py (the project root)
+    Either way config/ and logs/ resolve to the same place, whatever the CWD.
     """
     if getattr(sys, "frozen", False):
         return os.path.dirname(os.path.abspath(sys.executable))
@@ -29,22 +28,22 @@ os.makedirs(LOG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 DEFAULT_CONFIG = {
-    # ---- 原有键 ----
+    # ---- existing keys ----
     "maa_path": "",
     "maaend_path": "",
     "serverchan_key": "",
     "webhook_url": "",
-    "execute_time": "08:00",           # 旧字段：单时段（保留兼容，1.3.0 起由 schedule_times 接管）
-    "schedule_times": [],              # 多时段，如 ["08:00", "20:30"]；空=用 execute_time
-    "schedule_weekdays": [],           # 1=周一…7=周日；空=每天
+    "execute_time": "08:00",           # legacy: single slot (kept for compatibility; schedule_times owns it since 1.3.0)
+    "schedule_times": [],              # multiple slots, e.g. ["08:00", "20:30"]; empty = use execute_time
+    "schedule_weekdays": [],           # 1=Mon ... 7=Sun; empty = every day
     "enable_schedule": False,
     "wait_timeout": 60,
     "game_start_timeout": 120,
     "game_exit_timeout": 7200,
     "retry_times": 3,
     "retry_interval": 30,
-    # 模拟器「刚启动就退出」视为失败（秒）。MuMu 因为 ADB 连不上会当场退出，
-    # 旧版本把它当「任务完成」，误报成功。0 = 关闭该判定。
+    # An emulator that quits right after launch counts as a failure (seconds). MuMu dies at
+    # once when ADB cannot connect; older versions called that "done" and reported success. 0 = off.
     "min_emulator_runtime": 60,
     "auto_start": False,
     "minimize_to_tray": True,
@@ -52,9 +51,9 @@ DEFAULT_CONFIG = {
     "foreground_action": "none",
     "blacklist_apps": "",
     "last_trigger_date": "",
-    "last_trigger_key": "",            # "YYYY-MM-DD HH:MM"：多时段去重（比日期更精确）
+    "last_trigger_key": "",            # "YYYY-MM-DD HH:MM": per-slot dedupe (finer than a date)
     "run_count": 0,
-    # ---- 新增键 ----
+    # ---- newer keys ----
     "emulator_proc": "MuMuPlayer.exe",
     "pc_game_proc": "Endfield.exe",
     "enable_system_notify": True,
@@ -68,61 +67,61 @@ DEFAULT_CONFIG = {
     "show_animation": True,
     "last_run_time": "",
     "window_geometry": "",
-    # ---- 升级相关 ----
+    # ---- updates ----
     "auto_check_update": True,
     "auto_download_update": False,
-    "update_channel": "stable",   # stable / beta（beta 会包含 prerelease）
+    "update_channel": "stable",   # stable / beta (beta includes prereleases)
 
-    # ---- 找图与点击（多分辨率 / 缩放适配）----
-    # 1.0.x 是「全屏 + 固定尺寸」匹配，125%/150% 缩放下按钮对不上模板。
-    # 这里暴露成可调参数：默认范围覆盖 60%~200%，DPI 缩放比作为优先中心。
-    "search_scope": "window",        # window=只在目标窗口客户区找 / screen=全屏
-    "search_padding": 0,             # 搜索区域外扩像素
-    "match_threshold": 0.80,         # 相关系数阈值
-    "match_scale_min": 0.60,         # 模板缩放搜索下限
-    "match_scale_max": 2.00,         # 上限
-    "match_scale_step": 0.05,        # 尺度步长
-    "match_interval": 1.5,           # 两次尝试的间隔（秒）
-    "click_mode": "sendinput",       # sendinput=真实点击 / postmessage=后台点击
-    "click_activate": True,          # 点击前把目标窗口切到前台
-    "click_restore_cursor": True,    # 点完把鼠标放回原位
-    "click_move_delay_ms": 80,       # 移到目标后停顿，再按下
-    "click_offset_x": 0,             # 命中点微调（像素）
+    # ---- template matching and clicking (multi-resolution / DPI scaling) ----
+    # 1.0.x matched fixed sizes full-screen, so buttons missed their templates at 125%/150%.
+    # Exposed as tunables: the default range covers 60%..200%, centred on the DPI scale factor.
+    "search_scope": "window",        # window = target client area only / screen = whole screen
+    "search_padding": 0,             # pixels added around the search area
+    "match_threshold": 0.80,         # correlation-coefficient threshold
+    "match_scale_min": 0.60,         # lowest template scale searched
+    "match_scale_max": 2.00,         # highest
+    "match_scale_step": 0.05,        # scale step
+    "match_interval": 1.5,           # interval between attempts (seconds)
+    "click_mode": "sendinput",       # sendinput = real click / postmessage = background post
+    "click_activate": True,          # bring the target window to the foreground before clicking
+    "click_restore_cursor": True,    # put the mouse back where it was afterwards
+    "click_move_delay_ms": 80,       # pause after moving onto the target, before pressing
+    "click_offset_x": 0,             # nudge the hit point (pixels)
     "click_offset_y": 0,
-    "template_dir": "",              # 自定义模板目录，留空 = config/templates
+    "template_dir": "",              # custom template dir; empty = config/templates
 
-    # ---- 点击生效校验 ----
-    # 「点击发出去」不等于「点到了」：目标被遮挡或没抢到前台时，注入的点击会落到
-    # 别的窗口上，日志毫无异常但界面没反应。这里比对点击点附近的像素变化，
-    # 没变化就补点，并在日志里说清楚。
+    # ---- click verification ----
+    # "The click was sent" is not "the click landed": if the target is covered or never
+    # reached the foreground, the click hits another window - log clean, UI dead. Compare
+    # the pixels around the click; if nothing changed, click again and say so in the log.
     "click_verify": True,
-    "click_verify_delay_ms": 900,    # 点击后等多久再比对像素
-    "click_retries": 1,              # 判定无效时补点次数
+    "click_verify_delay_ms": 900,    # wait after clicking before comparing pixels
+    "click_retries": 1,              # extra clicks when the first is judged ineffective
 
-    # ---- 日志 ----
-    # logs/<年>/<月>/<日>/run_N_<HHMMSS>/task.log 每天至少一个目录，
-    # 长期运行（尤其配合定时任务）会堆到几千个，外加找图失败现场截图。
-    # 启动时按「保留最近 N 天」清理；0 = 不清理（全部保留）。
+    # ---- logging ----
+    # logs/<year>/<month>/<day>/run_N_<HHMMSS>/task.log means at least one dir per day;
+    # long runs (especially with schedules) pile up thousands, plus failure screenshots.
+    # Cleared at startup to "keep the last N days"; 0 = keep everything.
     "log_retention_days": 90,
 
-    # ---- 任务与界面 ----
-    # 任务期间把主窗口收进托盘：我们自己的窗口很容易盖住 MAA 的按钮，
-    # 那会同时毁掉找图（截到自己的界面）和点击（点到自己窗口上）。
+    # ---- tasks and UI ----
+    # Hide the main window in the tray during a task: our own window easily covers MAA's
+    # buttons, which breaks finding (we capture ourselves) and clicking (we click ourselves).
     "minimize_on_task": True,
 
-    # ---- 界面 ----
-    "ui_scale": 1.0,                 # 界面缩放（1.0 / 1.25 / 1.5），切换即时生效
+    # ---- UI ----
+    "ui_scale": 1.0,                 # UI scale (1.0 / 1.25 / 1.5); applied immediately
 
-    # ---- 新手引导 / 公告 ----
-    "tutorial_seen": False,          # 首次启动自动弹「新手教程」，看过就不再弹
-    "announcements_seen": [],        # 已读公告 id（首页「公告」按钮上的小红点）
-    # 上次读公告时的 updated 时间戳：公告内容更新（id 没变）时也要重新显示
+    # ---- onboarding / announcements ----
+    "tutorial_seen": False,          # Show the tutorial on first start; once seen it never pops up again
+    "announcements_seen": [],        # ids of announcements already read (the red dot on the home-page button)
+    # updated timestamp at last read: an edited announcement (same id) shows again
     "announcements_seen_updated": "",
 }
 
-# 「设置页不拥有」的运行时键：设置页在启动时复制了一份配置，后续任何一次
-# 自动保存都会把整份快照发回来。如果不保护这些键，用户点一下任意设置就会
-# 把 tutorial_seen 冲回 False（表现为「新手教程每次启动都弹」）。
+# Runtime keys "not owned by the settings page": it copies the config at startup and
+# sends the whole snapshot back on any auto-save. Without protecting these keys, one
+# click on any setting resets tutorial_seen to False (tutorial pops up every start).
 RUNTIME_CONFIG_KEYS = (
     "tutorial_seen",
     "announcements_seen",
@@ -136,9 +135,8 @@ RUNTIME_CONFIG_KEYS = (
 
 
 def load_config():
-    """
-    读取 config.json。
-    用 utf-8-sig 兼容带 BOM 的文件（PowerShell Set-Content -Encoding utf8 会加 BOM）。
+    """Read config.json.
+    utf-8-sig tolerates files with a BOM (PowerShell Set-Content -Encoding utf8 adds one).
     """
     if os.path.exists(CONFIG_FILE):
         try:
@@ -151,12 +149,12 @@ def load_config():
 
 
 def save_config(config):
-    """写 config.json（UTF-8 无 BOM）。
+    """Write config.json (UTF-8, no BOM).
 
-    先写同目录临时文件、再 os.replace 原子替换。主程序是「改完即存」，
-    而升级/退出/任务管理器结束都可能落在写入中间；直接覆盖原文件时
-    一旦被打断就是半截 JSON，下次启动 load_config() 会静默回退全默认值，
-    用户会感觉「配置全丢了」。
+    A temp file in the same directory is written first, then os.replace swaps it in
+    atomically. The app saves on every change, while an upgrade / exit / Task Manager
+    kill can land mid-write; overwriting in place leaves half a JSON file, and the next
+    load_config() silently falls back to all defaults - users see "the config is gone".
     """
     tmp_file = CONFIG_FILE + ".tmp"
     with open(tmp_file, "w", encoding="utf-8") as f:
@@ -167,18 +165,20 @@ def save_config(config):
 
 
 def cleanup_old_logs(retention_days=None, log_dir=None, logger=None):
-    """删除超过保留期的旧任务日志目录（启动时调用）。
+    """Delete task log directories older than the retention window (called at startup).
 
-    ``logs/`` 的结构是 ``<年>/<月>/<日>/run_N_<HHMMSS>/task.log``，每天至少一个目录；
-    配合定时任务长期运行会堆到几千个，外加找图失败留下的 ``find_fail_*.png``。
+    ``logs/`` is laid out as ``<year>/<month>/<day>/run_N_<HHMMSS>/task.log``, so there is
+    at least one directory per day; long scheduled runs pile up thousands, plus the
+    ``find_fail_*.png`` screenshots from failed matches.
 
-    只按**目录名解析出的日期**判断，不看 mtime：当天目录还在写入，mtime 一直在变，
-    靠 mtime 反而可能误删正在用的目录。日期目录里的东西整棵删掉，空目录顺手清掉。
+    Only the **date parsed from the directory name** counts, not mtime: today's directory
+    is still being written to, so its mtime keeps moving and using it could delete a
+    directory in active use. Date directories are removed whole, empty parents too.
 
-    :param retention_days: 保留最近多少天；``None`` 取默认值，``<=0`` 表示不清理
-    :param log_dir:        日志根目录；默认 ``LOG_DIR``（测试可传临时目录）
-    :param logger:         可选 logger，用于 debug 输出
-    :return: 删除的日期目录数
+    :param retention_days: how many days to keep; ``None`` uses the default, ``<=0`` disables
+    :param log_dir:        log root; defaults to ``LOG_DIR`` (tests pass a temp dir)
+    :param logger:         optional logger for debug output
+    :return: number of date directories removed
     """
     if retention_days is None:
         retention_days = DEFAULT_CONFIG["log_retention_days"]
@@ -223,7 +223,7 @@ def cleanup_old_logs(retention_days=None, log_dir=None, logger=None):
                 except ValueError:
                     continue
                 if day >= cutoff:
-                    continue          # 还在保留期内（含今天）
+                    continue          # still within the retention window (today included)
                 try:
                     shutil.rmtree(ddir)
                     removed += 1
@@ -233,7 +233,7 @@ def cleanup_old_logs(retention_days=None, log_dir=None, logger=None):
             _rmdir_if_empty(mdir)
         _rmdir_if_empty(ydir)
 
-    # 顶层的找图失败截图：文件有可靠 mtime，按 mtime 清
+    # Top-level failure screenshots: files have a reliable mtime, so clean by mtime
     for name in _list_dirs(base):
         if not (name.startswith("find_fail_") and name.lower().endswith(".png")):
             continue

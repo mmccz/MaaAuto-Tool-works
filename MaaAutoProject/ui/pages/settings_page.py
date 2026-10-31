@@ -27,11 +27,11 @@ logger = logging.getLogger("MaaAuto")
 
 
 def _match_test_worker(cfg):
-    """后台线程：按当前配置截屏匹配一次（只找不点）。
+    """Background thread: grab the screen and match once with the current config (find only, no click).
 
-    返回 ``[{"name":…, "match":Match|None, "source":…, "size":…, "error":…}]``。
-    放模块级、不碰 Qt 控件，是因为跨线程访问界面对象正是「升级器 0xC0000005
-    崩溃」的成因。
+    Returns ``[{"name":..., "match":Match|None, "source":..., "size":..., "error":...}]``.
+    Kept module-level and free of Qt widgets because cross-thread widget access is exactly
+    what caused the "updater 0xC0000005 crash".
     """
     import vision
     import automation
@@ -58,9 +58,9 @@ def _match_test_worker(cfg):
                 size = f"{im.width}×{im.height}"
         except Exception:
             pass
-        # 1.4.5：先把 MAA / MaaEnd 窗口弄到最前面再截屏。
-        # 旧实现直接抓全屏 —— 用户点「测试找图」时 MaaAuto 的窗口正压在目标
-        # 上面，截到的全是自己的界面，于是永远「未命中」。
+        # 1.4.5: bring the MAA / MaaEnd window to the front before grabbing.
+        # The old code grabbed the whole screen — when users clicked "Test search", the MaaAuto
+        # window sat on top, so the grab held our own UI and never matched.
         proc = automation.template_process(name, cfg)
         if proc:
             try:
@@ -81,13 +81,13 @@ def _match_test_worker(cfg):
 
 
 class SettingsPage(QWidget):
-    """设置页：单页滚动式分组 + 顶部跳转 chips + 视口高亮。"""
+    """Settings page: single scrolling page of groups + top jump chips + viewport highlight."""
 
     config_changed = Signal(dict)
     theme_changed = Signal(str)
     language_changed = Signal(str)
     accent_changed = Signal(str)
-    # 界面缩放单独走一条信号：主窗口要「即时重绘」，而不是只存配置等重启
+    # UI scale has its own signal: the main window must repaint immediately, not just save config for a restart
     ui_scale_changed = Signal(float)
     restart_requested = Signal()
 
@@ -105,7 +105,7 @@ class SettingsPage(QWidget):
 
         self._active_chip_key = None
 
-        # 网络测试线程句柄（防止被 GC）
+        # network test thread handle (keeps it from being GC'd)
         self._sc_test_worker = None
         self._wh_test_worker = None
 
@@ -129,7 +129,7 @@ class SettingsPage(QWidget):
         self.scroll.verticalScrollBar().valueChanged.connect(self._update_active_chip)
 
     # ==================================================================
-    # 构建 UI
+    # Build UI
     # ==================================================================
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -253,7 +253,7 @@ class SettingsPage(QWidget):
             chip.setChecked(self._groups.get(best_key) is group)
 
     # ------------------------------------------------------------------
-    # 分组
+    # Groups
     # ------------------------------------------------------------------
     def _build_groups(self):
         g = self._new_group("paths")
@@ -416,7 +416,7 @@ class SettingsPage(QWidget):
         self.bg_opacity_slider.setValue(int(self.config.get("background_opacity", 0.3) * 100))
         self._add_item(g, "settings.background.opacity", None, self.bg_opacity_slider)
 
-        # 背景模糊：0~60px。和透明度一样用滑杆（数值小的控件用输入框很难拖准）
+        # Background blur: 0-60px. A slider like opacity (small ranges are hard to type exactly)
         blur_row = QWidget()
         blur_lay = QHBoxLayout(blur_row)
         blur_lay.setContentsMargins(0, 0, 0, 0)
@@ -457,9 +457,9 @@ class SettingsPage(QWidget):
         self.ui_scale_combo.setCurrentIndex(idx)
         self.ui_scale_combo.setMinimumWidth(120)
 
-        # 缩放旁边常驻一个「重启程序」——切换比例后即时生效，但窗口结构
-        # （侧栏宽度、日志字号、滚动位置）要靠重启按新比例完整重建。
-        # 1.0.4 既没有即时生效，也没有这个入口，实测就是「什么都没出现」。
+        # A "Restart app" button sits next to the scale: the switch applies immediately, but
+        # window structure (sidebar width, log font size, scroll positions) is rebuilt only on
+        # restart. 1.0.4 applied neither immediately and had no such entry point — nothing happened.
         scale_row = QWidget()
         sr = QHBoxLayout(scale_row)
         sr.setContentsMargins(0, 0, 0, 0)
@@ -504,11 +504,12 @@ class SettingsPage(QWidget):
                        "settings.update_channel.desc", self.channel_combo)
 
     # ------------------------------------------------------------------
-    # 找图与点击
+    # Image search and clicking
     #
-    # 1.0.x 的找图是「全屏 + 固定尺寸」匹配：模板在 125% / 150% 缩放下比屏幕上的
-    # 按钮小一圈，于是频繁超时。这一组参数把匹配范围、相似度、缩放搜索区间
-    # 和点击方式都暴露出来，用户换机器/换缩放后不用等发版也能自己校准。
+    # 1.0.x matched full-screen at a fixed size: at 125% / 150% scaling the template came out
+    # smaller than the on-screen button, so searches timed out. These settings expose the match
+    # region, similarity, scale search range and click method so users can recalibrate after
+    # switching machine or scaling without waiting for a release.
     # ------------------------------------------------------------------
     def _build_vision_group(self, g):
         self.scope_seg = SegmentedControl(
@@ -618,13 +619,13 @@ class SettingsPage(QWidget):
                        actions)
 
     # ==================================================================
-    # 界面缩放（自绘控件）
+    # UI scale (custom-painted widgets)
     # ==================================================================
     def apply_ui_scale(self, scale):
-        """把界面缩放同步给 QSS 管不到的自绘控件。
+        """Propagate the UI scale to custom-painted widgets that QSS cannot reach.
 
-        QSS 只能重写 ``font-size``；Switch / 强调色色块 / 滚轮时间都是固定
-        像素尺寸，不跟着缩放就会在 150% 下显得又小又挤（开关 44×24 配 20px 字）。
+        QSS only rewrites ``font-size``; Switch / accent swatches / time wheels use fixed
+        pixel sizes, so at 150% they look small and cramped (44x24 switch with 20px text).
         """
         try:
             scale = max(0.75, min(2.0, float(scale)))
@@ -642,7 +643,7 @@ class SettingsPage(QWidget):
                 logger.warning(f"缩放控件尺寸失败: {e}")
 
     # ==================================================================
-    # 自动保存
+    # Auto-save
     # ==================================================================
     def _connect_auto_save(self):
         def emit_config(*_):
@@ -666,8 +667,9 @@ class SettingsPage(QWidget):
         self.scope_seg.selection_changed.connect(emit_config)
         self.click_mode_combo.currentIndexChanged.connect(emit_config)
         self.ui_scale_combo.currentIndexChanged.connect(self._on_ui_scale_changed)
-        # 滑条拖动会连续发 valueChanged；原来每一格都触发「整图高斯模糊 + 写配置」，
-        # 表现为拖动很卡。这里改成：文字实时更新，重绘/落盘防抖 180ms，松手立刻生效。
+        # Dragging a slider fires valueChanged continuously; every step used to trigger a full-image
+        # Gaussian blur plus a config write, making the drag stutter. Now the label updates live,
+        # repaint/save are debounced by 180ms, and release applies immediately.
         self._bg_apply_timer = QTimer(self)
         self._bg_apply_timer.setSingleShot(True)
         self._bg_apply_timer.setInterval(180)
@@ -689,7 +691,7 @@ class SettingsPage(QWidget):
         self.theme_changed.emit(theme)
 
     def _on_ui_scale_changed(self, *_):
-        """先存配置（config_changed），再通知主窗口即时重绘。"""
+        """Save config first (config_changed), then ask the main window to repaint now."""
         self.config_changed.emit(self.get_config())
         try:
             scale = float(self.ui_scale_combo.currentData() or 1.0)
@@ -712,11 +714,11 @@ class SettingsPage(QWidget):
         self.bg_blur_value.setText(str(int(value)))
 
     # ==================================================================
-    # 交互
+    # Interaction
     # ==================================================================
 
     def _on_bg_slider_changed(self, *_):
-        """背景两个滑条：值变了先刷文字，再防抖更新背景与配置。"""
+        """Both background sliders: refresh the label first, then debounce background and config."""
         self.bg_blur_value.setText(str(self.bg_blur_slider.value()))
         self._bg_apply_timer.start()
     def _browse_exe(self, line_edit):
@@ -743,7 +745,7 @@ class SettingsPage(QWidget):
             self.blacklist_edit.setText(",".join(names))
 
     # ------------------------------------------------------------------
-    # 找图与点击
+    # Image search and clicking
     # ------------------------------------------------------------------
     def _browse_template_dir(self):
         path = QFileDialog.getExistingDirectory(
@@ -752,10 +754,10 @@ class SettingsPage(QWidget):
             self.template_dir_edit.setText(path)
 
     def _open_template_capture(self):
-        """打开「截取模板」：框选屏幕区域，存成当前分辨率下的模板。
+        """Open "Capture template": box a screen region and save it as a template for this resolution.
 
-        保存路径与自检分数直接显示在对话框里（1.0.2 的二次弹窗一闪即逝），
-        所以这里不再弹提示，只负责把模板目录回填到设置项。
+        The dialog itself shows the save path and self-check score (1.0.2's follow-up popup
+        flashed by), so no extra prompt here; only the template dir is written back.
         """
         try:
             from ui.template_capture import TemplateCaptureDialog
@@ -767,14 +769,14 @@ class SettingsPage(QWidget):
         dlg.exec()
         target_dir = dlg.saved_dir()
         if target_dir and not self.template_dir_edit.text().strip():
-            # 用户模板落在默认目录时显式写出来，方便事后手动管理
+            # Write the template dir explicitly when a custom template lands in the default folder, so it can be managed by hand later
             self.template_dir_edit.setText(target_dir)
         if dlg.saved_file():
             logger.info(f"模板已更新: {dlg.saved_file()}"
                         f"（自检 {dlg.saved_score():.3f}）")
 
     def _run_match_test(self):
-        """按当前设置截屏匹配一次，只报告结果、不点击。"""
+        """Grab the screen and match once with the current settings; report only, never click."""
         self.btn_test_match.setEnabled(False)
         self.btn_test_match.setText(self.i18n.t("about.check_update.checking"))
         self._match_test_worker = AsyncWorker(_match_test_worker, self.get_config())
@@ -788,7 +790,7 @@ class SettingsPage(QWidget):
 
     def _on_match_test_done(self, results):
         self._reset_match_test_button()
-        # 测试时把 MAA / MaaEnd 拉到了前面，结果弹窗不能被压在后面
+        # The test brought MAA / MaaEnd to the front, so raise the result dialog above them
         try:
             win = self.window()
             win.showNormal()
@@ -808,8 +810,8 @@ class SettingsPage(QWidget):
             if match is None:
                 lines.append(f"{name}: 未命中（{source} {size}）")
                 continue
-            # 用户自截模板是「屏幕原尺寸」，所以 scale≈1.00 是正常的；
-            # 内置模板则应按系统缩放比命中（125% 时约 1.25）。
+            # A user-captured template is screen-sized, so scale ~1.00 is expected;
+            # bundled templates should match at the system scale (about 1.25 at 125%).
             lines.append(
                 f"{name}: score={match.score:.3f} scale={match.scale:.2f} "
                 f"center={match.center}  [{source} {size}]")
@@ -824,7 +826,7 @@ class SettingsPage(QWidget):
         QMessageBox.critical(self, self.i18n.t("common.error"), msg)
 
     # ==================================================================
-    # 测试推送 —— 全部改为后台线程，绝不阻塞 UI
+    # Test push — all on background threads, never blocks the UI
     # ==================================================================
     def test_serverchan(self):
         if not HAS_SERVERCHAN:
@@ -840,11 +842,11 @@ class SettingsPage(QWidget):
                                 self.i18n.t("serverchan.test.empty_key"))
             return
 
-        # 禁用按钮 + 提示
+        # Disable the button and show a hint
         self.btn_sc_test.setEnabled(False)
         self.btn_sc_test.setText(self.i18n.t("about.check_update.checking"))
 
-        # 后台线程调用 sc_send
+        # call sc_send on a background thread
         self._sc_test_worker = AsyncWorker(
             sc_send, key, "MaaAuto Test", "Test message", {"tags": "test"})
         self._sc_test_worker.finished.connect(self._on_sc_test_done)
@@ -903,7 +905,7 @@ class SettingsPage(QWidget):
         QMessageBox.critical(self, self.i18n.t("common.error"), err_msg)
 
     # ==================================================================
-    # 读取配置
+    # Load config
     # ==================================================================
     def get_config(self):
         c = self.config
@@ -937,7 +939,7 @@ class SettingsPage(QWidget):
             c[key] = sw.isChecked()
         c["foreground_action"] = self.fg_seg.current_value() or "none"
 
-        # ---- 找图与点击 ----
+        # ---- image search and clicking ----
         c["search_scope"] = self.scope_seg.current_value() or "window"
         c["match_threshold"] = self.threshold_spin.value() / 100.0
         c["match_scale_min"] = self.scale_min_spin.value() / 100.0
@@ -952,7 +954,7 @@ class SettingsPage(QWidget):
         return c
 
     # ==================================================================
-    # 语言切换
+    # Language switch
     # ==================================================================
     def retranslate(self):
         self.page_title.setText(self.i18n.t("settings.title"))

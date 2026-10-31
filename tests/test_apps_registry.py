@@ -1,8 +1,9 @@
-"""「设置→应用」版本号自愈（D-2）的单元测试。
+"""Unit tests for the "Settings → Apps" version self-heal (D-2).
 
-自动升级不跑 Inno，卸载项里的 DisplayVersion 会停在安装时的版本；主程序启动时
-调 ``apps_registry.sync_display_version`` 修正。这里只测纯函数与匹配规则，
-不碰真实注册表。
+Auto-updates do not run Inno, so the uninstall entry's DisplayVersion stays at the
+version installed; on startup the app calls ``apps_registry.sync_display_version`` to
+correct it. Only the pure helpers and matching rules are covered here; the real
+registry is never touched.
 """
 
 import os
@@ -40,7 +41,7 @@ def test_no_change_when_already_current():
 def test_updates_version_after_delta_upgrade():
     out = updates_for(_entry(), "1.4.3", INSTALL)
     assert out["DisplayVersion"] == "1.4.3"
-    # 1.4.x 内部升级，大/小版本号没变，不必写
+    # 1.4.x internal upgrade: major/minor unchanged, so no need to write them
     assert "VersionMajor" not in out
     assert "VersionMinor" not in out
 

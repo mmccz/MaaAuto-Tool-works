@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit,
 from PySide6.QtCore import Qt
 
 
-# 默认隐藏的系统进程（小写）
+# System processes hidden by default (lowercase)
 SYSTEM_PROCESSES = {
     "explorer.exe", "system", "registry", "idle",
     "svchost.exe", "csrss.exe", "winlogon.exe", "smss.exe",
@@ -67,7 +67,7 @@ class ProcessPickerDialog(QDialog):
             if x.strip()
         }
 
-        # 记录每个进程的原始数据（dict）
+        # Keep each process's raw data (dict)
         self._rows = []
 
         self._setup_ui()
@@ -79,7 +79,7 @@ class ProcessPickerDialog(QDialog):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
 
-        # 搜索框 + 显示系统进程
+        # Search box + show system processes
         top = QHBoxLayout()
         top.setSpacing(10)
 
@@ -93,7 +93,7 @@ class ProcessPickerDialog(QDialog):
         top.addWidget(self.show_system_cb)
         layout.addLayout(top)
 
-        # 表格
+        # Table
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([
             self.i18n.t("process_picker.col_name"),
@@ -117,7 +117,7 @@ class ProcessPickerDialog(QDialog):
 
         layout.addWidget(self.table, 1)
 
-        # 底部
+        # Bottom bar
         bottom = QHBoxLayout()
         self.count_label = QLabel("")
         self.count_label.setObjectName("SettingDesc")
@@ -164,7 +164,7 @@ class ProcessPickerDialog(QDialog):
 
             item_pid = QTableWidgetItem(str(p["pid"]))
             item_pid.setTextAlignment(Qt.AlignCenter)
-            # 让 PID 支持按数字排序
+            # Make PID sort numerically
             item_pid.setData(Qt.UserRole, p["pid"])
             self.table.setItem(row, 1, item_pid)
 
@@ -187,12 +187,12 @@ class ProcessPickerDialog(QDialog):
             name_lc = p["name"].lower()
             title_lc = (p.get("title", "") or "").lower()
 
-            # 系统进程过滤
+            # System process filter
             if not show_system and self._is_system(p["name"]):
                 self.table.setRowHidden(row, True)
                 continue
 
-            # 搜索
+            # Search
             if text and text not in name_lc and text not in title_lc:
                 self.table.setRowHidden(row, True)
                 continue
@@ -203,7 +203,7 @@ class ProcessPickerDialog(QDialog):
         self._update_count(total=len(self._rows), visible=visible)
 
     def _on_row_double_clicked(self, item):
-        """双击切换勾选"""
+        """Toggle the check state on double click."""
         row = item.row()
         it = self.table.item(row, 0)
         if not it:

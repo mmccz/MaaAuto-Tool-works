@@ -1,11 +1,10 @@
-"""
-版本检查（GitHub Release API）。
+"""Version check via the GitHub Release API.
 
-约定：
-  - 只做「检查 + 展示」，不做「下载 + 替换」
-  - 用户确认升级 → 调起 <install>/upgrade.exe
-  - 版本比较用 packaging.version，非法版本号 → 视为检查失败
-  - 频道：stable 只看 releases/latest；beta 看 releases 列表（含 prerelease）
+Rules:
+  - check and display only, never download or replace
+  - user confirms an upgrade -> launch <install>/upgrade.exe
+  - versions compare through packaging.version; an invalid version fails the check
+  - channels: stable reads releases/latest only; beta reads the releases list (prereleases too)
 """
 import os
 import sys
@@ -22,7 +21,7 @@ logger = logging.getLogger("MaaAuto")
 
 _UA = "MaaAuto-UpdateChecker/1.0"
 
-# /releases/latest → /releases（用于 beta 频道）
+# /releases/latest -> /releases (used by the beta channel)
 RELEASES_LIST_API = APP_UPDATE_API.rstrip("/")
 if RELEASES_LIST_API.endswith("/latest"):
     RELEASES_LIST_API = RELEASES_LIST_API[: -len("/latest")]
@@ -64,10 +63,9 @@ def _fetch_latest_release(channel="stable", timeout=15):
 
 
 def _parse_version(tag):
-    """
-    规整 tag → Version。失败返回 None。
-    支持：v2.0.1 / 2.0.1 / 2.1.0b1 / 2.1.0rc2 / 2.1.0.post1
-    拒绝：2.1.0-beta / garbage / 空
+    """Normalise a tag into a Version; None on failure.
+    Accepts: v2.0.1 / 2.0.1 / 2.1.0b1 / 2.1.0rc2 / 2.1.0.post1
+    Rejects: 2.1.0-beta / garbage / empty
     """
     v = (tag or "").strip().lstrip("vV")
     if not v:
@@ -80,15 +78,14 @@ def _parse_version(tag):
 
 
 def _pick_asset(release, latest_version=""):
-    """
-    优先级（3.0.0 起）：
-      1) name == MaaAuto_payload_v{latest}.zip —— 升级器真正下载的预构建包
-      2) name == MaaAuto_Source.zip            —— 2.x 过渡期的源码包
-      3) name 含 'win' 且以 .zip 结尾
-      4) 任意 .zip
+    """Priority order (since 3.0.0):
+      1) name == MaaAuto_payload_v{latest}.zip - the prebuilt payload the upgrader downloads
+      2) name == MaaAuto_Source.zip            - the 2.x transitional source package
+      3) name contains 'win' and ends with .zip
+      4) any .zip
 
-    这里的结果只用于**展示**（「关于」页提示升级包大小）；真正的下载由
-    upgrade.exe 自己重新查询 Release 决定，因此本函数选错也不影响升级。
+    The result is only for **display** (the About page shows the package size); the real
+    download re-queries the Release inside upgrade.exe, so a wrong pick here is harmless.
     """
     assets = release.get("assets") or []
     want = f"{APP_PAYLOAD_ASSET_PREFIX}{latest_version}.zip".lower()
@@ -111,11 +108,10 @@ def _pick_asset(release, latest_version=""):
 
 
 # --------------------------------------------------------------------------- #
-# 对外
+# Public API
 # --------------------------------------------------------------------------- #
 def check_update(channel="stable"):
-    """
-    返回 dict 或 None：
+    """Returns a dict, or None:
       {
         "has_update": bool,
         "current":    "1.0.0",
@@ -127,8 +123,8 @@ def check_update(channel="stable"):
         "channel":    "stable" | "beta",
       }
 
-    ``beta`` 频道会看 Release 列表并包含 prerelease；``stable`` 只看 latest。
-    任何网络/解析失败 → None。
+    ``beta`` reads the Release list including prereleases; ``stable`` reads latest only.
+    Any network or parsing failure -> None.
     """
     try:
         release = _fetch_latest_release(channel)
@@ -155,17 +151,16 @@ def check_update(channel="stable"):
 
 
 def apply_update(parent=None, silent=False, channel="stable"):
-    """
-    调起 upgrade.exe，主程序随后退出。
-      --from-main  必须
-      --restart    默认带（升级完重启主程序）
-      --silent     自动升级路径传 True
-      --channel    stable / beta（beta 会看 prerelease）
-    返回 True 表示已成功 Popen upgrade.exe。
+    """Launch upgrade.exe; the app then exits.
+      --from-main  required
+      --restart    always passed (restarts the app afterwards)
+      --silent     True on the automatic upgrade path
+      --channel    stable / beta (beta looks at prereleases)
+    True means upgrade.exe was Popen'ed successfully.
     """
     from PySide6.QtWidgets import QMessageBox
 
-    # onedir 打包后 __file__ 在 _internal/ 里，用 sys.executable 更稳
+    # after an onedir build __file__ lives in _internal/, so sys.executable is safer
     install_dir = os.path.dirname(os.path.abspath(sys.executable))
     upgrade_exe = os.path.join(install_dir, "upgrade.exe")
 

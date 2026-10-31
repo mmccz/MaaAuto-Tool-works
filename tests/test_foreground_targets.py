@@ -1,8 +1,9 @@
-"""「测试找图」「截取模板」前必须先把 MAA / MaaEnd 窗口前置。
+"""Before "test matching" or "capture template", the MAA / MaaEnd window must come to the front.
 
-用户实测：点「测试找图」永远未命中——因为截屏时 MaaAuto 的窗口正压在 MAA
-上面；截取模板同理，框到的其实是自己的界面。这里固定模板→进程的映射，
-以及两个入口调用前置的顺序。
+Reported by users: "test matching" never hit, because at capture time the MaaAuto window
+was sitting on top of MAA; capturing a template had the same problem — the box actually
+came from our own UI. These tests pin the template→process mapping and the order in which
+both entry points bring the target to the front.
 """
 
 import os
@@ -14,7 +15,7 @@ import automation
 
 
 # --------------------------------------------------------------------------- #
-# 模板 → 进程
+# Template → process
 # --------------------------------------------------------------------------- #
 def test_template_process_uses_config_paths():
     cfg = {"maa_path": r"E:\MAA\MAA.exe",
@@ -35,7 +36,7 @@ def test_template_process_case_insensitive():
 
 
 # --------------------------------------------------------------------------- #
-# 测试找图：先前置再截图
+# Test matching: bring the target to the front first, then capture
 # --------------------------------------------------------------------------- #
 def test_match_test_brings_each_target_to_front_first(monkeypatch):
     import vision
@@ -95,15 +96,15 @@ def test_match_test_survives_foreground_error(monkeypatch):
 
     results = settings_page._match_test_worker(
         {"maa_path": r"E:\MAA\MAA.exe"})
-    # 前置失败不能让「测试找图」整体崩掉
+    # A foreground failure must not take down "test matching" entirely
     assert results and results[0]["error"] is None
 
 
 # --------------------------------------------------------------------------- #
-# 截取模板：同样先前置
+# Capture template: brings the target to the front too
 # --------------------------------------------------------------------------- #
 def _fake_dialog(cfg):
-    """只借 TemplateCaptureDialog 的方法，不构造 Qt 控件。"""
+    """Borrow only TemplateCaptureDialog's methods; no Qt widgets are constructed."""
     from ui.template_capture import TemplateCaptureDialog
 
     class _FakeDialog(TemplateCaptureDialog):

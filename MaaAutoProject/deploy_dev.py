@@ -1,23 +1,22 @@
 #!/usr/bin/env python
-"""
-把 MaaAutoProject/dist/MaaAuto/ 部署到目标安装目录。
+"""Deploy MaaAutoProject/dist/MaaAuto/ into the target install directory.
 
-保留用户数据：
+User data kept:
   - config/
   - logs/
   - .maaauto.json
   - upgrade.exe
   - uninstall.exe
 
-会先删除这些（再拷新的）：
+Deleted first, then copied fresh:
   - _internal/
   - resources/  themes/  i18n/
   - MaaAuto.exe
 
-用法：
+Usage:
     cd MaaAuto-Tool-works\\MaaAutoProject
-    python deploy_dev.py                    # 默认目标 D:\\MaaAuto
-    python deploy_dev.py E:\\MaaAuto-Test    # 指定目录
+    python deploy_dev.py                    # default target D:\\MaaAuto
+    python deploy_dev.py E:\\MaaAuto-Test    # custom directory
 """
 
 import sys
@@ -29,17 +28,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DIST_APP = ROOT / "dist" / "MaaAuto"
 
-# 安装目录里要保留的（不覆盖、不删除）
+# Kept in the install dir (never overwritten or removed)
 KEEP_IN_INSTALL = {
     "config",
     "logs",
     ".maaauto.json",
     "upgrade.exe",
     "uninstall.exe",
-    "deploy_dev.py",       # 本脚本自己
+    "deploy_dev.py",       # this script itself
 }
 
-# 安装目录里要删掉再拷新的（顶层）
+# Removed from the install dir and copied again (top level)
 REPLACE_TOP = [
     "MaaAuto.exe",
     "_internal",
@@ -87,7 +86,7 @@ def main():
         print(f"[ERROR] 目标目录不存在：{target}")
         sys.exit(1)
 
-    # ---- 检查是否有主程序在跑 ----
+    # ---- check whether the main program is running ----
     try:
         import psutil
         running = False
@@ -106,7 +105,7 @@ def main():
     except ImportError:
         pass
 
-    # ---- 1. 删除旧内容（保留白名单）----
+    # ---- 1. remove old content (keep the allow-list) ----
     print()
     print("[1] 清理旧内容（保留 config/logs/.maaauto.json/upgrade.exe/uninstall.exe）")
     for name in REPLACE_TOP:
@@ -125,7 +124,7 @@ def main():
         except Exception as e:
             print(f"  [WARN] 删除 {name} 失败: {e}")
 
-    # ---- 2. 拷贝新内容 ----
+    # ---- 2. copy the new content ----
     print()
     print("[2] 拷贝新内容")
     copied = 0
@@ -150,7 +149,7 @@ def main():
         except Exception as e:
             print(f"  [ERROR] 拷贝 {item.name} 失败: {e}")
 
-    # ---- 3. 报告 ----
+    # ---- 3. report ----
     print()
     print("=" * 60)
     print(f"[OK] 部署完成：{copied} 项")

@@ -1,8 +1,9 @@
-"""任务日志轮转测试（1.1.1 新增）。
+"""Task log rotation tests (added in 1.1.1).
 
-背景：``logs/<年>/<月>/<日>/run_N_/task.log`` 每天至少一个目录，配合定时任务
-长期运行会堆到几千个；找图失败还会往 logs 根目录丢 ``find_fail_*.png``。
-清理按**目录名里的日期**判断（当天目录还在写，不能看 mtime）。
+Background: ``logs/<year>/<month>/<day>/run_N_/task.log`` creates at least one directory
+per day, and long-running schedules pile up thousands of them; failed matches also drop
+``find_fail_*.png`` into the logs root. Cleanup judges by the **date in the directory
+name** (today's directory is still being written, so mtime cannot be trusted).
 """
 
 import datetime
@@ -57,7 +58,7 @@ def test_zero_means_keep_everything(tmp_path):
 
 
 def test_removes_run_dirs_inside_expired_day(tmp_path):
-    """删的是整天目录（连同里面的 run_N 子目录）。"""
+    """Whole day directories are deleted (including their run_N subdirectories)."""
     root = str(tmp_path)
     y, m, d = _date_paths(root, _day(200))
     run_dir = _mk(root, y, m, d, "run_7_233015")
@@ -69,7 +70,7 @@ def test_removes_run_dirs_inside_expired_day(tmp_path):
 
 
 def test_cleans_empty_month_and_year(tmp_path):
-    """整个月都过期时，空的 月/年 目录也顺手删掉，不留空壳。"""
+    """When a whole month has expired, the empty month/year directories go too, leaving no shells behind."""
     root = str(tmp_path)
     y, m, d = _date_paths(root, _day(400))
     _mk(root, y, m, d)
@@ -79,7 +80,7 @@ def test_cleans_empty_month_and_year(tmp_path):
 
 
 def test_ignores_non_date_directories(tmp_path):
-    """不是「4 位年/2 位月/2 位日」的目录一律不碰。"""
+    """Directories that are not "4-digit year/2-digit month/2-digit day" are never touched."""
     root = str(tmp_path)
     _mk(root, "config")
     _mk(root, "2026", "backup")

@@ -1,4 +1,4 @@
-"""config_manager 的单元测试：原子写入、坏文件回退、新键默认值。"""
+"""Unit tests for config_manager: atomic writes, fallback on bad files, defaults for new keys."""
 
 import json
 import os
@@ -10,7 +10,7 @@ import config_manager as cm
 
 @pytest.fixture
 def isolated(tmp_path, monkeypatch):
-    """把 CONFIG_FILE 指到临时目录，避免污染真实 config/。"""
+    """Point CONFIG_FILE at a temp dir so the real config/ is never polluted."""
     cfg_file = tmp_path / "config" / "config.json"
     cfg_file.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(cm, "CONFIG_FILE", str(cfg_file))
@@ -42,7 +42,7 @@ def test_save_and_load_roundtrip(isolated):
 def test_save_is_atomic_leftover_tmp_removed(isolated):
     cm.save_config(cm.load_config())
     assert not os.path.exists(str(isolated) + ".tmp")
-    # 落盘的是完整 JSON，没有半截
+    # What lands on disk is complete JSON, never a truncated half
     with open(isolated, "r", encoding="utf-8") as f:
         json.load(f)
 
@@ -63,7 +63,7 @@ def test_utf8_bom_is_accepted(isolated):
 
 
 def test_unknown_keys_are_kept(isolated):
-    """老版本/新版本混用时，不认识的键不该被丢掉（否则升级会静默吃配置）。"""
+    """When old and new versions are mixed, unknown keys must not be dropped (otherwise an upgrade silently eats the config)."""
     isolated.write_text(json.dumps({"future_key": 42}, ensure_ascii=False),
                         encoding="utf-8")
     cfg = cm.load_config()

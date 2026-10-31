@@ -1,8 +1,9 @@
-"""开机自启：登录计划任务（打包态）与 Run 键（开发态）。
+"""Autostart: a logon scheduled task (frozen build) and the Run key (dev mode).
 
-1.4.5 修的是「打开开关、重启电脑、什么也没发生」：MaaAuto.exe 清单要求管理员
-权限，而 Windows 不会用 HKCU\\...\\Run 拉起需要提权的程序。这里把两种方式的
-命令拼装、注册/清理、失败路径都固定下来，避免以后又退回 Run 键。
+1.4.5 fixed "flip the switch, reboot, nothing happens": the MaaAuto.exe manifest
+requires administrator rights, and Windows will not launch an elevated program from
+HKCU\\...\\Run. These tests pin down the command building, registration/cleanup and
+failure paths of both mechanisms, so we never fall back to the Run key again.
 """
 
 import subprocess
@@ -19,7 +20,7 @@ def _proc(returncode=0, stdout="", stderr=""):
 
 
 # --------------------------------------------------------------------------- #
-# 命令拼装
+# Command building
 # --------------------------------------------------------------------------- #
 def test_task_command_frozen_has_no_extra_quotes():
     assert autostart.task_command(r"C:\MaaAuto\MaaAuto.exe") == \
@@ -32,7 +33,7 @@ def test_task_command_script_mode_quotes_both():
 
 
 # --------------------------------------------------------------------------- #
-# schtasks 调用
+# schtasks calls
 # --------------------------------------------------------------------------- #
 def test_task_exists_reads_returncode(monkeypatch):
     monkeypatch.setattr(autostart, "_schtasks", lambda *a, **k: _proc(0))
@@ -75,11 +76,11 @@ def test_delete_task_skips_when_absent(monkeypatch):
     monkeypatch.setattr(autostart, "_schtasks",
                         lambda *a, **k: calls.append(a) or _proc(1))
     assert autostart.delete_task() is True
-    assert [c[0] for c in calls] == ["/Query"]      # 没有 /Delete
+    assert [c[0] for c in calls] == ["/Query"]      # no /Delete
 
 
 # --------------------------------------------------------------------------- #
-# 对外开关
+# Public toggle
 # --------------------------------------------------------------------------- #
 def test_frozen_enable_creates_task_and_clears_legacy_run(monkeypatch):
     events = []
@@ -132,11 +133,11 @@ def test_failed_task_creation_falls_back_to_run_key(monkeypatch):
                         lambda cmd, *a, **k: written.append(cmd))
 
     assert autostart.set_enabled(True, executable="MaaAuto.exe") is False
-    assert written == ['"MaaAuto.exe" --autostart']      # 至少留个痕迹
+    assert written == ['"MaaAuto.exe" --autostart']      # at least leave a trace
 
 
 # --------------------------------------------------------------------------- #
-# 状态
+# State
 # --------------------------------------------------------------------------- #
 def test_state_prefers_task(monkeypatch):
     monkeypatch.setattr(autostart, "task_exists", lambda: True)

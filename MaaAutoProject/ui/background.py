@@ -3,28 +3,28 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtCore import Qt, QRect
 
-# 模糊前把图缩到这个尺寸再放大：背景图本来就铺满窗口、还要压暗，
-# 细节看不出来，但高斯模糊的耗时对边长近似平方 —— 缩一半就快 4 倍。
+# Blur at this reduced size, then scale back up: the background fills the window and is
+# dimmed anyway; blur cost is roughly quadratic in side length, so half size is ~4x faster.
 BLUR_MAX_SIDE = 1280
 
 
 class BackgroundWidget(QWidget):
-    """支持背景图片（透明度/模糊/缩放模式）的根容器"""
+    """Root container with background image support (opacity / blur / scale mode)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("BackgroundRoot")
         self._pixmap = None
         self._mode = "cover"
-        # 上次真正渲染用的参数；用于跳过重复解码
+        # Parameters of the last actual render; used to skip redundant decoding
         self._params = None
-        # 解码 + 缩放后的底图，只在「换图/换缩放模式」时重算（模糊/透明度都不重复解码）
+        # Decoded and scaled base image, recomputed only on image/scale-mode change (blur and opacity reuse it)
         self._base = None
         self._base_key = None
 
     # ------------------------------------------------------------------ #
     def _load_base(self, image_path):
-        """读取并（按需）缩放到 ``BLUR_MAX_SIDE``，结果缓存。"""
+        """Load and (if needed) downscale to ``BLUR_MAX_SIDE``; the result is cached."""
         try:
             mtime = os.path.getmtime(image_path)
         except OSError:
@@ -46,7 +46,7 @@ class BackgroundWidget(QWidget):
                               max(1, int(img.height * scale))), Image.LANCZOS)
         self._base_key = key
         self._base = img
-        self._blur_cache = {}          # 换了图，旧的模糊结果作废
+        self._blur_cache = {}          # new image: drop previous blur results
         return img
 
     def _apply_blur(self, img, blur):
@@ -57,7 +57,7 @@ class BackgroundWidget(QWidget):
         if cached is not None:
             return cached
         blurred = img.filter(ImageFilter.GaussianBlur(radius))
-        # 只保留最近 3 档，避免拖滑杆时缓存无限涨
+        # Keep only the 3 most recent buckets so dragging the slider cannot grow the cache unbounded
         if len(self._blur_cache) > 3:
             self._blur_cache.pop(next(iter(self._blur_cache)))
         self._blur_cache[radius] = blurred
@@ -85,7 +85,7 @@ class BackgroundWidget(QWidget):
 
         base = self._load_base(image_path)
         if base is None:
-            # PIL 打不开（少见格式/损坏）→ 交给 Qt 自己解码，至少能显示
+            # PIL could not open it (odd format/corrupt) → let Qt decode it so at least something shows
             self._pixmap = QPixmap(image_path)
             self.update()
             return

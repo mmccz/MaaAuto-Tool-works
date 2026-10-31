@@ -1,8 +1,8 @@
 name: release
 
-# 触发：推送 v* tag，或手动指定 tag。
-# 注意：workflow 必须在「tag 所在的仓库」里 —— Release 与 tag 都在主程序仓库，
-# 所以这里构建两个仓库的产物并上传到本仓库的 Release。
+# Trigger: push a v* tag, or pass a tag manually.
+# Note: the workflow must live in the repo that owns the tag -- both the Release and the
+# tag are in the main app repo, so build both repos' artifacts here and upload them to this repo's Release.
 on:
   push:
     tags: ["v*"]
@@ -32,10 +32,10 @@ jobs:
           ref: main
           path: installer
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.15
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.15"
 
       - name: Install dependencies
         run: |
@@ -61,7 +61,7 @@ jobs:
             "{0} => {1}" -f $_, (Test-Path $_) | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
           }
 
-      # 不传 --iscc：choco / winget 的安装位置不一样，交给脚本自动探测。
+      # No --iscc passed on purpose: choco / winget install locations differ, let the script auto-detect.
       - name: Build release assets
         shell: pwsh
         run: |
@@ -73,8 +73,8 @@ jobs:
             exit 1
           }
 
-      # 发布前的最后一道保险：在干净 runner 上真的装一遍 → 查产物与 manifest → 卸干净。
-      # 装不上 / manifest 版本不对 / 卸载残留 → 红在这里，绝不会把半成品发出去。
+      # Last safety net before publishing: really install on a clean runner -> check artifacts and manifest -> uninstall cleanly.
+      # Install fails / wrong manifest version / uninstall leftovers -> red here, so a half-built release never ships.
       - name: Smoke test installer
         shell: pwsh
         run: |
@@ -86,7 +86,7 @@ jobs:
             exit 1
           }
 
-      # 失败时把构建日志推到独立分支 ci-logs（不污染 main），便于排查。
+      # On failure, push the build log to a separate ci-logs branch (keeps main clean) for debugging.
       - name: Publish failure log
         if: failure()
         shell: pwsh
@@ -119,10 +119,10 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           name: MaaAuto ${{ env.TAG }}
-          # 发布说明直接取仓库里的 RELEASE_NOTES.md（每次发版同步更新这个文件）。
+          # Release body comes straight from RELEASE_NOTES.md in the repo (kept in sync on every release).
           body_path: RELEASE_NOTES.md
-          # 预发布（tag 含 b / rc / beta）：自动发布为 prerelease，beta 渠道才能拉到；
-          # 正式版同样直接发布 —— 构建失败时前面的步骤会 exit 1，不会产生半成品 Release。
+          # Prerelease (tag contains b / rc / beta): published as prerelease automatically so the beta channel can pull it;
+          # stable releases are published directly too -- any build failure makes earlier steps exit 1, so no half-built Release appears.
           prerelease: ${{ contains(env.TAG, 'b') || contains(env.TAG, 'rc') || contains(env.TAG, 'beta') }}
           draft: false
           generate_release_notes: false

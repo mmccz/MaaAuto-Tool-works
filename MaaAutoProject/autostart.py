@@ -1,19 +1,22 @@
-"""开机自启（1.4.5 起：登录计划任务；开发态仍用注册表 Run 键）。
+"""Autostart at logon (since 1.4.5: a logon scheduled task; dev mode still uses the
+registry Run key).
 
-为什么不用 ``HKCU\\...\\Run``
-----------------------------
-``MaaAuto.exe`` 的清单里写着 ``requireAdministrator``——它要往以管理员身份运行
-的 MAA 窗口发消息。Windows 不会用 Run 键去拉起需要提权的程序：任务管理器的
-「启动」页里开关还亮着，登录时却什么都不发生，日志也一片空白。1.0~1.4.4 的
-「开机自启无效」就是这个原因。
+Why not ``HKCU\\...\\Run``
+-------------------------
+The ``MaaAuto.exe`` manifest declares ``requireAdministrator``, because it has to
+send messages to the MAA window running elevated. Windows will not launch an
+elevated program from the Run key: the toggle on Task Manager > Startup still
+looks enabled, yet nothing happens at logon and the log stays empty. That is why
+"autostart does not work" was reported from 1.0 to 1.4.4.
 
-计划任务可以指定「使用最高权限运行」（``/RL HIGHEST``）：登录时由任务计划
-程序直接给出管理员令牌，既不弹 UAC，也不需要 Run 键。代价是创建/删除任务
-需要管理员权限——而主程序本身就是提权运行的，所以开关随时能生效。
+A scheduled task can run "with highest privileges" (``/RL HIGHEST``): at logon the
+Task Scheduler hands out the admin token itself, with no UAC prompt and no Run key.
+The cost is that creating / deleting the task needs admin rights - and the app
+itself already runs elevated, so the toggle takes effect whenever it is flipped.
 
-开发态（``python main.py``）没有提权需求，继续用 Run 键：改注册表不需要管理员，
-而 ``/RL HIGHEST`` 的任务创建需要。两种方式都只是「登录时带 ``--autostart``
-拉起自己」。
+Dev mode (``python main.py``) has no elevation needs and keeps the Run key: editing
+the registry needs no admin rights, while creating a ``/RL HIGHEST`` task does.
+Either way the only job is to start ourselves at logon with ``--autostart``.
 """
 
 import logging
@@ -31,10 +34,10 @@ _CREATE_NO_WINDOW = 0x08000000
 
 
 # --------------------------------------------------------------------------- #
-# 命令拼装
+# Command building
 # --------------------------------------------------------------------------- #
 def task_command(executable=None, script=None):
-    """登录时执行的命令行（含引号，可直接作为 ``schtasks /TR`` 的值）。"""
+    """Command line run at logon (quoted, usable directly as ``schtasks /TR``)."""
     exe = executable or sys.executable
     if script:
         return f'"{exe}" "{script}" --autostart'
@@ -46,13 +49,14 @@ def is_frozen():
 
 
 # --------------------------------------------------------------------------- #
-# schtasks 封装
+# schtasks wrapper
 # --------------------------------------------------------------------------- #
 def _schtasks(*args, timeout=20):
-    """调用 schtasks，返回 CompletedProcess；调用失败返回 None。
+    """Run schtasks and return its CompletedProcess; None when the call itself fails.
 
-    输出解码用 ``errors="replace"``：中文系统的提示是 GBK，而 Python 3.15
-    在非 UTF-8 控制台下按 UTF-8 解，直接 ``text=True`` 会抛 UnicodeDecodeError。
+    Output is decoded with ``errors="replace"``: a Chinese system prints GBK prompts,
+    while Python 3.15 decodes as UTF-8 on a non-UTF-8 console, so a plain
+    ``text=True`` raises UnicodeDecodeError.
     """
     try:
         return subprocess.run(
@@ -96,7 +100,7 @@ def delete_task():
 
 
 # --------------------------------------------------------------------------- #
-# 注册表 Run 键（开发态 / 清理旧机制）
+# Registry Run key (dev mode / cleaning up the old mechanism)
 # --------------------------------------------------------------------------- #
 def write_run_value(command, name=RUN_VALUE):
     import winreg
@@ -140,15 +144,15 @@ def run_value_enabled(name=RUN_VALUE):
 
 
 # --------------------------------------------------------------------------- #
-# 对外开关
+# Public toggle
 # --------------------------------------------------------------------------- #
 def set_enabled(enabled, executable=None, script=None):
-    """打开/关闭开机自启，返回是否成功（失败时调用方负责提示用户）。"""
+    """Enable/disable autostart; returns whether it worked (the caller reports failures)."""
     exe = executable or sys.executable
     enabled = bool(enabled)
 
     if is_frozen():
-        # 新机制：任务计划。顺手清掉旧版本留下的 Run 键，免得起两次。
+        # New mechanism: a scheduled task. Drop the Run key left by older versions too, or the app starts twice.
         try:
             delete_run_value()
         except OSError as e:
@@ -156,7 +160,7 @@ def set_enabled(enabled, executable=None, script=None):
         if enabled:
             ok = create_task(task_command(exe))
             if not ok:
-                # 退回 Run 键：至少留个痕迹，也方便用 diagnose 看到
+                # Fall back to the Run key: at least it leaves a trace, and diagnose can see it
                 try:
                     write_run_value(task_command(exe))
                 except OSError as e:
@@ -164,7 +168,7 @@ def set_enabled(enabled, executable=None, script=None):
             return ok
         return delete_task()
 
-    # 开发态：Run 键足够，而且不需要管理员
+    # Dev mode: the Run key is enough and needs no admin rights
     command = task_command(exe, script)
     try:
         if enabled:
@@ -180,7 +184,7 @@ def set_enabled(enabled, executable=None, script=None):
 
 
 def state():
-    """当前生效的自启方式，给自检 / 诊断用：``task`` / ``run`` / ``none``。"""
+    """Active autostart mode for self-check / diagnose: ``task`` / ``run`` / ``none``."""
     if task_exists():
         return "task"
     if run_value_enabled():
@@ -189,7 +193,7 @@ def state():
 
 
 def describe():
-    """一行人类可读的状态说明。"""
+    """One human-readable status line."""
     now = state()
     if now == "task":
         return f"登录计划任务 {TASK_NAME}（最高权限）"

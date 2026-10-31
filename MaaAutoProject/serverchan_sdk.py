@@ -1,22 +1,21 @@
-"""
-Server酱推送 SDK（本地实现，无第三方依赖）
+"""Server Chan push SDK (local implementation, no third-party dependency).
 
-支持：
-  - Server酱 Turbo 版（SendKey 形如 SCTxxxxxTxxxxx）
-  - Server酱³（SendKey 形如 sctp{uid}txxxxx）
+Supports:
+  - Server Chan Turbo (SendKey looks like SCTxxxxxTxxxxx)
+  - Server Chan 3 (SendKey looks like sctp{uid}txxxxx)
 
-对外接口与 PyPI 上的 `serverchan-sdk` 保持一致，
-方便将来切换为 pip 版本而不用改调用方代码。
+The public interface matches the `serverchan-sdk` package on PyPI, so switching to
+the pip version later needs no change in the callers.
 
-用法：
+Usage:
     from serverchan_sdk import sc_send
-    res = sc_send("sctp12345t...", "标题", "内容", {"tags": "测试"})
+    res = sc_send("sctp12345t...", "title", "content", {"tags": "test"})
 
-返回：
-    dict，形如：
-      成功：{"code": 0, "message": "SUCCESS", "data": {...}}
-      失败：{"code": 非0, "message": "错误信息"}
-      异常：{"code": -1, "message": "..."}
+Returns:
+    a dict shaped like:
+      success: {"code": 0, "message": "SUCCESS", "data": {...}}
+      failure: {"code": non-zero, "message": "error text"}
+      error:   {"code": -1, "message": "..."}
 """
 
 import re
@@ -32,13 +31,12 @@ USER_AGENT = "MaaAuto-ServerChan/1.0"
 
 
 # --------------------------------------------------------------------------- #
-# 内部工具
+# Internal helpers
 # --------------------------------------------------------------------------- #
 def _detect_url(sendkey: str) -> str:
-    """
-    根据 SendKey 自动识别 API 端点。
-      - sctp{uid}t... → Server酱³
-      - 其他          → Server酱 Turbo
+    """Detect the API endpoint from the SendKey.
+      - sctp{uid}t... -> Server Chan 3
+      - anything else -> Server Chan Turbo
     """
     sendkey = (sendkey or "").strip()
     if not sendkey:
@@ -55,7 +53,7 @@ def _detect_url(sendkey: str) -> str:
 
 
 def _parse_response(raw: str) -> dict:
-    """把响应体解析成 dict。失败返回 {'code': -1, 'message': raw}"""
+    """Parse the response body into a dict. On failure returns {'code': -1, 'message': raw}."""
     try:
         data = json.loads(raw)
         if isinstance(data, dict):
@@ -66,20 +64,19 @@ def _parse_response(raw: str) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# 对外接口
+# Public interface
 # --------------------------------------------------------------------------- #
 def sc_send(sendkey: str, title: str, desp: str = "", options: dict = None) -> dict:
-    """
-    发送 Server酱推送。
+    """Send a Server Chan push.
 
-    :param sendkey: SendKey（Turbo 版或 Server酱³）
-    :param title:   消息标题
-    :param desp:    消息正文（支持 Markdown）
-    :param options: 额外参数（如 {"tags": "测试"}）
+    :param sendkey: SendKey (Turbo or Server Chan 3)
+    :param title:   message title
+    :param desp:    message body (Markdown supported)
+    :param options: extra parameters (e.g. {"tags": "test"})
     :return: dict
-        - 成功：{"code": 0, "message": "SUCCESS", "data": {...}}
-        - 失败：{"code": 非0, "message": "错误信息"}
-        - 异常：{"code": -1, "message": "..."}
+        - success: {"code": 0, "message": "SUCCESS", "data": {...}}
+        - failure: {"code": non-zero, "message": "error text"}
+        - error:   {"code": -1, "message": "..."}
     """
     if options is None:
         options = {}
@@ -95,7 +92,7 @@ def sc_send(sendkey: str, title: str, desp: str = "", options: dict = None) -> d
         logger.error(f"SendKey 解析失败: {e}")
         return {"code": -1, "message": str(e)}
 
-    # 构造请求体
+    # Build the request body
     payload = {"title": title, "desp": desp or ""}
     for k, v in (options or {}).items():
         if k not in ("title", "desp"):

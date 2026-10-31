@@ -1,7 +1,8 @@
-"""自动换行的流式布局（Qt 官方 FlowLayout 示例的 Python 移植）。
+"""Auto-wrapping flow layout (Python port of the official Qt FlowLayout example).
 
-用在设置页顶部的「分组跳转 chips」：分组从 6 个增加到 7 个后，一行放不下，
-最后一个 chip 会顶到窗口边缘；用流式布局让它在窄窗口下自动折行。
+Used for the group-jump chips at the top of the settings page: after the number of
+groups grew from 6 to 7 one row no longer fits and the last chip hit the window edge;
+a flow layout wraps it on narrow windows instead.
 """
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt
@@ -16,7 +17,7 @@ class FlowLayout(QLayout):
         self._v_spacing = v_spacing
         self.setContentsMargins(margin, margin, margin, margin)
 
-    # ---------------- QLayout 接口 ----------------
+    # ---------------- QLayout interface ----------------
     def addItem(self, item):
         self._items.append(item)
 
@@ -58,7 +59,7 @@ class FlowLayout(QLayout):
                       margins.top() + margins.bottom())
         return size
 
-    # ---------------- 布局算法 ----------------
+    # ---------------- Layout algorithm ----------------
     def _do_layout(self, rect, test_only):
         margins = self.contentsMargins()
         effective = rect.adjusted(margins.left(), margins.top(),
@@ -90,8 +91,8 @@ class FlowLayout(QLayout):
         return y + line_height - rect.y() + margins.bottom()
 
     def addWidget(self, widget):
-        # 必须自己完成 QLayout::addWidget 的「挂到父控件上」这一步：
-        # 直接 addItem(QWidgetItem(w)) 不会 reparent，控件会变成从不显示的孤儿窗口。
+        # QLayout::addWidget's "attach to parent" step must happen here:
+        # addItem(QWidgetItem(w)) does not reparent and leaves a widget that never shows.
         parent = self.parentWidget()
         if parent is not None and widget.parentWidget() is not parent:
             widget.setParent(parent)

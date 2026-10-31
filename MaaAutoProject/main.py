@@ -21,7 +21,7 @@ from ui.main_window import MainWindow
 
 
 # --------------------------------------------------------------------------- #
-# --upgrading：静默优雅退出
+# --upgrading: quiet, graceful exit
 # --------------------------------------------------------------------------- #
 def _handle_upgrading_mode():
     logger = logging.getLogger("MaaAuto")
@@ -60,13 +60,13 @@ def _handle_upgrading_mode():
 
 
 # --------------------------------------------------------------------------- #
-# 上次自动升级失败检查
+# check for a failed previous auto-upgrade
 # --------------------------------------------------------------------------- #
 def _check_upgrade_failure():
     flag = os.path.join(CONFIG_DIR, "upgrade_failed.flag")
     logger = logging.getLogger("MaaAuto")
 
-    # 静默检查，不显示在主界面
+    # silent check, nothing shown on the main window
     logger.debug(f"检查升级失败标志: {flag}")
 
     if not os.path.exists(flag):
@@ -84,7 +84,7 @@ def _check_upgrade_failure():
             pass
         return
 
-    # 发现标志才用 INFO，因为接下来要弹窗
+    # INFO only once the flag exists, since a dialog follows
     logger.info(f"发现升级失败标志: {data}")
 
     msg = (
@@ -105,7 +105,7 @@ def _check_upgrade_failure():
 
 
 # --------------------------------------------------------------------------- #
-# 写入本次启动参数
+# write this run's launch arguments
 # --------------------------------------------------------------------------- #
 def _write_launch_args(logger):
     try:
@@ -121,31 +121,31 @@ def _write_launch_args(logger):
                 ensure_ascii=False,
                 indent=2,
             )
-        # 正常情况不刷主界面，仅 DEBUG 时可见
+        # normal runs stay off the main window; visible in DEBUG only
         logger.debug(f"已写入启动参数: {launch_args} -> {args_file}")
     except Exception as e:
         logger.error(f"写入 last_launch_args.json 失败: {e}")
 
 
 # --------------------------------------------------------------------------- #
-# 权限
+# Privileges
 #
-# 自 v2.1.0 起，安装器在安装时会为 MaaAuto.exe 写入 RUNASADMIN 兼容标志：
+# Since v2.1.0 the installer writes a RUNASADMIN compatibility flag for MaaAuto.exe:
 #     HKCU\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers
-# 因此主程序每次启动都会弹 UAC，且 is_admin() 恒为 True。
+# so the app raises UAC on every start and is_admin() is always True.
 #
-# 主程序**不再自我提权**（原 elevate_if_needed() 已移除，2026-09-20）：
-#   - 若 RUNASADMIN 标志 + ShellExecuteW("runas") 同时生效 → 二次 UAC 弹窗
-#   - 由安装器统一负责提权，是更清晰的方案
-#   - 原 --no-admin / --elevated 参数随之废弃，不再有实际作用
+# The app **no longer elevates itself** (elevate_if_needed() was removed 2026-09-20):
+#   - RUNASADMIN plus ShellExecuteW("runas") would mean a second UAC prompt
+#   - letting the installer own elevation is the cleaner design
+#   - --no-admin / --elevated are obsolete and no longer do anything
 #
-# 保留 is_admin() 供内部诊断 / 未来扩展使用。
+# is_admin() stays for internal diagnostics and future use.
 # --------------------------------------------------------------------------- #
 def is_admin() -> bool:
-    """当前进程是否以管理员身份运行。
+    """Whether this process runs as administrator.
 
-    注意：安装器为 MaaAuto.exe 设置了 RUNASADMIN 兼容标志后，
-    本函数在正常安装环境下**恒返回 True**。
+    Note: once the installer sets the RUNASADMIN compatibility flag on MaaAuto.exe,
+    this **always returns True** in a normal installed setup.
     """
     try:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
@@ -157,12 +157,12 @@ def is_admin() -> bool:
 # DPI
 # --------------------------------------------------------------------------- #
 def set_dpi_awareness() -> bool:
-    """声明 per-monitor-v2 DPI 感知，成功返回 True。
+    """Declare per-monitor-v2 DPI awareness; True on success.
 
-    ★ 这三个 API 失败时返回 0 / 错误码，**不会抛异常**。旧实现只看「有没有
-      抛异常」，于是设置失败也当作成功继续跑——此时进程仍是不感知状态：
-      ImageGrab 截到的是物理像素、GetWindowRect 返回虚拟像素，找图的
-      点击坐标会整体偏移（125% 缩放下偏 20%）。
+    * These three APIs return 0 / an error code on failure, **they never raise**. The old
+      implementation only checked for exceptions, so a failed call looked like success and
+      the app kept running DPI-unaware: ImageGrab captures physical pixels while
+      GetWindowRect reports virtual ones, shifting every coordinate (20% at 125%).
     """
     try:
         if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
@@ -184,19 +184,19 @@ def set_dpi_awareness() -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# 界面缩放
+# UI scaling
 #
-# Qt 会按系统 DPI 自动缩放布局，但「1080×720 的窗口 + 默认字号」在 4K/高缩放
-# 或 1366×768 小屏上都显得不合适。这里只放大基础字号（QSS 里没有 px 字号，
-# 所以整体会等比放大），配合 MainWindow 按可用区域收缩窗口。
+# Qt scales layouts by system DPI, but a 1080x720 window with the default font size
+# suits neither 4K / high scaling nor a 1366x768 screen. Only the base font grows
+# (the QSS has no px font sizes, so everything scales), while MainWindow shrinks to fit.
 # --------------------------------------------------------------------------- #
 def apply_ui_scale(app, config):
-    """把 ui_scale 应用到 app 字体，返回实际生效的倍数。
+    """Apply ui_scale to the app font; returns the factor actually used.
 
-    注意：真正让界面「看得见变大」的是 ``ThemeManager.apply_theme`` 里对 QSS
-    ``font-size`` 的重写（QSS 会覆盖 app 字体）。这里保留 app 字体缩放是为了
-    覆盖将来可能新增的、未被 QSS 命中的控件；设置页切换比例时走
-    ``ui.main_window.apply_ui_scale_live`` 的即时路径，不必重启。
+    What really makes the UI look bigger is the QSS ``font-size`` rewrite inside
+    ``ThemeManager.apply_theme`` (QSS overrides the app font). Scaling the app font here
+    still covers widgets added later that the QSS does not reach; the settings page takes
+    the live path in ``ui.main_window.apply_ui_scale_live`` and needs no restart.
     """
     try:
         scale = float(config.get("ui_scale", 1.0) or 1.0)
@@ -218,7 +218,7 @@ def apply_ui_scale(app, config):
 
 
 # --------------------------------------------------------------------------- #
-# 全局异常兜底
+# Global exception fallback
 # --------------------------------------------------------------------------- #
 def install_excepthook():
     def _hook(exc_type, exc_value, exc_tb):
@@ -238,19 +238,19 @@ def install_excepthook():
 
 
 # --------------------------------------------------------------------------- #
-# 入口
+# Entry point
 # --------------------------------------------------------------------------- #
 def main():
-    # 0) --upgrading 优先级最高
+    # 0) --upgrading has top priority
     if "--upgrading" in sys.argv:
         _handle_upgrading_mode()
 
-    # 1) config/.upgrading 兜底
+    # 1) config/.upgrading fallback
     #
-    #    正常情况：升级器写好标志 → 主程序退出。
-    #    异常情况：升级器崩溃 / 被任务管理器结束 / 停不掉主程序就返回，
-    #    标志会残留，用户此后双击主程序“毫无反应”。由 upgrade_guard 判定
-    #    “超时且无升级器进程”后删除标志并继续启动；判定规则见该模块。
+    #    Normal: the upgrader writes the flag, then the app exits.
+    #    Abnormal: the upgrader crashes / is killed in Task Manager / returns without
+    #    stopping the app; the flag stays behind and every double-click "does nothing".
+    #    upgrade_guard clears it once it has timed out with no upgrader; rules there.
     upgrading_flag = os.path.join(CONFIG_DIR, ".upgrading")
     if not resolve_upgrade_flag(
             upgrading_flag,
@@ -272,23 +272,23 @@ def main():
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    # 4) 日志
+    # 4) Logging
     logger, ui_handler = setup_logger()
     install_excepthook()
 
-    # 启动摘要：只留一条 INFO，路径信息走 DEBUG（不刷主界面）
+    # Startup summary: one INFO line only; paths go to DEBUG (keeps the main window clean)
     logger.info("MaaAuto 启动")
     logger.debug(f"BASE_DIR: {os.path.dirname(CONFIG_DIR)}")
     logger.debug(f"CONFIG_DIR: {CONFIG_DIR}")
     logger.debug(f"LOG_DIR: {LOG_DIR}")
     logger.debug(f"argv: {sys.argv}")
 
-    # 5) i18n + 配置
+    # 5) i18n + config
     i18n = init_i18n(resource_path("i18n"))
     config = load_config()
 
-    # 5.1) 「设置→应用」版本号自愈：自动升级不跑 Inno，卸载项版本会一直停在
-    #      安装时的值（D-2）。只有登记目录正好指向自己时才改，失败静默。
+    # 5.1) Self-heal the Settings > Apps version: auto-upgrade skips Inno, so the uninstall
+    #      entry keeps the install-time version (D-2); only touched if it points at us.
     try:
         from app_info import APP_VERSION
         if sync_display_version(APP_VERSION, os.path.dirname(CONFIG_DIR)):
@@ -296,13 +296,13 @@ def main():
     except Exception as e:
         logger.debug(f"同步应用列表版本号失败: {e}")
 
-    # 清理过期任务日志（按目录名里的日期判断，默认保留 90 天；0=不清理）
+    # Prune expired task logs (dates from directory names; keep 90 days by default, 0 = off)
     try:
         removed = cleanup_old_logs(config.get("log_retention_days"),
                                    logger=logger)
         if removed:
             logger.info(f"已清理 {removed} 个超过保留期的日志目录")
-    except Exception as e:                       # 清理失败绝不能影响启动
+    except Exception as e:                       # a cleanup failure must never block startup
         logger.debug(f"清理旧日志失败: {e}")
 
     ui_scale = apply_ui_scale(app, config)
@@ -313,30 +313,30 @@ def main():
     if not i18n.load_language(lang):
         i18n.load_language("zh_CN")
 
-    # 6) 主题（界面缩放一并传入：QSS 里的 font-size 会覆盖 app 字体）
+    # 6) Theme (UI scale is passed too: QSS font-size overrides the app font)
     theme_manager = ThemeManager(resource_path("themes"))
     theme_manager.apply_theme(config.get("theme", "system"), app,
                               ui_scale=config.get("ui_scale", 1.0))
 
-    # 7) 主窗口
+    # 7) Main window
     window = MainWindow(i18n, theme_manager)
 
-    # 8) 日志信号 → 首页
+    # 8) Log signal -> home page
     #
-    # ★ 这是界面日志的**唯一**通路：Worker 只挂自己的文件 handler，
-    #   不再接管全局 handler。删掉这行会让任务日志在界面上消失。
+    # * This is the **only** path for UI logs: a worker attaches its own file handler
+    #   and leaves the global one alone. Drop this line and task logs leave the UI.
     ui_handler.log_signal.connect(window.home_page.append_log)
 
-    # 9) 写启动参数（内部 debug 级别，不刷主界面）
+    # 9) Write launch arguments (debug level inside, keeps the main window clean)
     _write_launch_args(logger)
 
-    # 10) 显示窗口
+    # 10) Show the window
     if "--autostart" in sys.argv:
         window.hide()
     else:
         window.show()
 
-    # 11) 延迟检查升级失败标志（内部 debug 级别，只有发现问题才 INFO）
+    # 11) Delayed check of the upgrade-failure flag (debug inside; INFO only on a problem)
     QTimer.singleShot(300, _check_upgrade_failure)
 
     sys.exit(app.exec())

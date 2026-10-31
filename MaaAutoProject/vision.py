@@ -1,38 +1,45 @@
-"""屏幕找图：多分辨率 / 多 DPI 缩放适配。
+"""Screen image search adapted to multiple resolutions and DPI scales.
 
-为什么重写
-----------
-1.0.x 的找图是这一行：
+Why this was rewritten
+----------------------
+In 1.0.x the search was this single line:
 
     pyautogui.locateCenterOnScreen("maa_start.png", confidence=0.75, grayscale=True)
 
-三个硬伤：
+It had three hard flaws:
 
-1. **尺寸不匹配**：模板是在某个 DPI 缩放比下截的。换到 125% / 150% 缩放、
-   或者换一台分辨率不同的机器后，屏幕上的按钮比模板大一圈，相关系数被整体
-   压低，于是「找不到按钮」——而图明明就在屏幕上。
-2. **每次全屏扫**：1920×1080 下扫一次 1~2 秒；而且整个屏幕里任何长得像的
-   元素都可能被命中（比如另一个按钮上的同款图标）。
-3. **无法限定窗口**：命中的位置未必来自目标程序，误点后果不可控。
+1. **Size mismatch**: templates were captured at one DPI scale. At 125% / 150%, or on
+   a machine with another resolution, the on-screen button is a size larger, the
+   correlation drops across the board, and the button "cannot be found" while it is
+   plainly there.
+2. **Full-screen scan every time**: 1-2 s per scan at 1920x1080, and anything on screen
+   that merely looks similar can match (say the same icon on another button).
+3. **No window restriction**: a hit need not come from the target app, and a stray
+   click has consequences no one can control.
 
-本模块的做法
-------------
-    grab(region)  只截目标窗口客户区（或全屏）
-    find(...)     在内存里做多尺度模板匹配
-      · 缩放比由配置给出，默认覆盖 [0.6, 2.0]，并用当前系统 DPI 作为优先中心；
-      · 粗搜在半分辨率图上跑（约快 4 倍），命中后回原分辨率、小范围精修；
-      · 模板支持用户覆盖：``config/templates/<name>`` 优先于内置
-        ``resources/<name>``，用户换分辨率后可以自己重截模板，不必等发版。
+What this module does
+---------------------
+    grab(region)  captures only the target window client area (or the whole screen)
+    find(...)     multi-scale template matching in memory
+      - the scale range comes from config, default [0.6, 2.0], centred on the current
+        system DPI;
+      - the coarse pass runs on a half-resolution image (~4x faster), then the hit is
+        refined at full resolution in a small window;
+      - templates can be overridden per user: ``config/templates/<name>`` wins over the
+        bundled ``resources/<name>``, so a user can re-capture after a resolution
+        change instead of waiting for a release.
 
-坐标系约定
-----------
-main.py 里已用 ``SetProcessDpiAwarenessContext(-4)`` 声明 per-monitor-v2 DPI 感知，
-因此 ``ImageGrab`` 的像素、``GetWindowRect`` 的窗口矩形、``SetCursorPos`` 的
-坐标**都在同一套屏幕物理像素空间**里。本模块内部不做逻辑/物理换算，
-返回的坐标可以直接交给 input_driver 点击。
+Coordinate system
+-----------------
+``main.py`` declares per-monitor-v2 DPI awareness with
+``SetProcessDpiAwarenessContext(-4)``, so ``ImageGrab`` pixels, the ``GetWindowRect``
+rectangle and ``SetCursorPos`` coordinates all share **one screen physical pixel
+space**. No logical/physical conversion happens here; returned coordinates go
+straight to input_driver for clicking.
 
-依赖：opencv（opencv-python-headless）+ Pillow。cv2 缺失时 find() 会直接报错，
-不会静默降级成「精确像素匹配」——那会让问题在安装版上才暴露。
+Dependencies: opencv (opencv-python-headless) + Pillow. Without cv2, find() errors
+out rather than silently degrading to "exact pixel matching", which would only
+surface the problem on an installed build.
 """
 
 import ctypes
@@ -45,7 +52,7 @@ import numpy as np
 try:
     import cv2
     HAS_CV2 = True
-except Exception:                                  # pragma: no cover - 环境相关
+except Exception:                                  # pragma: no cover - environment dependent
     cv2 = None
     HAS_CV2 = False
 
@@ -53,16 +60,16 @@ from PIL import ImageGrab
 
 logger = logging.getLogger("MaaAuto")
 
-# 粗搜命中多少分就不必再试别的尺度（后面还会精修）
+# score at which the coarse pass stops trying further scales (refined later anyway)
 FAST_ACCEPT = 0.92
 
 
 # --------------------------------------------------------------------------- #
-# 结果
+# Result
 # --------------------------------------------------------------------------- #
 @dataclasses.dataclass
 class Match:
-    """一次命中。坐标全部是屏幕物理像素，left/top 为模板左上角。"""
+    """One hit; coordinates are screen physical pixels."""
 
     left: int
     top: int
@@ -87,12 +94,12 @@ class Match:
 # DPI
 # --------------------------------------------------------------------------- #
 def dpi_scale() -> float:
-    """当前系统 DPI 相对于 96 的倍数（1.0=100%，1.25=125%）。
+    """System DPI as a multiple of 96 (1.0 = 100%, 1.25 = 125%).
 
-    只作为多尺度搜索的**优先中心**，判错也不会导致找不到图，只会多试几个尺度。
+    Used only as the search's **preferred centre**; a wrong value costs a few extra scales, never a miss.
     """
     try:
-        # Win10 1607+；进程已声明 DPI 感知，返回值即物理 DPI
+        # Win10 1607+; the process already declares DPI awareness, so this is the physical DPI
         dpi = int(ctypes.windll.user32.GetDpiForSystem())
         if dpi > 0:
             return dpi / 96.0
@@ -114,13 +121,13 @@ def dpi_scale() -> float:
 
 
 # --------------------------------------------------------------------------- #
-# 截图
+# Screenshot
 # --------------------------------------------------------------------------- #
 def grab(region=None):
-    """截取屏幕（BGR ndarray）。
+    """Capture the screen as a BGR ndarray.
 
-    :param region: ``(left, top, right, bottom)`` 屏幕物理像素；None 表示整个虚拟屏幕。
-    :return: ndarray，失败返回 None。
+    :param region: ``(left, top, right, bottom)`` in screen physical pixels; None = the whole virtual screen.
+    :return: ndarray, or None on failure.
     """
     bbox = None
     if region is not None:
@@ -144,7 +151,7 @@ def grab(region=None):
 
 
 def grab_gray(region=None):
-    """截取屏幕并转灰度（匹配只需要灰度，省 2/3 内存）。"""
+    """Capture the screen in grayscale (matching only needs gray, and it saves 2/3 of the memory)."""
     img = grab(region)
     if img is None:
         return None
@@ -154,7 +161,7 @@ def grab_gray(region=None):
 
 
 def save_png(bgr_image, path):
-    """把 grab() 返回的 BGR 图存成 PNG（用于失败现场截图）。"""
+    """Save a grab() BGR image as PNG (used for failure screenshots)."""
     from PIL import Image
     if bgr_image is None:
         return False
@@ -164,17 +171,17 @@ def save_png(bgr_image, path):
 
 
 # --------------------------------------------------------------------------- #
-# 模板加载（带缓存）
+# Template loading (cached)
 # --------------------------------------------------------------------------- #
 _TEMPLATE_CACHE = {}
 _TEMPLATE_CACHE_LIMIT = 32
 
 
 def _template_gray(path):
-    """读取模板为灰度图，按 (路径, mtime, 大小) 缓存。
+    """Load a template as grayscale, cached by (path, mtime, size).
 
-    用 ``np.fromfile + cv2.imdecode`` 而不是 ``cv2.imread``：后者在含非 ASCII
-    字符的路径上（常见于中文用户名）会静默返回 None。
+    Uses ``np.fromfile + cv2.imdecode`` rather than ``cv2.imread``: the latter silently
+    returns None for paths with non-ASCII characters (common with CJK user names).
     """
     try:
         st = os.stat(path)
@@ -203,7 +210,7 @@ def _template_gray(path):
 
 
 # --------------------------------------------------------------------------- #
-# 多尺度匹配
+# Multi-scale matching
 # --------------------------------------------------------------------------- #
 def _resize(gray, scale):
     h, w = gray.shape[:2]
@@ -214,16 +221,17 @@ def _resize(gray, scale):
     return cv2.resize(gray, (nw, nh), interpolation=interp)
 
 
-MIN_TEMPLATE_PX = 16        # 缩放后小于这个尺寸的模板不参与匹配（噪声会长得像）
-BLUR_KSIZE = 3              # 匹配前柔和一下：对 1px 笔画与半像素错位不敏感
+MIN_TEMPLATE_PX = 16        # templates smaller than this after scaling are not matched (noise matches too well)
+BLUR_KSIZE = 3              # soften before matching: tolerant of 1px strokes and half-pixel misalignment
 
 
 def _match_one(screen, tpl, scale):
-    """在 screen 里按给定缩放比找一次，返回 (score, x, y, w, h) 或 None。
+    """Match once at the given scale; returns (score, x, y, w, h) or None.
 
-    匹配前对画面和模板做同样的 3×3 高斯模糊。不模糊时，文字按钮只要缩放比
-    差 1%（132px 宽差 1px），1px 笔画就整体错位，相关系数从 0.99 掉到 0.83——
-    明明在屏幕上却「找不到」；模糊后同样的错位仍有 0.96。
+    Image and template get the same 3x3 Gaussian blur first. Without it, a text button
+    off by 1% in scale (1 px on 132 px) shifts every 1 px stroke and the correlation
+    falls from 0.99 to 0.83 - "not found" while it is right there; with the blur the
+    same shift still scores 0.96.
     """
     t = _resize(tpl, scale)
     th, tw = t.shape[:2]
@@ -250,7 +258,7 @@ def _scale_list(scale_min, scale_max, step):
 
 
 def _ordered_scales(scales, center):
-    """把离 DPI 中心最近的尺度排前面：常见情况（模板与屏幕同缩放）第一次就命中。"""
+    """Sort scales by distance from the DPI centre."""
     center = max(0.1, float(center))
     return sorted(scales, key=lambda s: abs(s - center))
 
@@ -265,12 +273,12 @@ def _refine_scales(center, span=0.12, step=0.02):
 
 def find(image_path, region=None, threshold=0.8, scale_min=0.6,
          scale_max=2.0, scale_step=0.05, dpi_hint=True):
-    """在屏幕（或 region 内）寻找模板，返回最优 Match，找不到返回 None。
+    """Find a template on screen (or inside region); returns the best Match, or None.
 
-    :param image_path: 模板 PNG 路径
-    :param region:     ``(l, t, r, b)``，一般传目标窗口客户区；None = 全屏
-    :param threshold:  相关系数阈值（0~1）
-    :param dpi_hint:   是否用当前系统 DPI 作为搜索优先中心
+    :param image_path: path of the template PNG
+    :param region:     ``(l, t, r, b)``, usually the target window client area; None = full screen
+    :param threshold:  correlation threshold (0-1)
+    :param dpi_hint:   whether to centre the search on the current system DPI
     """
     if not HAS_CV2:
         logger.error("缺少 opencv，无法执行多尺度找图。请安装 opencv-python-headless。")
@@ -288,11 +296,11 @@ def find(image_path, region=None, threshold=0.8, scale_min=0.6,
 
     scales = _scale_list(scale_min, scale_max, scale_step)
     center = dpi_scale() if dpi_hint else 1.0
-    # DPI 只是「优先顺序」的提示，不擅自扩大用户设定的区间：
-    # 有人把区间设成 100%~100% 是为了提速，硬塞 1.25 会让他白等一轮。
+    # DPI only reorders the search, it never widens the user's range:
+    # some set 100%-100% purely for speed, and forcing 1.25 makes them wait a pass for nothing.
     scales = _ordered_scales(scales, center)
 
-    # ---- 粗搜：半分辨率 ----
+    # ---- coarse pass: half resolution ----
     sh, sw = screen.shape[:2]
     if sh >= 120 and sw >= 120:
         half = cv2.resize(screen, (sw // 2, sh // 2), interpolation=cv2.INTER_AREA)
@@ -315,7 +323,7 @@ def find(image_path, region=None, threshold=0.8, scale_min=0.6,
         return None
     coarse.sort(key=lambda item: item[0], reverse=True)
 
-    # ---- 精修：取前两个尺度，回原分辨率、围绕候选点小范围重匹配 ----
+    # ---- refine: top two scales, back to full resolution, small window around each hit ----
     best = None
     pad = 24
     for score, s, x, y, tw, th in coarse[:2]:
@@ -351,9 +359,9 @@ def find(image_path, region=None, threshold=0.8, scale_min=0.6,
 
 def find_any(paths, region=None, threshold=0.8, scale_min=0.6, scale_max=2.0,
              scale_step=0.05, dpi_hint=True):
-    """在多个模板里找最优的一个（同一目标的多种尺寸/样式）。
+    """Find the best match among several templates (one target in several sizes/styles).
 
-    模板列表按优先级排列；命中分数差距很小时仍取最高分。
+    The list is ordered by priority; when scores are close the highest still wins.
     """
     best = None
     for path in paths:
@@ -365,10 +373,10 @@ def find_any(paths, region=None, threshold=0.8, scale_min=0.6, scale_max=2.0,
 
 
 # --------------------------------------------------------------------------- #
-# 模板路径解析
+# Template path resolution
 # --------------------------------------------------------------------------- #
 def template_candidates(name, user_dir=None, bundled_dir=None):
-    """返回候选模板路径：用户目录优先，其次内置资源。"""
+    """Candidate template paths: the user directory first, then the bundled resources."""
     out = []
     if user_dir:
         p = os.path.join(user_dir, name)
