@@ -10,7 +10,7 @@ The widget never touches config directly, only get/set, which keeps it unit-test
 """
 
 from PySide6.QtCore import Qt, QTime, Signal
-from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel,
                                QListWidget, QPushButton, QToolButton,
                                QVBoxLayout, QWidget)
 
@@ -30,8 +30,8 @@ class TimePickDialog(QDialog):
         self.setModal(True)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 16, 18, 14)
-        root.setSpacing(10)
+        root.setContentsMargins(20, 18, 20, 16)
+        root.setSpacing(12)
         self.picker = WheelTimePicker()
         self.picker.setTime(QTime.fromString(initial, "HH:mm"))
         row = QHBoxLayout()
@@ -40,10 +40,22 @@ class TimePickDialog(QDialog):
         row.addStretch()
         root.addLayout(row)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        root.addWidget(buttons)
+        # Explicit buttons: a bare QDialogButtonBox showed English "OK"/"Cancel" in the
+        # native grey style, the one place the app fell out of its own visual language.
+        buttons = QHBoxLayout()
+        buttons.setSpacing(8)
+        buttons.addStretch()
+        self.btn_ok = QPushButton(self.i18n.t("common.ok"))
+        self.btn_ok.setObjectName("PrimaryButton")
+        self.btn_ok.setCursor(Qt.PointingHandCursor)
+        self.btn_ok.clicked.connect(self.accept)
+        buttons.addWidget(self.btn_ok)
+        self.btn_cancel = QPushButton(self.i18n.t("common.cancel"))
+        self.btn_cancel.setObjectName("GhostButton")
+        self.btn_cancel.setCursor(Qt.PointingHandCursor)
+        self.btn_cancel.clicked.connect(self.reject)
+        buttons.addWidget(self.btn_cancel)
+        root.addLayout(buttons)
         self.resize(260, 150)
 
     def value(self) -> str:

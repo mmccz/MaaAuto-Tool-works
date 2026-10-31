@@ -632,3 +632,20 @@ def test_dialog_button_rules_survive_ui_scaling():
         r"QDialog\s+QPushButton\s*,\s*QMessageBox\s+QPushButton\s*\{([^}]*)\}",
         scaled).group(1)
     assert "min-height: 48px" in block, block
+
+
+def test_time_pick_dialog_uses_localized_buttons(qapp, i18n):
+    """A bare QDialogButtonBox showed English "OK"/"Cancel" with native grey buttons."""
+    from PySide6.QtWidgets import QDialogButtonBox, QPushButton
+
+    from ui.schedule_editor import TimePickDialog
+
+    dlg = TimePickDialog(i18n, "08:00")
+    try:
+        assert dlg.findChildren(QDialogButtonBox) == []
+        buttons = dlg.findChildren(QPushButton)
+        assert [b.text() for b in buttons] == [i18n.t("common.ok"), i18n.t("common.cancel")]
+        assert [b.objectName() for b in buttons] == ["PrimaryButton", "GhostButton"]
+        assert all(b.styleSheet() == "" for b in buttons)
+    finally:
+        dlg.deleteLater()
