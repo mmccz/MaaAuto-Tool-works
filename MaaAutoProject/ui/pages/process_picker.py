@@ -124,6 +124,9 @@ class ProcessPickerDialog(QDialog):
         bottom = QHBoxLayout()
         self.count_label = QLabel("")
         self.count_label.setObjectName("SettingDesc")
+        # At UI scale 1.5 the row is narrower than the text needs; without wrapping the
+        # "selected N" tail is cut off and the selection feedback disappears.
+        self.count_label.setWordWrap(True)
         bottom.addWidget(self.count_label)
         bottom.addStretch()
 

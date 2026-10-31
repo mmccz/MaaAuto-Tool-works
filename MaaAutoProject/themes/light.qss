@@ -210,11 +210,13 @@ QTableWidget {
     selection-color: #111827;
 }
 QHeaderView {
-    background: transparent;
+    /* Solid, not transparent: an EMPTY table (no rows) paints only the header
+       widget background, and transparent showed the light palette as a white band. */
+    background: #f3f4f6;
     border: none;
 }
-/* A transparent section background lets the light palette show through and the table
-   header becomes a white band on the dark theme (the process picker). Paint it solid. */
+/* A transparent section background lets the plain palette show through (a white band on
+   the dark theme, the process picker); paint it solid so the header follows the theme. */
 QHeaderView::section {
     background: #f3f4f6;
     border: none;
@@ -379,9 +381,6 @@ QDialog QPushButton:pressed, QMessageBox QPushButton:pressed {
 QDialog QPushButton:disabled, QMessageBox QPushButton:disabled {
     color: #9ca3af;
     background: #f9fafb;
-}
-QMessageBox {
-    min-width: 380px;
 }
 QMessageBox QLabel {
     color: #1f2937;

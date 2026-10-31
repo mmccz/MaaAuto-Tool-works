@@ -196,7 +196,9 @@ QTableWidget {
     selection-color: #f3f4f6;
 }
 QHeaderView {
-    background: transparent;
+    /* Solid, not transparent: an EMPTY table (no rows) paints only the header
+       widget background, and transparent showed the light palette as a white band. */
+    background: rgba(255, 255, 255, 0.04);
     border: none;
 }
 /* A transparent section background lets the light palette show through and the table
@@ -367,9 +369,6 @@ QDialog QPushButton:disabled, QMessageBox QPushButton:disabled {
     background: rgba(255, 255, 255, 0.03);
 }
 /* The dark theme painted the QMessageBox background but not its text: black on #0f1115. */
-QMessageBox {
-    min-width: 380px;
-}
 QMessageBox QLabel {
     color: #e5e7eb;
 }

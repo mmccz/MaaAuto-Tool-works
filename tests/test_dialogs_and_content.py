@@ -590,7 +590,7 @@ def test_announcement_search_filters_index(qapp, i18n):
 
 
 # --------------------------------------------------------------------------- #
-# Dialog visuals: dark-theme readability (1.4.6)
+# Dialog visuals: dark-theme readability
 # --------------------------------------------------------------------------- #
 def test_qss_styles_dialog_buttons_and_messagebox():
     import re
@@ -665,8 +665,6 @@ def test_process_picker_padding_and_min_width(qapp, i18n):
 
 def test_process_picker_header_is_dark_in_dark_theme(qapp, i18n):
     """An empty table (0 rows) still paints the header: it must not show the light palette."""
-    from PySide6.QtGui import QColor
-
     from themes import ThemeManager
     from ui.pages.process_picker import ProcessPickerDialog
 
@@ -674,17 +672,61 @@ def test_process_picker_header_is_dark_in_dark_theme(qapp, i18n):
     tm.apply_theme("dark", qapp)
     dlg = ProcessPickerDialog(i18n, "")
     try:
+        dlg.table.setRowCount(0)          # the header must not depend on any rows
         dlg.resize(640, 400)
         dlg.show()
         qapp.processEvents()
+        img = dlg.grab().toImage()
         header = dlg.table.horizontalHeader()
-        img = header.grab().toImage()
-        color = QColor(img.pixel(img.width() // 2, img.height() // 2))
-        assert (color.red() + color.green() + color.blue()) / 3 < 128, color.name()
+        top = dlg.table.geometry().top() + header.geometry().top()
+        samples = dark = 0
+        for y in range(top + 2, top + header.height() - 2, 3):
+            for x in range(30, img.width() - 30, 5):
+                c = img.pixelColor(x, y)
+                samples += 1
+                if (c.red() + c.green() + c.blue()) / 3 < 128:
+                    dark += 1
+        assert samples and dark / samples > 0.6, (dark, samples)
     finally:
         dlg.close()
         dlg.deleteLater()
         tm.apply_theme("light", qapp)   # leave the module-wide qapp in a known state
+
+
+def test_qmessagebox_text_is_readable_in_dark_theme(qapp):
+    """A rendered assertion, not a QSS string check: black text on #0f1115 would show
+    no light pixels in the message area."""
+    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtWidgets import QLabel, QMessageBox
+
+    from themes import ThemeManager
+
+    tm = ThemeManager(os.path.join(APP_DIR, "themes"))
+    tm.apply_theme("dark", qapp)
+    box = QMessageBox()
+    try:
+        box.setWindowTitle("MaaAuto")
+        box.setIcon(QMessageBox.Warning)
+        box.setText("MAA 仍在运行，请先退出后重试。")
+        box.addButton("确定", QMessageBox.AcceptRole)
+        box.show()
+        qapp.processEvents()
+
+        label = box.findChild(QLabel, "qt_msgbox_label")
+        assert label is not None and not label.size().isEmpty()
+        top_left = label.mapTo(box, QPoint(0, 0))
+        img = box.grab().toImage()
+        region = img.copy(QRect(top_left, label.size()))
+        light = 0
+        for y in range(0, region.height(), 2):
+            for x in range(0, region.width(), 2):
+                c = region.pixelColor(x, y)
+                if (c.red() + c.green() + c.blue()) / 3 > 170:
+                    light += 1
+        assert light > 0, "no readable (light) pixels in the message text"
+    finally:
+        box.close()
+        tm.apply_theme("light", qapp)
 
 
 def test_announcement_body_document_margin(qapp, i18n):
@@ -715,3 +757,16 @@ def test_tutorial_right_gutter_and_message_wrap(qapp, i18n):
         assert box.maximumWidth() == 560
     finally:
         box.deleteLater()
+
+
+def test_process_picker_count_label_wraps_at_large_scale(qapp, i18n):
+    """At UI scale 1.5 the stats label was 164 px wide but needs 237 px, cutting the count."""
+    from ui.pages.process_picker import ProcessPickerDialog
+
+    dlg = ProcessPickerDialog(i18n, "")
+    try:
+        # The count row shares the line with three buttons; it must be allowed to wrap
+        # instead of being clipped when the UI scale makes the text wider.
+        assert dlg.count_label.wordWrap() is True
+    finally:
+        dlg.deleteLater()
