@@ -587,3 +587,48 @@ def test_announcement_search_filters_index(qapp, i18n):
                        for i in range(dlg.list.count()))
     finally:
         dlg.deleteLater()
+
+
+# --------------------------------------------------------------------------- #
+# Dialog visuals: dark-theme readability (1.4.6)
+# --------------------------------------------------------------------------- #
+def test_qss_styles_dialog_buttons_and_messagebox():
+    import re
+
+    for name in ("dark.qss", "light.qss"):
+        with open(os.path.join(APP_DIR, "themes", name), encoding="utf-8") as fh:
+            qss = fh.read()
+
+        # Without a dialog-scoped button rule QMessageBox falls back to the native grey
+        # Windows button while every other control in the app is rounded.
+        assert re.search(r"QDialog\s+QPushButton\s*,\s*QMessageBox\s+QPushButton\s*\{",
+                         qss), f"{name}: dialog button base rule missing"
+        block = re.search(
+            r"QDialog\s+QPushButton\s*,\s*QMessageBox\s+QPushButton\s*\{([^}]*)\}",
+            qss).group(1)
+        assert "border-radius" in block and "min-height" in block
+
+        # The dark QSS painted only the QDialog background; text stayed palette-black.
+        assert re.search(r"QMessageBox\s+QLabel\s*\{[^}]*color\s*:", qss, re.S), \
+            f"{name}: QMessageBox text colour missing"
+
+        # A transparent header section lets the light palette through -> white band.
+        header = re.search(r"QHeaderView::section\s*\{([^}]*)\}", qss, re.S)
+        assert header, f"{name}: QHeaderView::section rule missing"
+        assert "background" in header.group(1)
+        assert "transparent" not in header.group(1), \
+            f"{name}: header must paint a solid colour"
+
+
+def test_dialog_button_rules_survive_ui_scaling():
+    import re
+
+    from themes import ThemeManager
+
+    with open(os.path.join(APP_DIR, "themes", "dark.qss"), encoding="utf-8") as fh:
+        qss = fh.read()
+    scaled = ThemeManager._scale_qss(qss, 1.5)
+    block = re.search(
+        r"QDialog\s+QPushButton\s*,\s*QMessageBox\s+QPushButton\s*\{([^}]*)\}",
+        scaled).group(1)
+    assert "min-height: 48px" in block, block

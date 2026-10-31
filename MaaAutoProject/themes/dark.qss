@@ -195,9 +195,16 @@ QTableWidget {
     selection-background-color: rgba({accent_rgb}, 0.18);
     selection-color: #f3f4f6;
 }
-QHeaderView::section {
+QHeaderView {
     background: transparent;
     border: none;
+}
+/* A transparent section background lets the light palette show through and the table
+   header becomes a white band on the dark theme (the process picker). Paint it solid. */
+QHeaderView::section {
+    background: rgba(255, 255, 255, 0.04);
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding: 8px;
     color: #9ca3af;
     font-weight: 600;
@@ -334,4 +341,38 @@ QListWidget#ScheduleTimeList {
     border-radius: 8px;
     background: transparent;
     padding: 2px;
+}
+
+/* ============ 弹窗与提示框 ============ */
+/* QMessageBox and QDialogButtonBox render native grey Windows buttons otherwise; every
+   other control in the app is rounded, so dialogs looked foreign. Scoped to dialogs on
+   purpose: a global QPushButton rule would change main-window layout and size assertions. */
+QDialog QPushButton, QMessageBox QPushButton {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    min-height: 32px;
+    min-width: 76px;
+    padding: 6px 16px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #e5e7eb;
+}
+QDialog QPushButton:hover, QMessageBox QPushButton:hover {
+    background: rgba(255, 255, 255, 0.11);
+}
+QDialog QPushButton:pressed, QMessageBox QPushButton:pressed {
+    background: rgba(255, 255, 255, 0.04);
+}
+QDialog QPushButton:disabled, QMessageBox QPushButton:disabled {
+    color: rgba(229, 231, 235, 0.45);
+    background: rgba(255, 255, 255, 0.03);
+}
+/* The dark theme painted the QMessageBox background but not its text: black on #0f1115. */
+QMessageBox {
+    min-width: 380px;
+}
+QMessageBox QLabel {
+    color: #e5e7eb;
+}
+QMessageBox QPushButton {
+    min-width: 88px;
 }
