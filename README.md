@@ -14,6 +14,8 @@
 
 </div>
 
+**简体中文** ｜ [English](README.en.md) ｜ 📘 [详细使用手册](docs/guide/zh-CN.md) · [User guide](docs/guide/en-US.md)
+
 ---
 
 ## 这是什么
