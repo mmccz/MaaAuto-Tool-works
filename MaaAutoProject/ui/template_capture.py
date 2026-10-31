@@ -268,12 +268,46 @@ class TemplateCaptureDialog(QDialog):
                     QMessageBox.Yes:
                 return
 
+        # 目标窗口先在屏幕上看一眼，免得用户以为「点了没反应」
+        proc = self._target_process(filename)
+        if proc:
+            self.status_label.setText(
+                self.i18n.t("capture.foreground", process=proc))
+
         # 先把对话框藏起来，免得它出现在截图里
         self.hide()
         app = QApplication.instance()
         if app is not None:
             app.processEvents()
         QTimer.singleShot(260, lambda: self._do_capture(filename, target_dir, target))
+
+    # ------------------------------------------------------------------ #
+    # 1.4.5：截取前把 MAA / MaaEnd 窗口弄到最前面
+    #
+    # 旧实现直接抓当前屏幕：用户从设置页点「截取模板」时，MAA 往往压在
+    # MaaAuto 主窗口后面甚至最小化，抓到的画面里根本没有 Link Start，
+    # 框出来的模板自然对不上。
+    # ------------------------------------------------------------------ #
+    def _target_process(self, filename):
+        """模板对应的进程名；自定义模板返回空串（自己负责摆好窗口）。"""
+        try:
+            import automation
+            return automation.template_process(filename, self.config)
+        except Exception:
+            return ""
+
+    def _bring_target_front(self, filename):
+        proc = self._target_process(filename)
+        if not proc:
+            return ""
+        try:
+            from process_utils import bring_process_to_front, interruptible_sleep
+            if bring_process_to_front([proc]):
+                interruptible_sleep(0.5)
+                return proc
+        except Exception as e:
+            logger.warning(f"把 {proc} 窗口前置失败: {e}")
+        return ""
 
     def _do_capture(self, filename, target_dir, target):
         screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
@@ -283,6 +317,7 @@ class TemplateCaptureDialog(QDialog):
                   int(round((geom.x() + geom.width()) * dpr)),
                   int(round((geom.y() + geom.height()) * dpr)))
 
+        self._bring_target_front(filename)
         captured = vision.grab(region)
         if captured is None:
             self.show()

@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 import datetime
-import winreg
 import atexit
 import base64
 
@@ -16,6 +15,7 @@ from config_manager import (load_config, save_config, LOG_DIR, CONFIG_DIR,
 from automation import (execute_workflow, last_failure,
                         FAILURE_TEMPLATE, FAILURE_OFFSCREEN)
 from utils import resource_path, AsyncWorker
+import autostart
 from process_utils import kill_all_related_processes
 from ui.background import BackgroundWidget
 from ui.sidebar import Sidebar
@@ -243,6 +243,9 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1200, self._startup_prompts)
         # 后台拉在线公告（不需要发版就能改公告）
         QTimer.singleShot(2500, self._fetch_announcements_async)
+        # 每次启动校一遍自启：旧版本写的是 Run 键（对提权程序无效），
+        # 升级上来的用户要在这里迁移成登录计划任务。
+        QTimer.singleShot(900, self.set_auto_start)
 
     # ==================================================================
     # 背景
@@ -868,31 +871,31 @@ class MainWindow(QMainWindow):
     # 自启 / 退出
     # ==================================================================
     def set_auto_start(self):
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        app_name = "MaaAuto"
+        """开关开机自启（1.4.5 起：打包态用登录计划任务，开发态用 Run 键）。
 
-        # Run 键的值必须是**单个可执行文件**（可带参数）。
-        # 旧实现在开发态拼成 `"python "C:\...\main.py"" --autostart`，
-        # 双引号嵌套，注册表值是坏的。这里改用 sys.executable。
-        if getattr(sys, "frozen", False):
-            command = f'"{sys.executable}" --autostart'
-        else:
-            script = os.path.abspath(sys.argv[0])
-            command = f'"{sys.executable}" "{script}" --autostart'
+        MaaAuto.exe 要求管理员权限，而 Windows 不会用 ``HKCU\\...\\Run`` 拉起
+        需要提权的程序——任务管理器里开关亮着，登录时却什么都不发生。
+        计划任务用 ``/RL HIGHEST`` 在登录时直接给管理员令牌，不弹 UAC。
+        详见 :mod:`autostart`。
+        """
+        enabled = bool(self.config.get("auto_start", False))
+        frozen = getattr(sys, "frozen", False)
+        script = None if frozen else os.path.abspath(sys.argv[0])
 
-        try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
-                                 winreg.KEY_SET_VALUE)
-            if self.config.get("auto_start"):
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, command)
-            else:
-                try:
-                    winreg.DeleteValue(key, app_name)
-                except FileNotFoundError:
-                    pass
-            winreg.CloseKey(key)
-        except Exception as e:
-            self.logger.error(f"设置开机自启失败: {e}")
+        ok = autostart.set_enabled(enabled, executable=sys.executable,
+                                   script=script)
+        if enabled and not ok:
+            self.logger.error(
+                "开机自启没有设置成功：创建登录计划任务失败（需要管理员权限）。"
+                "详见日志；可稍后重试，或用 README 里的排查步骤手动注册。")
+            try:
+                self.tray.showMessage("MaaAuto",
+                                      self.i18n.t("notify.autostart_failed"),
+                                      QSystemTrayIcon.Warning, 8000)
+            except Exception:
+                pass
+        elif enabled:
+            self.logger.info(f"开机自启已启用（{autostart.describe()}）")
 
     def show_normal(self):
         self.showNormal()

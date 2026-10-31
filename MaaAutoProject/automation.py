@@ -315,6 +315,26 @@ def template_paths(image_name, config=None):
     )
 
 
+# 模板 → 配置里记录它所属进程路径的键。
+# 「测试找图」「截取模板」前要先把对应窗口弄到前面，否则截到的画面里压着
+# 别的窗口（通常就是 MaaAuto 自己），匹配结果永远对不上。
+TEMPLATE_TARGETS = {
+    "maa_start.png": "maa_path",
+    "maaend_start.png": "maaend_path",
+}
+
+
+def template_process(image_name, config=None):
+    """模板对应的进程名（如 ``MAA.exe``）；自定义模板返回空串。"""
+    key = TEMPLATE_TARGETS.get(str(image_name or "").strip().lower())
+    if not key:
+        return ""
+    path = str((config or {}).get(key) or "").strip()
+    if not path:
+        return ""
+    return os.path.basename(path.replace("/", "\\"))
+
+
 def _search_region(config, procs):
     """按配置返回 (搜索矩形, 窗口句柄)。
 

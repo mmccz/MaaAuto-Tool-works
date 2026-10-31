@@ -6,7 +6,7 @@
 
 **MAA & MaaEnd 的定时自动化调度台**
 
-[![Version](https://img.shields.io/badge/version-1.4.4-2f81f7.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.5-2f81f7.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#环境要求)
@@ -108,8 +108,8 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 
 | 文件 | 说明 |
 | --- | --- |
-| `MaaAuto_Setup_v1.4.4-Windows-x64.exe` | **完整包（约 56 MB）**，内嵌预构建程序，断网也能装 |
-| `MaaAuto_Online_v1.4.4-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
+| `MaaAuto_Setup_v1.4.5-Windows-x64.exe` | **完整包（约 56 MB）**，内嵌预构建程序，断网也能装 |
+| `MaaAuto_Online_v1.4.5-Windows-x64.exe` | 在线引导包（约 2 MB），安装时才下载完整包 |
 
 双击后 30 秒左右装完，**不需要 Python、不联网、不需要管理员权限**：默认装到 `%LOCALAPPDATA%\Programs\MaaAuto`；向导里也可以选「为所有用户安装」，装到 `Program Files`（这一步会弹 UAC）。
 「选择附加任务」页可以选**是否创建开始菜单快捷方式**（默认创建）与桌面图标。
@@ -256,7 +256,7 @@ Content-Type: application/json
 
 ## 🔄 升级与版本
 
-当前版本 **1.4.4**，变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 **1.4.5**，变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 任何已安装的 1.x 都可以在程序内一键升级：优先下载 `MaaAuto_delta_v{旧}_to_{新}.zip` 差分包
 （通常不到 1 MB，跳版本会自动串链），没有可用补丁时才回退 `MaaAuto_payload_v{版本}.zip` 整包；

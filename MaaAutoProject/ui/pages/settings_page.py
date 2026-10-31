@@ -58,14 +58,25 @@ def _match_test_worker(cfg):
                 size = f"{im.width}×{im.height}"
         except Exception:
             pass
+        # 1.4.5：先把 MAA / MaaEnd 窗口弄到最前面再截屏。
+        # 旧实现直接抓全屏 —— 用户点「测试找图」时 MaaAuto 的窗口正压在目标
+        # 上面，截到的全是自己的界面，于是永远「未命中」。
+        proc = automation.template_process(name, cfg)
+        if proc:
+            try:
+                from process_utils import bring_process_to_front, interruptible_sleep
+                if bring_process_to_front([proc]):
+                    interruptible_sleep(0.8)
+            except Exception as e:
+                logger.warning(f"把 {proc} 窗口前置失败: {e}")
         try:
             match = vision.find_any(paths, region=None, threshold=threshold,
                                     scale_min=scale_min, scale_max=scale_max)
             results.append({"name": name, "match": match, "source": source,
-                            "size": size, "error": None})
+                            "size": size, "error": None, "process": proc})
         except Exception as e:
             results.append({"name": name, "match": None, "source": source,
-                            "size": size, "error": f"异常: {e}"})
+                            "size": size, "error": f"异常: {e}", "process": proc})
     return results
 
 
@@ -777,6 +788,14 @@ class SettingsPage(QWidget):
 
     def _on_match_test_done(self, results):
         self._reset_match_test_button()
+        # 测试时把 MAA / MaaEnd 拉到了前面，结果弹窗不能被压在后面
+        try:
+            win = self.window()
+            win.showNormal()
+            win.raise_()
+            win.activateWindow()
+        except Exception:
+            pass
         lines = []
         for item in results:
             name = item["name"]

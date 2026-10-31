@@ -3,6 +3,19 @@
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
         {
+            "id": "v1.4.5",
+            "date": "2026-10-31",
+            "tag": "问题修复",
+            "title": {
+                "zh_CN": "1.4.5：开机自启修好了；测试找图 / 截取模板会自动前置窗口",
+                "en_US": "1.4.5: start with Windows fixed; match test and capture bring the target window forward"
+            },
+            "body": {
+                "zh_CN": "**开机自启**：以前打开开关、任务管理器里也显示已启用，可重启登录后程序就是不出现。原因是 `MaaAuto.exe` 要求管理员权限，而 Windows 不会用注册表 Run 键拉起需要提权的程序。\n\n1.4.5 改用登录计划任务（使用最高权限运行）：登录时由任务计划程序直接给出管理员令牌，不弹 UAC；升级后第一次启动会自动把旧的 Run 键迁移掉、不会启动两次。如果创建任务失败（例如被组策略限制），会退回 Run 键并在托盘提示以管理员身份运行。\n\n**测试找图 / 截取模板**：以前这两个操作直接抓当前屏幕，而 MAA / MaaEnd 往往被 MaaAuto 压在后面，于是「测试找图」永远未命中、「截取模板」截到的是自己的窗口。现在会先按配置把目标窗口置顶，等 0.8 秒再截图，截取对话框会显示「正在把 MAA 窗口切到前面…」。自定义模板不会动其它窗口。",
+                "en_US": "**Start with Windows**: the toggle used to look enabled (and Task Manager agreed), yet nothing started after signing in. The cause: `MaaAuto.exe` requires administrator rights, and Windows will not launch an elevated program from the registry Run key.\n\n1.4.5 uses a logon scheduled task (run with highest privileges) instead: the task scheduler hands over the admin token at sign-in without a UAC prompt. The first launch after upgrading migrates the old Run entry and removes it, so the app will not start twice. If the task cannot be created (for example by policy), it falls back to the Run key and shows a tray warning about running as administrator.\n\n**Match test / capture**: both used to grab the current screen while MAA / MaaEnd was behind MaaAuto, so the match test never hit and the captured template was MaaAuto's own window. They now bring the target window to the front first, wait 0.8 s and then take the screenshot; the capture dialog shows \"Bringing the MAA window to the front...\". Custom templates leave other windows alone."
+            }
+        },
+        {
             "id": "v1.4.4",
             "date": "2026-10-31",
             "tag": "问题修复",

@@ -245,6 +245,7 @@ def bring_process_to_front(process_names):
     win32gui.EnumWindows(enum_windows_callback, None)
     if brought_count == 0:
         logger.info(f"未找到可置顶的窗口: {process_names}")
+    return brought_count > 0
 
 
 def kill_blacklist_apps(blacklist_names):
