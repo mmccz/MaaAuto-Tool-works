@@ -60,7 +60,9 @@ class TutorialDialog(QDialog):
         container.setAttribute(Qt.WA_StyledBackground, True)
         container.setAutoFillBackground(False)
         self.vbox = QVBoxLayout(container)
-        self.vbox.setContentsMargins(26, 8, 26, 20)
+        # 34 on the right because the scroll bar overlays the viewport: 26 left the text
+        # running into the bar at 125% scaling.
+        self.vbox.setContentsMargins(26, 8, 34, 20)
         self.vbox.setSpacing(14)
         scroll.setWidget(container)
         root.addWidget(scroll, 1)

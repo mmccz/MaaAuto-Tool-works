@@ -649,3 +649,69 @@ def test_time_pick_dialog_uses_localized_buttons(qapp, i18n):
         assert all(b.styleSheet() == "" for b in buttons)
     finally:
         dlg.deleteLater()
+
+
+def test_process_picker_padding_and_min_width(qapp, i18n):
+    from ui.pages.process_picker import ProcessPickerDialog
+
+    dlg = ProcessPickerDialog(i18n, "")
+    try:
+        assert dlg.minimumWidth() == 560
+        m = dlg.layout().contentsMargins()
+        assert (m.left(), m.top(), m.right(), m.bottom()) == (20, 20, 20, 20)
+    finally:
+        dlg.deleteLater()
+
+
+def test_process_picker_header_is_dark_in_dark_theme(qapp, i18n):
+    """An empty table (0 rows) still paints the header: it must not show the light palette."""
+    from PySide6.QtGui import QColor
+
+    from themes import ThemeManager
+    from ui.pages.process_picker import ProcessPickerDialog
+
+    tm = ThemeManager(os.path.join(APP_DIR, "themes"))
+    tm.apply_theme("dark", qapp)
+    dlg = ProcessPickerDialog(i18n, "")
+    try:
+        dlg.resize(640, 400)
+        dlg.show()
+        qapp.processEvents()
+        header = dlg.table.horizontalHeader()
+        img = header.grab().toImage()
+        color = QColor(img.pixel(img.width() // 2, img.height() // 2))
+        assert (color.red() + color.green() + color.blue()) / 3 < 128, color.name()
+    finally:
+        dlg.close()
+        dlg.deleteLater()
+        tm.apply_theme("light", qapp)   # leave the module-wide qapp in a known state
+
+
+def test_announcement_body_document_margin(qapp, i18n):
+    from ui.announcements import AnnouncementDialog
+
+    with open(os.path.join(RES, "announcements.json"), encoding="utf-8") as fh:
+        items = json.load(fh)["items"]
+    dlg = AnnouncementDialog(i18n, items)
+    try:
+        assert dlg.browser.document().documentMargin() == 14
+    finally:
+        dlg.deleteLater()
+
+
+def test_tutorial_right_gutter_and_message_wrap(qapp, i18n):
+    from ui.tutorial_dialog import TutorialDialog
+    from ui.update_dialog import MessageDialog
+
+    tut = TutorialDialog(i18n)
+    try:
+        assert tut.vbox.contentsMargins().right() == 34
+    finally:
+        tut.deleteLater()
+
+    box = MessageDialog(i18n, "标题", "很长的提示文字 " * 40)
+    try:
+        assert box.text_label.wordWrap() is True
+        assert box.maximumWidth() == 560
+    finally:
+        box.deleteLater()

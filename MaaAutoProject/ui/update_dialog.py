@@ -92,8 +92,8 @@ class MessageDialog(QDialog):
         self.setMaximumWidth(560)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 20, 22, 18)
-        root.setSpacing(12)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.setSpacing(10)
 
         head = QHBoxLayout()
         head.setSpacing(12)

@@ -76,8 +76,11 @@ class ProcessPickerDialog(QDialog):
     # ------------------------------------------------------------------
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
+        # Without a floor the dialog collapsed to ~435px on a narrow screen and the
+        # "process name / PID / window title" columns were unreadable.
+        self.setMinimumWidth(560)
 
         # Search box + show system processes
         top = QHBoxLayout()

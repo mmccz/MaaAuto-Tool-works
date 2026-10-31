@@ -292,6 +292,9 @@ class AnnouncementDialog(QDialog):
         self.browser = QTextBrowser()
         self.browser.setObjectName("AnnouncementBody")
         self.browser.setOpenExternalLinks(True)
+        # Release notes used to run flush against the pane edge, unlike every other text
+        # block in the app; the document margin gives them the same gutter.
+        self.browser.document().setDocumentMargin(14)
         body_row.addWidget(self.browser, 1)
         root.addLayout(body_row, 1)
 
