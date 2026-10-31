@@ -12,6 +12,7 @@ from process_utils import (kill_foreground_apps, kill_blacklist_apps,
                            wait_for_process_exit, wait_for_process_start,
                            minimize_process_windows, bring_process_to_front,
                            find_process_window, get_client_rect_screen,
+                           visible_ratio,
                            TaskInterrupted, check_interrupt,
                            interruptible_sleep)
 from notifier import send_task_report  # <--- 引入独立的推送模块
@@ -34,9 +35,81 @@ DEFAULT_MATCH_INTERVAL = 1.5        # 两次尝试之间的间隔（秒）
 DEFAULT_VERIFY_DELAY_MS = 900       # 点击后等多久再判断「有没有生效」
 DEFAULT_VERIFY_RETRIES = 1          # 点击无效时再补几次（0=不补）
 
+# 目标窗口可见面积低于这个比例，就认为「窗口在屏幕外」，直接报错而不是白等超时。
+MIN_VISIBLE_RATIO = 0.35
+
 
 class EmulatorStartupFailed(RuntimeError):
     """模拟器启动/连接失败（环境问题，重试也不会好）。"""
+
+
+class TemplateNotFound(TimeoutError):
+    """找图超时：按钮可能就在屏幕上，但模板匹配不上。
+
+    常见于 MAA / MaaEnd 更新后界面样式变化（按钮改版、主题、自定义背景），
+    或内置模板与用户的窗口尺寸 / 缩放比差异过大。继承 ``TimeoutError``
+    以兼容按超时捕获的旧代码。
+    """
+
+
+class TemplateMissing(FileNotFoundError):
+    """模板文件本身不存在（用户模板删了、内置资源缺失）。"""
+
+
+class TargetWindowNotVisible(RuntimeError):
+    """目标窗口几乎不在任何显示器内（被拖到屏幕外），找图与点击都不可能成功。"""
+
+
+# 找图超时后给用户的可操作提示。日志里会带上，界面也用它弹提醒。
+TEMPLATE_HINT = (
+    "如果按钮明明在屏幕上却一直找不到，通常是 MAA / MaaEnd 更新后界面样式变了"
+    "（按钮改版、换主题、自定义背景），或内置模板与当前窗口尺寸 / 缩放比相差太大。\n"
+    "处理：打开「设置 → 模板」重新截取对应按钮（用户模板会优先于内置模板）；"
+    "也可以先调整窗口大小 / 换回默认主题再试。"
+)
+OFFSCREEN_HINT = (
+    "目标窗口大部分在屏幕外，截图里只有黑边，找图不可能成功。\n"
+    "处理：先把 MAA / MaaEnd 窗口移回屏幕内（或恢复 / 最大化）再执行任务。"
+)
+
+def _try_restore_window(hwnd):
+    """最小化窗口先还原一次；真的还原了返回 True。
+
+    Windows 把最小化窗口的坐标挪到 -32000，不先还原就会把「最小化」
+    误判成「在屏幕外」（提示就会指错方向）。
+    """
+    try:
+        import win32con
+        import win32gui
+        if hwnd and win32gui.IsIconic(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            time.sleep(0.5)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+# 最近一次任务的失败类型，供界面决定弹什么提示。
+# 用模块级状态而不是改 execute_workflow 的返回值，避免破坏已有调用方 / 测试。
+_LAST_FAILURE = {"kind": "", "message": ""}
+
+FAILURE_TEMPLATE = "template"
+FAILURE_OFFSCREEN = "window_offscreen"
+
+
+def last_failure():
+    """最近一次任务的失败信息：``{"kind": ..., "message": ...}``（副本）。"""
+    return dict(_LAST_FAILURE)
+
+
+def _set_failure(kind, message=""):
+    _LAST_FAILURE["kind"] = kind or ""
+    _LAST_FAILURE["message"] = message or ""
+
+
+def _clear_failure():
+    _set_failure("", "")
 
 
 # --------------------------------------------------------------------------- #
@@ -306,7 +379,10 @@ def find_and_click(image_name, config=None, procs=None, timeout=None):
         logger.error(
             f"【严重错误】找不到图像文件: {image_name} "
             f"（已查 {_user_template_dir(config)} 与内置 resources）")
-        return False
+        raise TemplateMissing(
+            f"找不到模板文件: {image_name}\n"
+            f"已查找：用户模板目录 {_user_template_dir(config)}、内置 resources。\n"
+            f"处理：到「设置 → 模板」重新截取一张，或重新安装以补回内置模板。")
 
     threshold = float(config.get("match_threshold", DEFAULT_MATCH_THRESHOLD))
     scale_min = float(config.get("match_scale_min", DEFAULT_SCALE_MIN))
@@ -332,6 +408,20 @@ def find_and_click(image_name, config=None, procs=None, timeout=None):
         region, hwnd = _search_region(config, procs)
         last_region = region
 
+        if region:
+            ratio = visible_ratio(region)
+            if ratio < MIN_VISIBLE_RATIO and _try_restore_window(hwnd):
+                region, hwnd = _search_region(config, procs)
+                last_region = region
+                ratio = visible_ratio(region) if region else 1.0
+            if region and ratio < MIN_VISIBLE_RATIO:
+                logger.error(
+                    f"目标窗口可见比例仅 {ratio:.0%}（区域 {region}），"
+                    f"截图里会是大片黑边，不可能找到 {image_name}")
+                raise TargetWindowNotVisible(
+                    f"目标窗口几乎在屏幕外（可见 {ratio:.0%}，窗口区域 {region}），"
+                    f"无法识别 {image_name}。\n{OFFSCREEN_HINT}")
+
         match = vision.find_any(
             candidates, region=region, threshold=threshold,
             scale_min=scale_min, scale_max=scale_max, scale_step=scale_step)
@@ -347,7 +437,11 @@ def find_and_click(image_name, config=None, procs=None, timeout=None):
     shot = _save_failure_screenshot(image_name, last_region)
     if shot:
         logger.info(f"找图失败现场截图: {shot}")
-    raise TimeoutError(f"找图超时，未能找到: {image_name}")
+    logger.warning(TEMPLATE_HINT)
+    raise TemplateNotFound(
+        f"找图超时（{attempt} 次尝试，共 {timeout} 秒），未能找到: {image_name}\n"
+        f"{TEMPLATE_HINT}"
+        + (f"\n现场截图（用于确认按钮当时长什么样）：{shot}" if shot else ""))
 
 
 def run_maa_phase(config, logger):
@@ -500,6 +594,7 @@ def execute_workflow(config, logger):
     webhook_url = config.get("webhook_url", "")
     retry_times = config.get("retry_times", 3)
     retry_interval = config.get("retry_interval", 30)
+    _clear_failure()
 
     try:
         # ================= 启动前的前台处理（按配置） =================
@@ -515,6 +610,12 @@ def execute_workflow(config, logger):
                     break
                 except TaskInterrupted:
                     raise
+                except TargetWindowNotVisible as e:
+                    # 窗口在屏幕外：重试也不会自己回到屏幕上，直接报错说清楚
+                    logger.error(f"MAA 阶段失败（窗口在屏幕外，不再重试）: {e}")
+                    _set_failure(FAILURE_OFFSCREEN, str(e))
+                    overall_status = "报错"
+                    break
                 except EmulatorStartupFailed as e:
                     # 环境/配置问题：再点几次 Link Start 也是同样的失败，直接收尾
                     logger.error(f"MAA 阶段失败（环境问题，不再重试）: {e}")
@@ -529,6 +630,8 @@ def execute_workflow(config, logger):
                         interruptible_sleep(retry_interval)   # ← 可中断
                     else:
                         logger.error("MAA 阶段重试次数已达上限，跳过该阶段。")
+                        if isinstance(e, (TemplateNotFound, TemplateMissing)):
+                            _set_failure(FAILURE_TEMPLATE, str(e))
                         overall_status = "报错"
         else:
             logger.info("未配置 MAA 启动地址，跳过 MAA 阶段。")
@@ -543,6 +646,11 @@ def execute_workflow(config, logger):
                     break
                 except TaskInterrupted:
                     raise
+                except TargetWindowNotVisible as e:
+                    logger.error(f"MaaEnd 阶段失败（窗口在屏幕外，不再重试）: {e}")
+                    _set_failure(FAILURE_OFFSCREEN, str(e))
+                    overall_status = "报错"
+                    break
                 except Exception as e:
                     logger.error(f"MaaEnd 阶段发生异常: {e}")
                     if attempt < retry_times:
@@ -552,6 +660,8 @@ def execute_workflow(config, logger):
                         interruptible_sleep(retry_interval)   # ← 可中断
                     else:
                         logger.error("MaaEnd 阶段重试次数已达上限。")
+                        if isinstance(e, (TemplateNotFound, TemplateMissing)):
+                            _set_failure(FAILURE_TEMPLATE, str(e))
                         overall_status = "报错"
         else:
             logger.info("未配置 MaaEnd 启动地址，跳过 MaaEnd 阶段。")

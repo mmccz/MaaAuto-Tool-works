@@ -211,6 +211,8 @@
     "settings.enable_system_notify.desc": "仅提示任务结果，不包含日志内容",
     "notify.task_success": "任务执行成功",
     "notify.task_failed": "任务执行失败，请查看日志",
+    "notify.task_failed_template": "任务失败：按钮一直没找到。多半是 MAA / MaaEnd 更新后界面变了，请到「设置 → 模板」重新截取该按钮",
+    "notify.task_failed_offscreen": "任务失败：目标窗口在屏幕外，请先把 MAA / MaaEnd 窗口移回屏幕内",
     "notify.task_stopped": "任务已被中止",
     "serverchan.test.success": "推送成功",
     "serverchan.test.failed": "推送失败",

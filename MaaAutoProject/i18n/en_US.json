@@ -211,6 +211,8 @@
     "settings.enable_system_notify.desc": "Shows only the result, no log content",
     "notify.task_success": "Task completed successfully",
     "notify.task_failed": "Task failed, please check the log",
+    "notify.task_failed_template": "Task failed: the button was never found. The UI probably changed after a MAA / MaaEnd update - recapture it in Settings > Templates",
+    "notify.task_failed_offscreen": "Task failed: the target window is off-screen. Move the MAA / MaaEnd window back onto your screen",
     "notify.task_stopped": "Task was stopped",
     "serverchan.test.success": "Push succeeded",
     "serverchan.test.failed": "Push failed",

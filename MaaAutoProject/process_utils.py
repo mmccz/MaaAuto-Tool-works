@@ -374,6 +374,56 @@ def get_client_rect_screen(hwnd):
         return get_window_rect_screen(hwnd)
 
 
+# GetSystemMetrics 的虚拟桌面索引（多显示器时 l/t 可能是负数）
+_SM_XVIRTUALSCREEN = 76
+_SM_YVIRTUALSCREEN = 77
+_SM_CXVIRTUALSCREEN = 78
+_SM_CYVIRTUALSCREEN = 79
+
+
+def virtual_screen_rect():
+    """整个虚拟桌面（含所有显示器和负坐标副屏）的屏幕矩形；失败返回 None。"""
+    try:
+        import win32api
+        left = win32api.GetSystemMetrics(_SM_XVIRTUALSCREEN)
+        top = win32api.GetSystemMetrics(_SM_YVIRTUALSCREEN)
+        width = win32api.GetSystemMetrics(_SM_CXVIRTUALSCREEN)
+        height = win32api.GetSystemMetrics(_SM_CYVIRTUALSCREEN)
+    except Exception:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    return (left, top, left + width, top + height)
+
+
+def intersect_area(a, b):
+    """两个 (l, t, r, b) 矩形的交集面积；无交集返回 0。"""
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    if w <= 0 or h <= 0:
+        return 0
+    return w * h
+
+
+def visible_ratio(rect, screen=None):
+    """``rect`` 落在虚拟桌面内的面积占比（0~1）。
+
+    窗口被拖到所有显示器之外时，截图只能拿到黑边、点击也点不到，
+    找图会白等满超时。用这个比例提前判断，直接给出明确原因。
+
+    :return: 0~1；拿不到屏幕尺寸时返回 1.0（不做拦截，保持旧行为）
+    """
+    if not rect:
+        return 1.0
+    screen = screen or virtual_screen_rect()
+    if not screen:
+        return 1.0
+    total = max(0, rect[2] - rect[0]) * max(0, rect[3] - rect[1])
+    if total <= 0:
+        return 0.0
+    return intersect_area(rect, screen) / total
+
+
 def is_window_valid(hwnd):
     try:
         return bool(hwnd) and bool(win32gui.IsWindow(hwnd))

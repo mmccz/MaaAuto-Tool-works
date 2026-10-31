@@ -142,7 +142,10 @@ def test_find_and_click_timeout(monkeypatch, stub_vision, fake_click):
 
 def test_find_and_click_missing_template(monkeypatch, fake_click):
     monkeypatch.setattr(automation, "template_paths", lambda name, cfg: [])
-    assert automation.find_and_click("nope.png", {}) is False
+    # 1.4.4 起不再静默返回 False（调用方忽略返回值，等于「什么都没点却报成功」），
+    # 而是抛错并告诉用户去哪里补模板。
+    with pytest.raises(automation.TemplateMissing):
+        automation.find_and_click("nope.png", {})
     assert fake_click["clicks"] == []
 
 

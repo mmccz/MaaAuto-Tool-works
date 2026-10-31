@@ -3,6 +3,19 @@
     "_note": "在线公告：直接改本文件并 push 到 main 分支即可，客户端下次启动会拉取，不需要发新版本。`updated` 变化时，已经读过公告的用户也会重新看到红点（内容更新提示）；新增条目按 id 判为未读。",
     "items": [
         {
+            "id": "v1.4.4",
+            "date": "2026-10-31",
+            "tag": "问题修复",
+            "title": {
+                "zh_CN": "1.4.4：MAA 更新后「Link Start!」找不到？已修好",
+                "en_US": "1.4.4: fixed the missing \"Link Start!\" button after a MAA update"
+            },
+            "body": {
+                "zh_CN": "**现象**：执行任务时 MAA 阶段一直提示「找图超时，未能找到: maa_start.png」，等了三次共 3 分钟也没点到 Link Start，可按钮明明就在屏幕左下角。\n\n**原因**：MAA v6.21 改了主界面按钮的渲染和尺寸，内置模板（9 月截的 144×68）对当前界面最高只有 0.74 的匹配度，阈值是 0.80 —— 找图逻辑没坏，是模板过期了。\n\n**这一版**：按 MAA 6.21 重新截了内置 `maa_start.png`（132×66），对失败现场匹配度 1.00，把截图缩放到 0.90~1.50 倍再搜也都能命中。\n\n同时把失败原因说清楚：\n\n- 找图超时后，日志与托盘提醒会告诉你可能是 MAA / MaaEnd 改版、换了主题或自定义背景，并指向「设置 → 模板」重新截取；\n- 窗口被拖到屏幕外时立即报错（不再白等 60 秒、不再重试 3 次），提示先把窗口移回屏幕内；\n- 模板文件缺失时直接报错并列出查找过的目录，不再「什么都没点却继续跑」。",
+                "en_US": "**Symptom**: the MAA stage kept reporting \"image search timed out, could not find: maa_start.png\" for three 60-second attempts, never clicking Link Start - even though the button was sitting in the bottom-left corner.\n\n**Cause**: MAA v6.21 changed how the main-window button is drawn and sized. The bundled template (144x68, captured in September) only reached a 0.74 match score against the new UI, while the threshold is 0.80. The matching code was fine - the template was stale.\n\n**This release**: the bundled `maa_start.png` was recaptured against MAA 6.21 (132x66). It scores 1.00 on the failure screenshot and still matches at 0.90x - 1.50x scaling.\n\nFailures are also explained now:\n\n- on a match timeout, the log and the tray notification say it is probably a MAA / MaaEnd redesign, a theme or a custom background, and point to Settings > Templates;\n- a window dragged off-screen fails immediately (no more 60-second wait or 3 retries), telling you to move it back;\n- a missing template file raises an error listing the directories that were searched instead of silently continuing."
+            }
+        },
+        {
             "id": "v1.4.3",
             "date": "2026-10-31",
             "tag": "问题修复",

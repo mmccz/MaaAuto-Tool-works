@@ -13,7 +13,8 @@ from PySide6.QtGui import QIcon, QAction
 
 from config_manager import (load_config, save_config, LOG_DIR, CONFIG_DIR,
                             RUNTIME_CONFIG_KEYS)
-from automation import execute_workflow
+from automation import (execute_workflow, last_failure,
+                        FAILURE_TEMPLATE, FAILURE_OFFSCREEN)
 from utils import resource_path, AsyncWorker
 from process_utils import kill_all_related_processes
 from ui.background import BackgroundWidget
@@ -472,6 +473,7 @@ class MainWindow(QMainWindow):
     def _on_task_finished(self, status):
         if not self.config.get("enable_system_notify", True):
             return
+        duration = 5000
         if status == "成功":
             msg = self.i18n.t("notify.task_success")
             icon = QSystemTrayIcon.Information
@@ -479,9 +481,21 @@ class MainWindow(QMainWindow):
             msg = self.i18n.t("notify.task_stopped")
             icon = QSystemTrayIcon.Warning
         else:
-            msg = self.i18n.t("notify.task_failed")
-            icon = QSystemTrayIcon.Critical
-        self.tray.showMessage("MaaAuto", msg, icon, 5000)
+            # 失败时尽量说清楚「下一步做什么」：找图超时基本等于模板过期，
+            # 窗口在屏幕外则是环境问题，两者的处理方式完全不同。
+            kind = last_failure().get("kind")
+            if kind == FAILURE_TEMPLATE:
+                msg = self.i18n.t("notify.task_failed_template")
+                icon = QSystemTrayIcon.Warning
+                duration = 10000
+            elif kind == FAILURE_OFFSCREEN:
+                msg = self.i18n.t("notify.task_failed_offscreen")
+                icon = QSystemTrayIcon.Warning
+                duration = 8000
+            else:
+                msg = self.i18n.t("notify.task_failed")
+                icon = QSystemTrayIcon.Critical
+        self.tray.showMessage("MaaAuto", msg, icon, duration)
 
     def _on_worker_finished(self):
         self.home_page.set_running(False)
