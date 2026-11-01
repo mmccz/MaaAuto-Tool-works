@@ -27,9 +27,13 @@
 
 ## 1. What it is
 
-MaaAuto is a Windows **scheduling shell**: at the time you set, it launches [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) or [MaaEnd](https://github.com/MaaEnd/MaaEnd), clicks "Link Start!" / "Start task" by image matching, waits for the game to exit, then pushes the result to WeChat or a webhook.
+MaaAuto is a Windows **scheduling shell**: at the time you set it launches [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) or [MaaEnd](https://github.com/MaaEnd/MaaEnd), lets them finish the daily routine, and pushes the result to WeChat or a webhook.
 
-It contains **no game logic**: it does not patch the game, read memory, or replay input sequences. It does three things — **start on schedule, find-and-click, guard processes**.
+**Since 2.0 it no longer screenshots-and-clicks**: MAA is driven by **config injection** — "Startup → Run directly" is switched on in the scheme MAA already uses, then MAA is started and connects to the emulator on its own; MaaEnd is driven from the **command line** (`--autostart --instance <name> --quit-after-run`). The result is judged from MAA's `debug/gui.log` and MaaEnd's stdout, distinguishing all done / partially failed / emulator unreachable / no tasks selected / timeout / stopped.
+
+Upstream redesigns, theme changes and window resizes can no longer break a run; the 1.x vision/click path is kept as a compatibility mode you can switch back to.
+
+It contains **no game logic**: it does not patch the game, read memory, or replay input sequences. It does three things — **start on schedule, drive the upstreams, judge and report**.
 
 | Good fit | Not a fit |
 | --- | --- |
@@ -45,7 +49,7 @@ It contains **no game logic**: it does not patch the game, read memory, or repla
 | --- | --- |
 | OS | Windows 10 / 11 (x64) |
 | Privileges | **Install** is per-user by default and needs no admin (only "install for all users" does); **the app** runs elevated, so each launch shows one UAC prompt |
-| Disk | ~59 MB installed, plus log space (retention is configurable) |
+| Disk | Installer ~62 MB, ~275 MB installed (bundled PySide6), plus log space (retention is configurable) |
 | Display | 1920×1080 or better; works at 125% / 150% scaling |
 | External apps | MAA and/or MaaEnd, plus an Android emulator (e.g. MuMu) |
 | Network | Needed for update checks, announcements and push; unattended runs can be offline |
@@ -59,7 +63,7 @@ It contains **no game logic**: it does not patch the game, read memory, or repla
 ### 3.1 Installer (recommended)
 
 1. Open [Releases](https://github.com/mmccz/MaaAuto-Tool-works/releases/latest);
-2. Download `MaaAuto_Setup_v<version>.exe` (~59 MB);
+2. Download `MaaAuto_Setup_v<version>.exe` (~62 MB);
 3. Run it and follow the wizard: language → install folder → optional shortcuts → install;
 4. Leave "Run MaaAuto" checked to start it right away.
 
@@ -97,9 +101,9 @@ Python 3.11 or newer (development and CI use 3.15).
 The tutorial calls these out because they are **preconditions**, not suggestions:
 
 1. **In MAA, enable "exit emulator when done"**.
-   Otherwise the emulator is still running after the task, MaaAuto never sees the emulator exit, and both this run and the next one fail.
+   Otherwise the emulator keeps holding memory and ADB after the tasks. 2.0 judges the end from MAA's log instead, but the switch is still required — MAA finishes cleanly and the next round does not have to fight over the same emulator.
 2. **MaaEnd's task list must end with "Close program" or "Close emulator"**.
-   Order matters: it must be the last task, or MaaEnd closes itself before finishing. That task is also MaaAuto's signal that MaaEnd is done.
+   Order matters: it must be the last task, or MaaEnd closes itself before finishing. It is also the "round is over" signal: 2.0 additionally watches stdout task markers, but without it a run can still wait until timeout.
 3. **Set both paths correctly**: `MAA.exe` and `MaaEnd.exe`.
 
 Do steps 1–2 before the first "Run now" — that is what makes the first run succeed.
@@ -113,7 +117,7 @@ Three pages:
 | Page | Contents |
 | --- | --- |
 | **Home** | Status, last/next run, run count, live log panel (clearable), "Run now / Stop", announcements, tutorial |
-| **Settings** | Seven groups: paths, process & timeouts, matching & clicking, foreground handling, schedule & push, appearance, general; jump chips at the top |
+| **Settings** | Eight groups: paths, run control, process & timeouts, matching & clicking (compatibility mode), foreground handling, schedule & push, appearance, general; jump chips at the top |
 | **About** | Version info, check for updates, open config/log folders, export logs, project links |
 
 Tray menu: Show, Settings, Stop, Restart, Quit. Whether closing the window keeps the app in the tray depends on "Close to tray".
@@ -131,7 +135,20 @@ Tray menu: Show, Settings, Stop, Restart, Quit. Whether closing the window keeps
 | ServerChan SendKey | WeChat push, from [serverchan](https://sct.ftqq.com/); empty = no push |
 | Webhook URL | Custom HTTP endpoint; can be used together with SendKey |
 
-### 6.2 Process & timeouts
+### 6.2 Run control (new in 2.0)
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Control mode | Config injection | "Inject" writes MAA's config before launch (recommended); "Click" is the 1.x vision/click path (compatibility mode) |
+| MaaEnd instance | Empty = last used | Passed as `--autostart --instance <name>`; pick the right one when MaaEnd holds several instances |
+| Stage retries | 3 / 30 s | Classified backoff (30 / 60 / 120 s); repeated identical failures trip a circuit breaker |
+| Update timing | Between two runs | A new version never interrupts the current run; after a failure auto-retry pauses for 24 hours |
+| Keep upstreams after a run | Off | Off = each stage closes its own process (MAA / MaaEnd / Hypergryph launcher); on = keep them for debugging |
+| Game launcher processes | `HypergryphLauncher.exe, Launcher.exe, Games.exe` | Closed by name at the end of the MaaEnd stage; leave empty to leave them alone |
+
+> The matching/clicking group only appears when control mode is "Click" (values are kept and restored when you switch back).
+
+### 6.3 Process & timeouts
 
 | Setting | Default | Notes |
 | --- | --- | --- |
@@ -143,7 +160,9 @@ Tray menu: Show, Settings, Stop, Restart, Quit. Whether closing the window keeps
 | Retries / interval | 3 / 30 s | Retry policy when matching fails |
 | Min emulator runtime | 60 s | An emulator that dies immediately counts as failure; 0 = off |
 
-### 6.3 Matching & clicking
+### 6.4 Matching & clicking (compatibility mode)
+
+> This group only appears when control mode is "Click". The default config-injection mode does not look at the screen at all, so upstream redesigns cannot break it; if injection ever misbehaves you can switch back to clicking from the Self-check window.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
@@ -158,7 +177,7 @@ Tray menu: Show, Settings, Stop, Restart, Quit. Whether closing the window keeps
 
 > If "Link Start!" suddenly stops matching after a MAA update, run "Test match" and re-capture the template when the score is below the threshold (MAA has changed that button's rendering before).
 
-### 6.4 Foreground handling
+### 6.5 Foreground handling
 
 | Mode | Notes |
 | --- | --- |
@@ -168,7 +187,7 @@ Tray menu: Show, Settings, Stop, Restart, Quit. Whether closing the window keeps
 
 Keep "Minimize main window during runs" on: MaaAuto's own window can cover MAA's buttons.
 
-### 6.5 Schedule & push
+### 6.6 Schedule & push
 
 | Setting | Notes |
 | --- | --- |
@@ -177,11 +196,11 @@ Keep "Minimize main window during runs" on: MaaAuto's own window can cover MAA's
 | Weekdays | Only these days trigger; none selected = every day |
 | Start with Windows | Launches MaaAuto at sign-in (see §10) |
 
-### 6.6 Appearance
+### 6.7 Appearance
 
 Theme (system/light/dark), accent colour, background image (opacity/blur/fit mode), UI scale (1.0/1.25/1.5, follow the in-app prompt; a restart is usually required), animations, UI language (中文 / English).
 
-### 6.7 General
+### 6.8 General
 
 System notifications, close to tray, close related processes on exit, auto check for updates, auto download, update channel (stable / beta), log retention in days (default 90; 0 = keep everything).
 
@@ -280,8 +299,8 @@ Expected: it manipulates other windows and processes. Accept UAC.
 **Q2 "Run now" does nothing.**
 Check both paths, then that MAA has "exit emulator when done" enabled, then read the home log for a Chinese error line.
 
-**Q3 Matching fails / "Link Start!" not found.**
-Use "Test match" to see the score; re-capture the template when it is below the threshold; confirm MAA's UI language and resolution did not change.
+**Q3 Matching fails / "Link Start!" not found.** (click mode only)
+Use "Test match" to see the score; re-capture the template when it is below the threshold; confirm MAA's UI language and resolution did not change. The default config-injection mode does not look at the screen, so an upstream redesign cannot break it this way.
 
 **Q4 No push after a run.**
 Check SendKey/webhook and your network; a failed push does not fail the run, and the log records why.
@@ -314,7 +333,10 @@ No. Config and logs live in `config\` and `logs\` inside the install folder and 
 | "Window not visible" | Target minimised or off-screen | Restore the window; avoid RDP sessions |
 | "Emulator failed to start" | Emulator died instantly / no ADB | Start the emulator manually once |
 | Stuck on "waiting for window" | Wrong process name | Re-pick it with "Pick process" |
-| Clicks do nothing | Window covered / not foreground | Enable click verification, keep "Minimize during runs" on |
+| Clicks do nothing (click mode only) | Window covered / not foreground | Enable click verification, keep "Minimize during runs" on |
+| MAA starts but never begins the tasks | No tasks selected / blocked by an update prompt / no readiness marker within 90 s | Read `<MAA dir>\debug\gui.log`; make sure the scheme has tasks; switch to click mode from Self-check if needed |
+| "MAA is already running" | 2.0 drives MAA by writing its config and will not take over a running instance | Quit MAA (including the tray icon) and run again |
+| Result is "cannot tell" (`LOG_UNKNOWN`) | Upstream changed its closing wording | Judgement rules are updated remotely; restart MaaAuto to fetch them, and export logs if it still fails |
 | No autostart after sign-in | Scheduled task blocked by policy | Use the installed build, or start manually |
 | Dialogs hard to read in dark theme | Defect in 1.4.5 and older | Fixed in 1.4.6 |
 | Update fails | Network drop / outdated installer | Retry; when told the installer is too old, download the full installer |
@@ -328,7 +350,7 @@ When in doubt, run "About → Export logs" and attach the archive to the issue.
 - Config and logs stay **on your machine**, in the install folder; nothing is uploaded;
 - Network use is limited to: update checks (GitHub API), announcements, and the push endpoint you configure;
 - `MaaAuto.exe` is elevated because it must enumerate/activate other processes' windows and send input;
-- It does not read game memory, inject code, or modify game files;
+- It does not read game memory or modify game files; 2.0 **temporarily rewrites MAA's own config** (`config\gui.new.json`) to trigger "run directly" and restores it byte for byte afterwards; a kill or power loss is compensated on the next start;
 - SendKey and webhook URLs are credentials: they sit in `config\config.json`, so check logs/config before sharing them.
 
 ---

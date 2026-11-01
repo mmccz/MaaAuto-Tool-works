@@ -24,7 +24,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout main app
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python 3.15
@@ -65,7 +65,7 @@ jobs:
           PYTHONIOENCODING: utf-8
           PYTHONUTF8: "1"
         run: |
-          Push-Location installer
+          Push-Location MaaAutoInstaller
           python -m pytest tests -q --junitxml=../pytest-installer.xml
           $code = $LASTEXITCODE
           Pop-Location
