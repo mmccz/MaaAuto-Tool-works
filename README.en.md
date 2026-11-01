@@ -80,14 +80,14 @@ Download from [Releases](https://github.com/mmccz/MaaAuto-Tool-works/releases):
 
 | File | Purpose |
 | --- | --- |
-| `MaaAuto_Setup_v1.4.6-Windows-x64.exe` | **Full installer (~59 MB)**, embeds the app, works offline |
-| `MaaAuto_Online_v1.4.6-Windows-x64.exe` | Online bootstrap (~2 MB), downloads the full installer |
+| `MaaAuto_Setup_v2.0.0-Windows-x64.exe` | **Full installer (~62 MB)**, embeds the app, works offline |
+| `MaaAuto_Online_v2.0.0-Windows-x64.exe` | Online bootstrap (~2 MB), downloads the full installer |
 
 Installs in about 30 seconds, needs no Python and no network; per-user install goes to `%LOCALAPPDATA%\Programs\MaaAuto`, and "install for all users" (Program Files) is offered in the wizard — that one shows UAC.
 
 The Start menu shortcut is optional (on by default); the desktop icon is optional (off by default).
 
-The app itself requires administrator rights (it must handle the game's elevated window), so **each launch shows one UAC prompt** — that is expected.
+The app itself requires administrator rights (it starts/stops the upstreams, may message their windows and writes MAA's config file), so **each launch shows one UAC prompt** — that is expected.
 
 ### Option 2: from source
 
@@ -99,7 +99,9 @@ py main.py
 
 > Start from inside `MaaAutoProject`; `main.py` relies on relative paths there.
 
-### Image templates
+### Image templates (compatibility mode)
+
+> This section only matters with `control: "click"` (the 1.x vision/click path). The default config-injection mode never looks at the screen, so upstream redesigns, themes and window resizes cannot break it.
 
 | File | Purpose |
 | --- | --- |
@@ -120,19 +122,20 @@ Files in `config/templates/` **override** the bundled ones, so a fresh capture t
 > ⚠️ **Do these two first, or automation cannot finish:**
 >
 > 1. **MAA → Settings → Startup settings → enable "Exit emulator when done"**
->    Without it the emulator stays open, MaaAuto never sees it exit, and this run and the next one may both fail.
+>    Without it the emulator keeps holding memory and ADB after the tasks. 2.0 judges the end from MAA's log instead, but the switch is still required: MAA finishes cleanly and the next round does not have to fight over the same emulator.
 > 2. **MaaEnd → task list → add "Close program" or "Close emulator" as the LAST task**
->    That task is MaaAuto's "MaaEnd finished" signal; without it MaaAuto waits until the timeout (2 hours by default).
+>    It is the "round is over" signal; without it a run can still wait until the timeout (2 hours by default).
 
 1. Fix MAA / MaaEnd as above.
 2. **Settings → Paths**: `MAA.exe`, `MaaEnd.exe` (empty = skip that phase).
 3. **Settings → Process & timeouts**: emulator process (`MuMuPlayer.exe`), game process (`Endfield.exe`).
 4. **Settings → Foreground handling**: pick a strategy; the blacklist accepts picked processes.
-5. **Settings → Matching & clicking**: keep defaults first; adjust threshold / scale range or capture templates only when it misses. Run **Test match** before relying on it.
-6. **Settings → Schedule & push**: times, ServerChan SendKey, webhook, system notifications.
-7. **Settings → Appearance**: theme / accent / language / background / UI scale.
-8. **Settings → General**: autostart, close behaviour, update checks, auto download.
-9. Back on the home page press **▶ Run now**; failures are in the home log or `logs/.../task.log`.
+5. **Settings → Run control**: control mode (default "config injection"), MaaEnd instance, stage retries, update timing, whether to keep the upstreams after a run.
+6. **Settings → Matching & clicking** (compatibility mode only): appears when control mode is "Click"; keep defaults first, adjust threshold / scale range or capture templates only when it misses.
+7. **Settings → Schedule & push**: times, ServerChan SendKey, webhook, system notifications.
+8. **Settings → Appearance**: theme / accent / language / background / UI scale.
+9. **Settings → General**: autostart, close behaviour, update checks, auto download.
+10. Back on the home page press **▶ Run now**; failures are in the home log or `logs/.../task.log`.
 
 ---
 
