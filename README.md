@@ -18,11 +18,17 @@
 
 ---
 
+
+> **安装器已并入本仓库**：构建脚本、Inno 包装与升级器在 `MaaAutoInstaller/`，不再单独维护安装器仓库。
 ## 这是什么
 
-MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 或 [MaaEnd](https://github.com/MaaEnd/MaaEnd)，用图像识别点掉「Link Start!」「开始任务」，等游戏退出，再把结果推送到微信或 Webhook。
+MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 或 [MaaEnd](https://github.com/MaaEnd/MaaEnd)，让它们按你自己配好的任务列表开跑，读它们的日志判定结果，再把结果推送到微信或 Webhook。
 
-它本身**不包含任何游戏逻辑**——不修改游戏、不读内存、不模拟输入序列，只做「按日程 + 找图点击 + 进程守护」这三件事。
+它本身**不包含任何游戏逻辑**——不修改游戏、不读内存、不模拟输入序列，只做「按日程 + 驱动上游 + 判定结果」这三件事。
+
+> **2.0 起默认不再「找图点按钮」**：MAA 走配置注入（把「启动即开始任务」写进它自己的配置再启动），
+> MaaEnd 走命令行（`--autostart --instance <实例> --quit-after-run`），结果从日志判断。
+> 1.x 的找图点击链路完整保留为兼容模式（`control: "click"`）。
 
 <table>
 <tr><td width="50%" valign="top">
@@ -51,7 +57,10 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 ### 自动化调度
 
 - **每日定时启动** —— 自定义执行时间；当天错过时间点，晚些开软件也会补执行一次。
-- **图像识别点击** —— 基于 `opencv` 多尺度模板匹配（`vision.py`），自动点掉 MAA 的「Link Start!」与 MaaEnd 的「开始任务」。**支持不同分辨率与 100% / 125% / 150% 缩放**；搜索限定在目标窗口客户区内，又快又不会点到别处。
+- **配置注入启动（2.0 默认）** —— 不点按钮：把「直接开始任务」写进 MAA 当前使用的方案，再用 `--autostart --instance <实例> --quit-after-run` 拉起 MaaEnd。上游改版换按钮样式也不会再失手；写入的配置在任务结束后按原始文件逐字节还原，进程被杀也会在下次启动自动还原。
+- **日志判定结果（2.0）** —— 读 MAA 的 `debug/gui.log` 与 MaaEnd 的 stdout，区分「全部完成 / 部分失败 / 连不上模拟器 / 没选任务 / 超时」，并在失败时给出可执行的提示；判定不出来时**不会**当作成功。
+- **环境自检（2.0）** —— 托盘菜单「环境自检」只读检查：程序路径、配置目录、任务队列是否为空、MaaEnd 末位是否有关闭任务、上游自带定时是否会和本工具重复触发。
+- **图像识别点击（兼容模式）** —— `control` 设为 `"click"` 时回到 1.x 行为：`opencv` 多尺度模板匹配点掉「Link Start!」「开始任务」，支持 100% / 125% / 150% 缩放。
 - **自截模板** —— 换机器、换缩放或按钮改版时，用「设置 → 找图与点击 → 截取模板」框选按钮存成 `config/templates/*.png`，立即生效并回报自检相似度，不必等发版。
 - **两种点击方式** —— 默认真实点击（SendInput，可还原鼠标位置）；也可选实验性的后台 `PostMessage` 点击（不占用鼠标，但游戏通常不响应）。
 - **前台处理策略** —— 启动前可选：不做任何操作（默认）/ 关闭所有前台程序 / 仅关闭黑名单程序（带可视化进程选择器）。
@@ -178,8 +187,13 @@ py main.py
 
 | 字段 | 说明 | 默认值 |
 | --- | --- | --- |
+| `control` | 控制方式：`inject`（配置注入 + 日志判定，2.0 默认）/ `click`（1.x 找图点击兼容） | `inject` |
 | `maa_path` | MAA 可执行文件路径，留空跳过 MAA 阶段 | `""` |
 | `maaend_path` | MaaEnd 可执行文件路径，留空跳过 MaaEnd 阶段 | `""` |
+| `maaend_instance` | MaaEnd 实例（方案）名；空 = 用它上次选中的那个 | `""` |
+| `retry` | 控制方式为 `inject` 时每个阶段的重试次数 | `2` |
+| `update_policy` | `between-rounds`（只在两轮任务之间升级）/ `manual` | `between-rounds` |
+| `keep_upstream` | 任务结束后保留 MAA / MaaEnd 不关闭 | `false` |
 | `emulator_proc` | 模拟器进程名 | `MuMuPlayer.exe` |
 | `pc_game_proc` | PC 端游戏进程名 | `Endfield.exe` |
 | `foreground_action` | 前台策略：`none` / `kill_all` / `blacklist` | `none` |

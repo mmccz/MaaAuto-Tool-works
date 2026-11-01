@@ -375,3 +375,33 @@ QMessageBox QLabel {
 QMessageBox QPushButton {
     min-width: 88px;
 }
+
+
+/* ---- Setup wizard (2.0) ---- */
+QWidget#SetupContainer { background: transparent; }
+QFrame#SetupCard {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+QLabel#SetupTitle { font-size: 13px; font-weight: 600; color: #f3f4f6; }
+QLabel#SetupDetail { font-size: 12px; color: #cbd5e1; }
+QLabel#SetupHint { font-size: 12px; color: #fbbf24; }
+QLabel#SetupOk { color: #34d399; font-size: 15px; font-weight: 700; }
+QLabel#SetupWarn { color: #fbbf24; font-size: 15px; font-weight: 700; }
+QLabel#SetupError { color: #f87171; font-size: 15px; font-weight: 700; }
+QLabel#SetupSummaryError { font-size: 12px; color: #f87171; font-weight: 600; }
+
+/* ---- Setup wizard step rail (2.0.5) ---- */
+QLabel#SetupStepDot {
+    min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px;
+    border-radius: 11px; background: rgba(255,255,255,0.10); color: #9ca3af;
+    font-size: 12px; font-weight: 700;
+}
+QLabel#SetupStepDotActive {
+    min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px;
+    border-radius: 11px; background: #3b82f6; color: #ffffff;
+    font-size: 12px; font-weight: 700;
+}
+QLabel#SetupStep { color: #9ca3af; font-size: 13px; }
+QLabel#SetupStepActive { color: #f3f4f6; font-size: 13px; font-weight: 700; }

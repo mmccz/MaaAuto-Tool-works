@@ -26,6 +26,47 @@ RELEASES_LIST_API = APP_UPDATE_API.rstrip("/")
 if RELEASES_LIST_API.endswith("/latest"):
     RELEASES_LIST_API = RELEASES_LIST_API[: -len("/latest")]
 
+#: Written by upgrade.exe when a replace failed and was rolled back.
+UPGRADE_FAILED_FLAG = "upgrade_failed.flag"
+#: After a failed upgrade, no automatic retry for this long (hours).
+FAILED_UPGRADE_COOLDOWN_HOURS = 24
+
+
+# --------------------------------------------------------------------------- #
+# Update policy (2.0)
+#
+# Updating is allowed *between rounds* only: never while a task runs, and never
+# again right after a failed attempt (the user sees a red dot instead of a loop).
+# --------------------------------------------------------------------------- #
+def failed_upgrade_age_hours(config_dir, now=None):
+    """Hours since upgrade_failed.flag was written, or None when it does not exist."""
+
+    import datetime
+
+    path = os.path.join(str(config_dir), UPGRADE_FAILED_FLAG)
+    try:
+        written = os.path.getmtime(path)
+    except OSError:
+        return None
+    now = now if now is not None else datetime.datetime.now().timestamp()
+    return max(0.0, (now - written) / 3600.0)
+
+
+def recent_upgrade_failure(config_dir, now=None, hours=FAILED_UPGRADE_COOLDOWN_HOURS):
+    """True when the last upgrade failed recently enough to skip automatic retries."""
+
+    age = failed_upgrade_age_hours(config_dir, now=now)
+    return age is not None and age < hours
+
+
+def auto_update_allowed(config, config_dir, now=None):
+    """False when the policy or the failure cooldown says "not this time"."""
+
+    policy = str((config or {}).get("update_policy") or "between-rounds").strip().lower()
+    if policy == "manual":
+        return False
+    return not recent_upgrade_failure(config_dir, now=now)
+
 
 # --------------------------------------------------------------------------- #
 # GitHub API

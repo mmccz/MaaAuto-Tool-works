@@ -125,3 +125,9 @@ build/
 dist/
 *.spec
 _version_info.txt
+
+# merged installer (2026-11-01)
+MaaAutoInstaller/dist/
+MaaAutoInstaller/_build/
+MaaAutoInstaller/**/__pycache__/
+MaaAutoInstaller/*.log

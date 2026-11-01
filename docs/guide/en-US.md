@@ -204,7 +204,25 @@ The same minute never runs twice: each `date + hour:minute` triggers once, and a
 
 ### 8.1 What a run does
 
-Launch the target app → wait for its window → match and click "Link Start!" and friends → wait for the game process to exit → apply foreground handling → push the result → write logs.
+**2.0 (default, `control: "inject"`)**:
+
+```
+check config -> back up MAA's config -> write "start the queue directly" -> launch MAA
+  -> judge MAA's debug\gui.log -> restore MAA's config
+  -> launch MaaEnd with --autostart --instance <name> --quit-after-run -> judge stdout
+  -> wrap up (close or keep, per keep_upstream) -> push the result -> write logs
+```
+
+An outcome that cannot be judged is never reported as success: a log without a
+terminator becomes `LOG_UNKNOWN` and goes through the retry policy.
+
+**Compatibility mode (`control: "click"`, the 1.x behaviour)**: launch the target app →
+wait for its window → match and click "Link Start!" and friends → wait for the game
+process to exit → apply foreground handling → push the result → write logs.
+
+Tray menu → "Setup check" runs a read-only pass over the current configuration
+(paths, empty task queue, MaaEnd's last task, upstream timers). One glance before a
+run saves a lot of debugging.
 
 ### 8.2 Where the logs are
 

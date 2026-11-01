@@ -18,11 +18,19 @@
 
 ---
 
+
+> **The installer now lives in this repository**: build scripts, Inno packaging and the updater are under `MaaAutoInstaller/`.
+
 ## What it is
 
-MaaAuto is a Windows desktop **scheduling shell**: at the time you set it launches [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) or [MaaEnd](https://github.com/MaaEnd/MaaEnd), clicks "Link Start!" / "Start task" by image matching, waits for the game to exit, then pushes the result to WeChat or a webhook.
+MaaAuto is a Windows desktop **scheduling shell**: at the time you set it launches [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) or [MaaEnd](https://github.com/MaaEnd/MaaEnd), lets them run the task queue you already configured, judges the outcome from their logs, then pushes the result to WeChat or a webhook.
 
-It contains **no game logic** — no patching, no memory reading, no input replay. It does three things: **start on schedule, find-and-click, guard processes**.
+It contains **no game logic** — no patching, no memory reading, no input replay. It does three things: **start on schedule, drive the upstream, judge the result**.
+
+> **Since 2.0 clicking is no longer the default**: MAA is started through its own config
+> ("start the queue directly" written into the active scheme) and MaaEnd through
+> `--autostart --instance <name> --quit-after-run`, with the outcome read from their logs.
+> The 1.x find-and-click path is kept as a compatibility mode (`control: "click"`).
 
 ---
 

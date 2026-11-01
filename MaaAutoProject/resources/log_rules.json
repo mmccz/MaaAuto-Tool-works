@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "updated": "2026-11-01",
+  "note": "Built-in judgement rules. A remote copy with the same schema can override this file (see APP_LOG_RULES_URLS); the built-in one is always the fallback. 'verified' means the phrase was actually observed in MAA 6.21.0's debug/gui.log on 2026-11-01.",
+  "maa": {
+    "success": [
+      "任务已全部完成！"
+    ],
+    "failure": [
+      "任务已结束，以下任务出现错误",
+      "任务已完成，但出现错误！"
+    ],
+    "task_done": "完成任务: ",
+    "task_fail": "任务出错: ",
+    "stop": [
+      "正在停止……",
+      "正在停止...",
+      "已停止"
+    ],
+    "issues": [
+      {
+        "contains": "未选择任务",
+        "code": "NO_TASK",
+        "fatal": true,
+        "verified": false,
+        "hint": "请先在 MAA 里勾选要执行的任务再运行"
+      },
+      {
+        "contains": "未检测到任何模拟器",
+        "code": "NO_EMULATOR",
+        "fatal": true,
+        "verified": false,
+        "hint": "请先启动模拟器，或在 MAA 里打开「启动后自动启动模拟器」"
+      },
+      {
+        "contains": "检查连接设置",
+        "code": "ADB_FAIL",
+        "fatal": false,
+        "verified": true,
+        "hint": "MAA 连不上模拟器：检查 ADB 地址（MuMu 12 常见为 127.0.0.1:16384），或重启模拟器后重试"
+      },
+      {
+        "contains": "连接失败",
+        "code": "ADB_FAIL",
+        "fatal": false,
+        "verified": true,
+        "hint": "MAA 连不上模拟器：检查 ADB 地址，或重启模拟器后重试"
+      },
+      {
+        "contains": "内存不足",
+        "code": "OUT_OF_MEMORY",
+        "fatal": false,
+        "verified": false,
+        "hint": "关闭部分程序后重试"
+      }
+    ],
+    "start": [
+      "LinkStartWithTasks",
+      "正在连接模拟器",
+      "Index 0, Type"
+    ],
+    "start_grace_seconds": 90
+  },
+  "maaend": {
+    "task_start": "任务开始: ",
+    "task_done": "任务完成: ",
+    "task_fail": "任务失败: ",
+    "issues": [
+      {
+        "contains": "连接超时",
+        "code": "ADB_FAIL",
+        "fatal": false,
+        "verified": true,
+        "hint": "MaaEnd 连接游戏窗口/模拟器超时，请确认游戏已启动"
+      },
+      {
+        "contains": "连接失败",
+        "code": "ADB_FAIL",
+        "fatal": false,
+        "verified": true,
+        "hint": "MaaEnd 连不上游戏，请确认游戏已启动且没有被遮挡"
+      }
+    ]
+  }
+}

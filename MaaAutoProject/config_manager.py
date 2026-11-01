@@ -27,6 +27,26 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
+#: Schema version of config.json. 2 = the 2.0 control model (inject by default).
+CONFIG_VERSION = 4
+
+#: Keys that only the 1.x template-matching path uses. If a user actually tuned them,
+#: the migration keeps them on "click" instead of silently switching their workflow.
+CLICK_ONLY_KEYS = (
+    "click_mode",
+    "click_verify",
+    "click_verify_delay_ms",
+    "click_retries",
+    "click_activate",
+    "click_offset_x",
+    "click_offset_y",
+    "match_threshold",
+    "match_scale_min",
+    "match_scale_max",
+    "match_interval",
+)
+
+
 DEFAULT_CONFIG = {
     # ---- existing keys ----
     "maa_path": "",
@@ -56,6 +76,9 @@ DEFAULT_CONFIG = {
     # ---- newer keys ----
     "emulator_proc": "MuMuPlayer.exe",
     "pc_game_proc": "Endfield.exe",
+    # MaaEnd launches the game through Hypergryph's launcher (Launcher.exe /
+    # Games.exe). It stays in the tray after a run, so it is closed with MaaEnd.
+    "launcher_proc": "Games.exe",
     "enable_system_notify": True,
     "theme": "system",
     "language": "zh_CN",
@@ -117,6 +140,23 @@ DEFAULT_CONFIG = {
     "announcements_seen": [],        # ids of announcements already read (the red dot on the home-page button)
     # updated timestamp at last read: an edited announcement (same id) shows again
     "announcements_seen_updated": "",
+
+    # ---- 2.0 control model ----
+    # "inject" drives the upstreams through their own config / command line and judges
+    # the result from their logs; "click" is the 1.x template-matching path, kept as a
+    # fallback for setups where injection is not possible (MAA already running, etc.).
+    "control": "inject",
+    "config_version": CONFIG_VERSION,
+    # MaaEnd runs one named instance (MXU "实例"); empty = the one MaaEnd used last.
+    "maaend_instance": "",
+    # Attempts per phase on retryable failures (2.0); retry_times stays for the click path.
+    "retry": 2,
+    # "between-rounds": check/apply updates only between rounds, never mid-run.
+    "update_policy": "between-rounds",
+    # Keep MAA / MaaEnd open after the round instead of closing them (old behaviour
+    # minimised them; closing is the new default for unattended runs).
+    "keep_upstream": False,
+    "setup_wizard_seen": False,      # the read-only setup check ran at least once
 }
 
 # Runtime keys "not owned by the settings page": it copies the config at startup and
@@ -134,6 +174,43 @@ RUNTIME_CONFIG_KEYS = (
 )
 
 
+def migrate_config(data):
+    """Bring an older config.json up to the current schema (pure, idempotent).
+
+    2.0 changes *how* the upstreams are driven: config injection + log judgement by
+    default instead of find-image-and-click. A user who had tuned the click path keeps
+    it, so the migration only flips the default for untouched configurations.
+    """
+
+    config = dict(data or {})
+    try:
+        version = int(config.get("config_version") or 1)
+    except (TypeError, ValueError):
+        version = 1
+    if version >= CONFIG_VERSION:
+        return config
+
+    # v4: only Games.exe is killed (tree kill). Launcher.exe is the bootstrap and
+    # the earlier multi-name defaults must not survive.
+    _legacy_launcher = (
+        "",
+        "Launcher.exe",
+        "Launcher.exe, Games.exe",
+        "HypergryphLauncher.exe, Launcher.exe, Games.exe",
+    )
+    if str(config.get("launcher_proc") or "") in _legacy_launcher:
+        config["launcher_proc"] = DEFAULT_CONFIG["launcher_proc"]
+
+    if "control" not in config:
+        tuned_click = any(
+            key in config and config.get(key) != DEFAULT_CONFIG.get(key)
+            for key in CLICK_ONLY_KEYS
+        )
+        config["control"] = "click" if tuned_click else DEFAULT_CONFIG["control"]
+    config["config_version"] = CONFIG_VERSION
+    return config
+
+
 def load_config():
     """Read config.json.
     utf-8-sig tolerates files with a BOM (PowerShell Set-Content -Encoding utf8 adds one).
@@ -142,7 +219,7 @@ def load_config():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
-            return {**DEFAULT_CONFIG, **data}
+            return {**DEFAULT_CONFIG, **migrate_config(data)}
         except Exception:
             return DEFAULT_CONFIG.copy()
     return DEFAULT_CONFIG.copy()

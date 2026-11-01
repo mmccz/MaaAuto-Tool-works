@@ -11,7 +11,7 @@ APP_DISPLAY_NAME = "MaaAuto"
 # Cross-repo contract: the installer / upgrader parses this line.
 # Accepted version syntax (aligned with the upgrader's parser):
 #   X.Y.Z / X.Y.ZaN / X.Y.ZbN / X.Y.ZrcN / X.Y.Z.postN
-APP_VERSION = "1.4.6"
+APP_VERSION = "2.0.0"
 APP_ORG = "MaaAuto"
 APP_GITHUB = "https://github.com/mmccz/MaaAuto-Tool-works"
 APP_EMAIL = "Frank010700@outlook.com"
@@ -41,4 +41,19 @@ APP_ANNOUNCEMENTS_URLS = (
     "MaaAutoProject/resources/announcements.json",
     "https://cdn.jsdelivr.net/gh/mmccz/MaaAuto-Tool-works@main/"
     "MaaAutoProject/resources/announcements.json",
+)
+
+# ---- Log judgement rules (2.0) ----
+# Same dual-source trick as announcements: edit resources/log_rules.json, push to main,
+# clients pick it up on their next launch - no release needed. This is how an upstream
+# wording change stops forcing a version bump.
+#
+# NOTE for the installer: this is a *tuple*, so build_release.read_app_info()'s
+# line-start string parser ignores it. The five frozen contract constants above are
+# untouched, so this addition needs no installer change and no protocol bump.
+APP_LOG_RULES_URLS = (
+    "https://raw.githubusercontent.com/mmccz/MaaAuto-Tool-works/main/"
+    "MaaAutoProject/resources/log_rules.json",
+    "https://cdn.jsdelivr.net/gh/mmccz/MaaAuto-Tool-works@main/"
+    "MaaAutoProject/resources/log_rules.json",
 )

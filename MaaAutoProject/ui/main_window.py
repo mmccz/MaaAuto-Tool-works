@@ -99,13 +99,46 @@ def spawn_new_instance(program, args, workdir=""):
     return bool(result)
 
 
+def strip_resume_args(path):
+    """Remove the one-shot --resume-run flag from last_launch_args.json.
+
+    upgrade.exe relaunches us with the arguments recorded in that file. A resume
+    request belongs to exactly one run, so once that run finishes the flag must be
+    gone - otherwise a later upgrade would try to resume a round that already ended.
+    """
+
+    import json
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return False
+    args = data.get("args")
+    if not isinstance(args, list):
+        return False
+    kept = [a for a in args if not str(a).startswith("--resume-run")]
+    if kept == args:
+        return False
+    data["args"] = kept
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+    except OSError:
+        return False
+    return True
+
+
 class Worker(QThread):
     task_finished = Signal(str)
 
-    def __init__(self, config, run_log_dir):
+    def __init__(self, config, run_log_dir, resume=False, resume_run_id=""):
         super().__init__()
         self.config = config
         self.run_log_dir = run_log_dir
+        #: True when this run continues a round interrupted by an upgrade restart.
+        self.resume = bool(resume)
+        self.resume_run_id = resume_run_id or ""
 
     def run(self):
         logger = logging.getLogger("MaaAuto")
@@ -127,7 +160,15 @@ class Worker(QThread):
         logger.addHandler(file_handler)
 
         try:
-            status = execute_workflow(self.config, logger) or "成功"
+            # The resume hints are per-run only: they must never reach config.json
+            # (start_task() saves the snapshot before the worker starts).
+            run_config = dict(self.config)
+            if self.resume:
+                run_config["_resume_run"] = True
+                if self.resume_run_id:
+                    run_config["_run_id"] = self.resume_run_id
+                logger.info(f"续跑上一轮未完成的任务: {self.resume_run_id or '(日志中的 run_id)'}")
+            status = execute_workflow(run_config, logger) or "成功"
             self.task_finished.emit(status)
         except Exception as e:
             logger.error(f"执行错误: {e}")
@@ -195,6 +236,7 @@ class MainWindow(QMainWindow):
         self.settings_page.accent_changed.connect(self._on_accent_changed)
         self.settings_page.ui_scale_changed.connect(self._on_ui_scale_changed)
         self.settings_page.restart_requested.connect(self.restart_app)
+        self.settings_page.setup_wizard_requested.connect(self.show_setup_wizard)
         self.i18n.language_changed.connect(self._retranslate_all)
 
         self._apply_background()
@@ -219,6 +261,8 @@ class MainWindow(QMainWindow):
 
         self._pending_upgrade_silent = False
         self._pending_upgrade_info = None
+        #: Pending resume request: None = none, "" = bare --resume-run, or a run id.
+        self._resume_request = None
 
         # When a scheduled run hits a running task, remember the "already deferred" date to avoid logging every 10s
         self._schedule_deferred_key = ""
@@ -272,12 +316,14 @@ class MainWindow(QMainWindow):
         menu = QMenu()
         self.act_show = QAction(self.i18n.t("tray.show"), self, triggered=self._tray_show)
         self.act_settings = QAction(self.i18n.t("tray.settings"), self, triggered=self._tray_show_settings)
+        self.act_setup = QAction(self.i18n.t("tray.setup"), self, triggered=self.show_setup_wizard)
         self.act_stop = QAction(self.i18n.t("tray.stop"), self, triggered=self._tray_stop)
         self.act_restart = QAction(self.i18n.t("tray.restart"), self, triggered=self.restart_app)
         self.act_quit = QAction(self.i18n.t("tray.quit"), self, triggered=self.quit_app)
 
         menu.addAction(self.act_show)
         menu.addAction(self.act_settings)
+        menu.addAction(self.act_setup)
         menu.addSeparator()
         menu.addAction(self.act_stop)
         menu.addSeparator()
@@ -465,7 +511,8 @@ class MainWindow(QMainWindow):
         self.logger.info(f"本次任务日志: {run_dir}")
         self.home_page.set_running(True)
         self._hide_for_task()
-        self.worker = Worker(self.config, run_dir)
+        self.worker = Worker(self.config, run_dir, *self.consume_resume())
+        self._last_run_resumed = bool(self.worker.resume)
         self.worker.task_finished.connect(self._on_task_finished)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.start()
@@ -510,6 +557,11 @@ class MainWindow(QMainWindow):
         self._refresh_home_stats()
         self._update_next_run()
         self._restore_after_task()
+        if getattr(self, "_last_run_resumed", False):
+            self._last_run_resumed = False
+            # The resume hand-off is one-shot: it must not survive into the next
+            # upgrade restart, or a later upgrade would "resume" a finished round.
+            strip_resume_args(os.path.join(CONFIG_DIR, "last_launch_args.json"))
         if self._pending_upgrade_silent and self._pending_upgrade_info:
             info = self._pending_upgrade_info
             self._pending_upgrade_silent = False
@@ -764,6 +816,53 @@ class MainWindow(QMainWindow):
             self.logger.info(f"公告有更新（{state['count']}），自动展示。")
             self.show_announcements()
 
+    # ------------------------------------------------------------------
+    # Setup wizard / resumed round (2.0)
+    # ------------------------------------------------------------------
+    def consume_resume(self):
+        """(resume, run_id) for the next run; cleared so it applies exactly once."""
+
+        request = getattr(self, "_resume_request", None)
+        self._resume_request = None
+        if request is None:
+            return False, ""
+        return True, str(request)
+
+    def start_resumed_task(self, run_id=""):
+        """Continue a round that an upgrade restart interrupted."""
+
+        if self._is_running():
+            self.logger.info("任务正在执行中，续跑请求已忽略。")
+            return
+        self._resume_request = run_id or ""
+        self.start_task()
+
+    def show_setup_wizard(self):
+        from ui.setup_wizard import SetupWizardDialog
+
+        dlg = SetupWizardDialog(self.i18n, self.config, self)
+        dlg.control_mode_changed.connect(self._on_control_mode_changed)
+        dlg.exec()
+        if not self.config.get("setup_wizard_seen"):
+            self.config["setup_wizard_seen"] = True
+            save_config(self.config)
+        return dlg
+
+    def _on_control_mode_changed(self, mode):
+        label = "配置注入" if mode == "inject" else "找图点击"
+        self.logger.info(f"控制方式已切换为：{label}（下次执行生效）")
+
+    def _maybe_show_setup_wizard(self):
+        """First 2.0 start: run the read-only setup check once."""
+
+        if self.config.get("setup_wizard_seen"):
+            return False
+        if not self.isVisible() or self.isMinimized():
+            return False
+        self.logger.info("首次运行环境自检。")
+        self.show_setup_wizard()
+        return True
+
     def show_tutorial(self):
         from ui.tutorial_dialog import TutorialDialog
         self._tutorial_open = True
@@ -791,6 +890,8 @@ class MainWindow(QMainWindow):
         shown = self._maybe_show_tutorial()
         delay = 400 if shown else 200
         QTimer.singleShot(delay, self._maybe_show_announcements)
+        # 2.0: after the tutorial/announcements, run the read-only setup check once.
+        QTimer.singleShot(delay + 400, self._maybe_show_setup_wizard)
 
     # ==================================================================
     # Upgrading
@@ -827,12 +928,40 @@ class MainWindow(QMainWindow):
         self._update_check_worker.error.connect(
             lambda err: self.logger.warning(f"检查更新失败: {err}"))
         self._update_check_worker.start()
+        # 2.0: refresh the log judgement rules in parallel (silent on failure; the
+        # built-in table always works, so a wording change upstream needs no release).
+        QTimer.singleShot(4000, self._refresh_log_rules)
+
+    def _refresh_log_rules(self):
+        try:
+            from app_info import APP_LOG_RULES_URLS
+            import log_monitor
+        except Exception:
+            return
+
+        def fetch():
+            return log_monitor.refresh_rules(APP_LOG_RULES_URLS, CONFIG_DIR)
+
+        self._rules_worker = AsyncWorker(fetch)
+        self._rules_worker.finished.connect(self._on_rules_refreshed)
+        self._rules_worker.error.connect(lambda _err: None)   # silent by design
+        self._rules_worker.start()
+
+    def _on_rules_refreshed(self, rules):
+        if rules is not None:
+            self.logger.debug(f"日志判定规则已更新（{rules.updated or '未标注日期'}）")
 
     def _on_update_checked(self, info):
         if not info or not info.get("has_update"):
             return
         self.logger.info(f"检测到新版本: {info['latest']}（当前 {info['current']}）")
         if self.config.get("auto_download_update", False):
+            from update_checker import auto_update_allowed
+
+            if not auto_update_allowed(self.config, CONFIG_DIR):
+                # A failed upgrade must not be retried on every start: keep the task path clean.
+                self.logger.warning("上次升级失败未满 24 小时，本次跳过自动升级。")
+                return
             if self._is_running():
                 self._pending_upgrade_silent = True
                 self._pending_upgrade_info = info

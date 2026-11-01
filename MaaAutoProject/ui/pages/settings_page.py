@@ -3,7 +3,7 @@ import os
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QPushButton,
-    QLineEdit, QSlider,
+    QLineEdit, QSlider, QComboBox,
     QFileDialog, QMessageBox, QFrame,
 )
 from PySide6.QtCore import Qt, Signal, QTime, QTimer
@@ -80,6 +80,38 @@ def _match_test_worker(cfg):
     return results
 
 
+def maaend_instance_names(config):
+    """Instance names from MaaEnd's own config, for the dropdown.
+
+    MXU stores them in ``config/mxu-MaaEnd.json``; when MaaEnd is not configured or
+    unreadable the dropdown simply keeps the "automatic" entry.
+    """
+
+    try:
+        import json
+        from pathlib import Path
+
+        import upstream
+
+        root = None
+        configured = str(config.get("maaend_path") or "").strip()
+        if configured:
+            root = Path(configured).parent
+        if root is None:
+            found = upstream.detect_exe("maaend", [r"E:\MaaEnd\MaaEnd.exe"])
+            root = Path(found).parent if found else None
+        if root is None:
+            return []
+        data = json.loads((root / "config" / "mxu-MaaEnd.json").read_text(encoding="utf-8"))
+        return [
+            str(item["name"])
+            for item in (data.get("instances") or [])
+            if isinstance(item, dict) and item.get("name")
+        ]
+    except Exception:
+        return []
+
+
 class SettingsPage(QWidget):
     """Settings page: single scrolling page of groups + top jump chips + viewport highlight."""
 
@@ -90,6 +122,8 @@ class SettingsPage(QWidget):
     # UI scale has its own signal: the main window must repaint immediately, not just save config for a restart
     ui_scale_changed = Signal(float)
     restart_requested = Signal()
+    #: Re-open the first-run wizard / environment check (available at any time).
+    setup_wizard_requested = Signal()
 
     def __init__(self, config, i18n, theme_manager, parent=None):
         super().__init__(parent)
@@ -209,6 +243,39 @@ class SettingsPage(QWidget):
         self._add_item(group, title_key, desc_key, sw)
         return sw
 
+    def _apply_control_visibility(self, *_):
+        """Injection does not click, so the whole vision group only matters in click mode.
+
+        Hiding it (and its jump chip) removes a page of irrelevant knobs from the
+        default configuration; the values are kept, so switching back restores them.
+        """
+
+        click_mode = (self.control_seg.current_value() or "inject") == "click"
+        group = getattr(self, "_vision_group", None)
+        if group is not None:
+            group.setVisible(click_mode)
+        for chip, key, target in self._jump_chips:
+            if target is group:
+                chip.setVisible(click_mode)
+        if hasattr(self, "vision_hint"):
+            self.vision_hint.setVisible(click_mode)
+
+    def _reload_maaend_instances(self):
+        combo = self.maaend_instance_combo
+        want = str(self.config.get("maaend_instance") or "")
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(self.i18n.t("settings.maaend_instance.auto"), "")
+        for name in maaend_instance_names(self.config):
+            combo.addItem(name, name)
+        index = combo.findData(want)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _on_maaend_path_changed(self, _text):
+        self._reload_maaend_instances()
+        self.config_changed.emit(self.get_config())
+
     @staticmethod
     def _make_spin(minimum, maximum, value):
         return IntLineEdit(minimum, maximum, value)
@@ -264,6 +331,42 @@ class SettingsPage(QWidget):
         self._add_item(g, "settings.maaend_path", "settings.maaend_path.desc",
                        self._wrap_browse(self.maaend_path_edit))
 
+        g = self._new_group("control")
+        self.control_seg = SegmentedControl(
+            items=[
+                ("settings.control.inject", "inject"),
+                ("settings.control.click", "click"),
+            ],
+            i18n=self.i18n,
+        )
+        self.control_seg.set_current_value(self.config.get("control", "inject"))
+        self._add_item(g, "settings.control", "settings.control.desc", self.control_seg)
+
+        self.maaend_instance_combo = QComboBox()
+        self.maaend_instance_combo.setMinimumWidth(200)
+        self._reload_maaend_instances()
+        self._add_item(g, "settings.maaend_instance", "settings.maaend_instance.desc",
+                       self.maaend_instance_combo)
+
+        self.retry_spin = self._make_spin(0, 5, int(self.config.get("retry", 2)))
+        self._add_item(g, "settings.retry", "settings.retry.desc", self.retry_spin)
+
+        self.update_policy_seg = SegmentedControl(
+            items=[
+                ("settings.update_policy.between", "between-rounds"),
+                ("settings.update_policy.manual", "manual"),
+            ],
+            i18n=self.i18n,
+        )
+        self.update_policy_seg.set_current_value(
+            self.config.get("update_policy", "between-rounds"))
+        self._add_item(g, "settings.update_policy", "settings.update_policy.desc",
+                       self.update_policy_seg)
+
+        self.keep_upstream_sw = self._add_switch(
+            g, "settings.keep_upstream", "settings.keep_upstream.desc",
+            "keep_upstream", False)
+
         g = self._new_group("process")
         self.emulator_edit = QLineEdit(self.config.get("emulator_proc", "MuMuPlayer.exe"))
         self._add_item(g, "settings.emulator_proc", "settings.emulator_proc.desc",
@@ -271,6 +374,10 @@ class SettingsPage(QWidget):
         self.pc_game_edit = QLineEdit(self.config.get("pc_game_proc", "Endfield.exe"))
         self._add_item(g, "settings.pc_game_proc", "settings.pc_game_proc.desc",
                        self.pc_game_edit)
+        self.launcher_edit = QLineEdit(
+            self.config.get("launcher_proc", "Launcher.exe, Games.exe"))
+        self._add_item(g, "settings.launcher_proc", "settings.launcher_proc.desc",
+                       self.launcher_edit)
         self.wait_timeout_spin = self._make_spin(10, 300, self.config.get("wait_timeout", 60))
         self._add_item(g, "settings.wait_timeout", "settings.wait_timeout.desc",
                        self.wait_timeout_spin)
@@ -292,7 +399,10 @@ class SettingsPage(QWidget):
                        "settings.min_emulator_runtime.desc", self.min_emu_runtime_spin)
 
         g = self._new_group("vision")
+        self._vision_group = g
         self._build_vision_group(g)
+        self.control_seg.selection_changed.connect(self._apply_control_visibility)
+        self._apply_control_visibility()
 
         g = self._new_group("foreground")
         self.fg_seg = SegmentedControl(
@@ -485,6 +595,13 @@ class SettingsPage(QWidget):
             0, 3650, int(self.config.get("log_retention_days", 90) or 0))
         self._add_item(g, "settings.log_retention_days",
                        "settings.log_retention_days.desc", self.log_retention_spin)
+        self.btn_setup_wizard = QPushButton(self.i18n.t("settings.setup_wizard"))
+        self.btn_setup_wizard.setObjectName("GhostButton")
+        self.btn_setup_wizard.setCursor(Qt.PointingHandCursor)
+        self.btn_setup_wizard.clicked.connect(self.setup_wizard_requested.emit)
+        self._add_item(g, "settings.setup_wizard", "settings.setup_wizard.desc",
+                       self.btn_setup_wizard)
+
         self.auto_check_update_sw = self._add_switch(
             g, "settings.auto_check_update", None, "auto_check_update", True)
         self.auto_download_update_sw = self._add_switch(
@@ -650,7 +767,7 @@ class SettingsPage(QWidget):
             self.config_changed.emit(self.get_config())
 
         for w in (self.maa_path_edit, self.maaend_path_edit, self.emulator_edit,
-                  self.pc_game_edit, self.blacklist_edit, self.sc_edit,
+                  self.pc_game_edit, self.launcher_edit, self.blacklist_edit, self.sc_edit,
                   self.webhook_edit, self.bg_edit, self.template_dir_edit):
             w.textChanged.connect(emit_config)
         for w in (self.wait_timeout_spin, self.game_start_spin, self.game_exit_spin,
@@ -664,6 +781,11 @@ class SettingsPage(QWidget):
         self.schedule_editor.changed.connect(emit_config)
         self.channel_combo.currentIndexChanged.connect(emit_config)
         self.fg_seg.selection_changed.connect(emit_config)
+        self.control_seg.selection_changed.connect(emit_config)
+        self.update_policy_seg.selection_changed.connect(emit_config)
+        self.retry_spin.valueChanged.connect(emit_config)
+        self.maaend_instance_combo.currentIndexChanged.connect(emit_config)
+        self.maaend_path_edit.textChanged.connect(self._on_maaend_path_changed)
         self.scope_seg.selection_changed.connect(emit_config)
         self.click_mode_combo.currentIndexChanged.connect(emit_config)
         self.ui_scale_combo.currentIndexChanged.connect(self._on_ui_scale_changed)
@@ -913,6 +1035,7 @@ class SettingsPage(QWidget):
         c["maaend_path"] = self.maaend_path_edit.text().strip()
         c["emulator_proc"] = self.emulator_edit.text().strip() or "MuMuPlayer.exe"
         c["pc_game_proc"] = self.pc_game_edit.text().strip() or "Endfield.exe"
+        c["launcher_proc"] = self.launcher_edit.text().strip()
         c["wait_timeout"] = self.wait_timeout_spin.value()
         c["game_start_timeout"] = self.game_start_spin.value()
         c["game_exit_timeout"] = self.game_exit_spin.value()
@@ -938,6 +1061,10 @@ class SettingsPage(QWidget):
         for sw, key in self._switches:
             c[key] = sw.isChecked()
         c["foreground_action"] = self.fg_seg.current_value() or "none"
+        c["control"] = self.control_seg.current_value() or "inject"
+        c["maaend_instance"] = self.maaend_instance_combo.currentData() or ""
+        c["retry"] = self.retry_spin.value()
+        c["update_policy"] = self.update_policy_seg.current_value() or "between-rounds"
 
         # ---- image search and clicking ----
         c["search_scope"] = self.scope_seg.current_value() or "window"
@@ -1006,6 +1133,7 @@ class SettingsPage(QWidget):
         self.btn_template_browse.setText(self.i18n.t("settings.browse"))
         self.btn_capture_template.setText(self.i18n.t("settings.template_capture"))
         self.btn_test_match.setText(self.i18n.t("settings.match_test"))
+        self.btn_setup_wizard.setText(self.i18n.t("settings.setup_wizard"))
         self.btn_restart.setText(self.i18n.t("settings.ui_scale.restart"))
         self.btn_restart.setToolTip(self.i18n.t("settings.ui_scale.restart.tip"))
         self.fg_seg.retranslate()

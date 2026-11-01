@@ -605,26 +605,12 @@ def _handle_foreground_action(config, logger):
         logger.info("前台处理策略：【不做任何操作】，跳过清理前台程序。")
 
 
-def execute_workflow(config, logger):
-    start_time = datetime.datetime.now()
-
-    # ================= 1. Capture this task's log records =================
-    task_logs = []
-
-    class CaptureHandler(logging.Handler):
-        def emit(self, record):
-            task_logs.append(self.format(record))
-
-    capture_handler = CaptureHandler()
-    capture_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    logger.addHandler(capture_handler)
+def _execute_legacy(config, logger):
+    """1.x behaviour: find the start button, click it, wait for the process to exit."""
 
     overall_status = "成功"
-    send_key = config.get("serverchan_key", "")
-    webhook_url = config.get("webhook_url", "")
     retry_times = config.get("retry_times", 3)
     retry_interval = config.get("retry_interval", 30)
-    _clear_failure()
 
     try:
         # ================= Pre-launch foreground handling (per config) =================
@@ -687,7 +673,7 @@ def execute_workflow(config, logger):
                         logger.info(f"将在 {retry_interval} 秒后重试 MaaEnd 阶段...")
                         if is_process_running(["maaend"]):
                             bring_process_to_front(["maaend"])
-                        interruptible_sleep(retry_interval)   # <- interruptible
+                        interruptible_sleep(retry_interval)
                     else:
                         logger.error("MaaEnd 阶段重试次数已达上限。")
                         if isinstance(e, (TemplateNotFound, TemplateMissing)):
@@ -701,6 +687,69 @@ def execute_workflow(config, logger):
         overall_status = "中止"
     except Exception as global_e:
         logger.error(f"执行过程中发生未知严重错误: {global_e}")
+        overall_status = "报错"
+    return overall_status
+
+
+def _execute_inject(config, logger):
+    """2.0 behaviour: the orchestrator drives both phases via adapters.
+
+    No template matching, no clicking, no "wait for the emulator to exit" guess:
+    the upstreams are told to run (config injection / MXU command line) and the
+    result is judged from their logs.
+    """
+
+    import orchestrator
+
+    runner = orchestrator.Orchestrator(
+        config,
+        logger,
+        store=orchestrator.default_store(),
+        foreground=_handle_foreground_action,
+    )
+    result = runner.run(
+        resume=bool(config.get("_resume_run")),
+        run_id=config.get("_run_id") or None,
+    )
+    if result.status == "报错":
+        _set_failure("", result.message or "任务执行失败")
+    elif result.status == "成功":
+        _clear_failure()
+    return result.status
+
+
+def execute_workflow(config, logger):
+    start_time = datetime.datetime.now()
+
+    # ================= 1. Capture this task's log records =================
+    task_logs = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record):
+            task_logs.append(self.format(record))
+
+    capture_handler = CaptureHandler()
+    capture_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(capture_handler)
+
+    send_key = config.get("serverchan_key", "")
+    webhook_url = config.get("webhook_url", "")
+    _clear_failure()
+
+    control = str(config.get("control") or "click").strip().lower()
+    try:
+        if control == "inject":
+            logger.info("控制方式：配置注入（2.0）")
+            overall_status = _execute_inject(config, logger)
+        else:
+            logger.info("控制方式：找图点击（1.x 兼容）")
+            overall_status = _execute_legacy(config, logger)
+    except TaskInterrupted:
+        logger.info("=== 任务被用户中止 ===")
+        overall_status = "中止"
+    except Exception as exc:  # noqa: BLE001 - a crash must still produce a report
+        logger.error(f"执行过程中发生未知严重错误: {exc}")
+        _set_failure("", str(exc))
         overall_status = "报错"
     finally:
         logger.removeHandler(capture_handler)

@@ -1,6 +1,7 @@
 import os
 import time
 import psutil
+import subprocess
 import win32gui
 import win32process
 import logging
@@ -429,3 +430,45 @@ def is_window_valid(hwnd):
         return bool(hwnd) and bool(win32gui.IsWindow(hwnd))
     except Exception:
         return False
+
+def kill_process_tree(process_names):
+    """Kill processes by image name **including their children** (`taskkill /T`).
+
+    The Hypergryph launcher runs elevated (its manifest says requireAdministrator),
+    so psutil's terminate/kill gets "access denied" unless we are elevated as well;
+    `taskkill /F /IM <name> /T` is the form that works and also takes the
+    QtWebEngineProcess child down with it. A non-elevated caller is told what to do
+    instead of silently failing.
+    """
+
+    import subprocess
+
+    names = [str(n).strip() for n in (process_names or []) if str(n).strip()]
+    if not names:
+        return False
+    killed = False
+    for name in names:
+        try:
+            result = subprocess.run(
+                ["taskkill", "/F", "/IM", name, "/T"],
+                capture_output=True,
+                text=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except OSError as exc:
+            logger.warning(f"调用 taskkill 失败({name}): {exc}")
+            continue
+        if result.returncode == 0:
+            logger.info(f"正在关闭进程树: {name}")
+            killed = True
+            continue
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        reason = detail[0] if detail else f"exit={result.returncode}"
+        if "拒绝访问" in reason or "Access is denied" in reason or "5" == str(result.returncode):
+            logger.warning(
+                f"关闭 {name} 被拒绝（{reason}）：鹰角启动器以管理员身份运行，"
+                "本程序需要以管理员身份启动才能关闭它"
+            )
+        elif result.returncode != 128:      # 128 = "not found", i.e. already gone
+            logger.debug(f"关闭 {name} 未成功: {reason}")
+    return killed

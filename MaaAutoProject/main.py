@@ -240,6 +240,22 @@ def install_excepthook():
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
+def _parse_resume_run(argv):
+    """Return the resume run id, or None when --resume-run was not passed.
+
+    Accepted forms: ``--resume-run=<id>``, ``--resume-run <id>`` and a bare
+    ``--resume-run`` (empty string: continue whatever round the journal holds).
+    """
+
+    for index, arg in enumerate(list(argv or [])):
+        if arg.startswith("--resume-run="):
+            return arg.split("=", 1)[1].strip()
+        if arg == "--resume-run":
+            nxt = argv[index + 1] if index + 1 < len(argv) else ""
+            return nxt.strip() if nxt and not nxt.startswith("--") else ""
+    return None
+
+
 def main():
     # 0) --upgrading has top priority
     if "--upgrading" in sys.argv:
@@ -286,6 +302,17 @@ def main():
     # 5) i18n + config
     i18n = init_i18n(resource_path("i18n"))
     config = load_config()
+
+    # 5.0) Compensation for a crashed round: a pending injection journal means the
+    #      MAA config was never restored (killed process, power loss). Undo it now,
+    #      before anything reads or writes MAA's config again.
+    try:
+        from injector import MaaInjector
+
+        if MaaInjector.recover(os.path.join(CONFIG_DIR, "injected_state.json"), logger):
+            logger.info("检测到上次运行未还原的 MAA 配置，已自动还原")
+    except Exception as e:
+        logger.warning(f"还原上次注入的 MAA 配置失败: {e}")
 
     # 5.1) Self-heal the Settings > Apps version: auto-upgrade skips Inno, so the uninstall
     #      entry keeps the install-time version (D-2); only touched if it points at us.
@@ -338,6 +365,13 @@ def main():
 
     # 11) Delayed check of the upgrade-failure flag (debug inside; INFO only on a problem)
     QTimer.singleShot(300, _check_upgrade_failure)
+
+    # 12) Resume a round interrupted by an upgrade restart (upgrade.exe relaunches us
+    #     with the same arguments, which are restored from last_launch_args.json).
+    resume_id = _parse_resume_run(sys.argv)
+    if resume_id is not None:
+        logger.info(f"收到续跑请求: {resume_id or '(使用运行日志中的 run_id)'}")
+        QTimer.singleShot(2500, lambda: window.start_resumed_task(resume_id))
 
     sys.exit(app.exec())
 
