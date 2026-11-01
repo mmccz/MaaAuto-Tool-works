@@ -3,5 +3,7 @@
 #
 # 1.0.2 起不再需要 PySide6：进度窗改为 ctypes/Win32（installer/core/native_ui.py），
 # upgrade.exe 从 43 MB 降到 7.5 MB。主程序的 PySide6 依赖在它自己的 requirements.txt 里。
-psutil>=5.9.0
-bsdiff4>=1.2
+#
+# 2.0 起锁死精确版本，避免升级器二进制无谓变动把差分包撑大（与主程序同一个理由）。
+psutil==7.2.2
+bsdiff4==1.4.1

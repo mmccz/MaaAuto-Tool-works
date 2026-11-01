@@ -1,21 +1,27 @@
 # ---- 核心 UI ----
-PySide6>=6.5.0
+# 2.0 起锁死精确版本：PySide6 的 Qt DLL 一旦整体重编译，差分包会从几百 KB 涨到几十 MB
+# （1.4.6 的 29.8 MB 差分包就是这么来的）。锁住版本后 CI 与本机产物一致，
+# 差分里只剩真正改过的代码——2.0.0 的 1.4.6→2.0.0 差分包只有 668 KB。
+PySide6==6.12.0
+shiboken6==6.12.0
 
 # ---- 打包 ----
-pyinstaller>=6.0
+pyinstaller==6.22.3
 
 # ---- 进程 / 窗口 ----
-psutil>=5.9.0
-pywin32>=306
+psutil==7.2.2
+pywin32==312
 
 # ---- 自动化找图 ----
 # 1.0.2 起不再用 pyautogui（它按固定尺寸全屏找图，换缩放就失效）；
 # 找图改用 vision.py 的 cv2 多尺度匹配，点击用 ctypes SendInput 直接注入。
-Pillow>=10.0.0
+Pillow==13.0.0
 
 # ---- 图像识别（vision.py 多尺度模板匹配）----
 # 用 headless 版：无 GUI 依赖，体积比 opencv-python 小
-opencv-python-headless>=4.8.0
+opencv-python-headless==5.0.0.93
+# numpy 是 opencv 的依赖，但它是大体积二进制，单独锁住免得跟着升版本撑大差分包
+numpy==2.5.4
 
 # ---- 版本比较（update_checker）----
-packaging>=23.0
+packaging==26.3
