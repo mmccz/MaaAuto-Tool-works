@@ -12,7 +12,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-[简体中文](README.md) ｜ **English** ｜ 📘 [Full user guide](docs/guide/en-US.md)
+[简体中文](README.md) ｜ **English** ｜ 📘 [Full user guide](docs/guide/en-US.md) ｜ 🌐 [Wiki](https://github.com/mmccz/MaaAuto-Tool-works/wiki) (bilingual)
 
 </div>
 
