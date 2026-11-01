@@ -1,6 +1,6 @@
 # MaaAuto User Guide (English)
 
-> Applies to **v1.4.6** (2026-11-01)｜[简体中文](zh-CN.md)｜[Back to README](../../README.en.md)
+> Applies to **v2.0.0** (2026-11-01)｜[简体中文](zh-CN.md)｜[Back to README](../../README.en.md)
 > This guide is written for users: install, first-run setup, daily unattended runs, and troubleshooting — follow it step by step.
 
 ---
@@ -359,4 +359,4 @@ When in doubt, run "About → Export logs" and attach the archive to the issue.
 
 - Issues and feature requests: [Issues](https://github.com/mmccz/MaaAuto-Tool-works/issues)
 - Changelog: [CHANGELOG](../../CHANGELOG.md)｜Release notes: [Releases](https://github.com/mmccz/MaaAuto-Tool-works/releases)
-- Versioning: big updates bump `X.Y` (1.4.x → 1.5.0), small ones bump `X.Y.Z` (1.4.5 → 1.4.6)
+- Versioning: big updates bump `X.Y` (1.4.x → 2.0.0), small ones bump `X.Y.Z` (2.0.0 → 2.0.1); since 2.0.0 the `X` segment is `2`

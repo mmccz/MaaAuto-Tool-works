@@ -1,6 +1,6 @@
 # MaaAuto 使用手册（中文）
 
-> 适用于 **v1.4.6**（2026-11-01）｜[English](en-US.md)｜[返回 README](../../README.md)
+> 适用于 **v2.0.0**（2026-11-01）｜[English](en-US.md)｜[返回 README](../../README.md)
 > 这份手册面向使用者：从安装、首次配置到日常挂机、排障，全部按「照着做就行」写。
 
 ---
@@ -357,4 +357,4 @@ MAA 里没勾「完成后退出模拟器」，或者 MaaEnd 任务列表最后�
 
 - 问题与建议：[Issues](https://github.com/mmccz/MaaAuto-Tool-works/issues)
 - 更新记录：[CHANGELOG](../../CHANGELOG.md)｜发布说明：[Releases](https://github.com/mmccz/MaaAuto-Tool-works/releases)
-- 版本规则：大更新动 `X.Y`（如 1.4.x → 1.5.0），小更新动 `X.Y.Z`（如 1.4.5 → 1.4.6）
+- 版本规则：大更新动 `X.Y`（如 1.4.x → 2.0.0），小更新动 `X.Y.Z`（如 2.0.0 → 2.0.1）；2.0.0 起 `X` 段为 `2`
