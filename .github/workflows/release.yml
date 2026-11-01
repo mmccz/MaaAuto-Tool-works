@@ -100,11 +100,11 @@ jobs:
       - name: Collect assets
         run: |
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          Copy-Item MaaAutoInstaller/dist/MaaAuto_Setup_*.exe out/
-          Copy-Item MaaAutoInstaller/dist/MaaAuto_Online_*.exe out/
-          Copy-Item MaaAutoInstaller/dist/MaaAuto_payload_*.zip out/
-          Copy-Item MaaAutoInstaller/dist/MaaAuto_delta_*.zip out/ -ErrorAction SilentlyContinue
-          Copy-Item MaaAutoInstaller/dist/SHA256SUMS.txt out/
+          Copy-Item dist/MaaAuto_Setup_*.exe out/
+          Copy-Item dist/MaaAuto_Online_*.exe out/
+          Copy-Item dist/MaaAuto_payload_*.zip out/
+          Copy-Item dist/MaaAuto_delta_*.zip out/ -ErrorAction SilentlyContinue
+          Copy-Item dist/SHA256SUMS.txt out/
           Get-ChildItem out | Format-Table Name, Length
 
       - name: Publish GitHub Release
