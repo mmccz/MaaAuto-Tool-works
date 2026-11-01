@@ -6,7 +6,7 @@
 
 **A scheduling console for MAA & MaaEnd**
 
-[![Version](https://img.shields.io/badge/version-1.4.6-2f81f7.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-2f81f7.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.15%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#requirements)
@@ -42,6 +42,15 @@ It contains **no game logic** — no patching, no memory reading, no input repla
 - Background scheduler checks every 10 seconds; "Run now" and "Stop" are always available
 - Foreground strategy: do nothing / close all foreground apps / close a blacklist
 - Optional logon autostart using a scheduled task (highest privileges, no UAC prompt)
+
+**Driving the upstreams (2.0)**
+
+- **Config injection (default)** — "run the queue directly" is written into MAA's active scheme before launch; no clicks, so an upstream redesign cannot break it. The written keys are restored byte for byte afterwards, and a kill or power loss is compensated on the next start
+- **MaaEnd via CLI** — `--autostart --instance <name> --quit-after-run`, no button clicking
+- **Log judgement** — `debug/gui.log` and MaaEnd's stdout are parsed into all done / partially failed / emulator unreachable / no tasks selected / timeout; "cannot tell" is never reported as success
+- **Self-check (read-only)** — tray menu: program paths, config folder, empty task queue, a missing last "close" task in MaaEnd, upstream schedules that would fire twice
+- **Run control settings** — control mode, MaaEnd instance, stage retries, update timing, whether to keep the upstreams after a run, launcher process
+- **Vision & clicking** — kept as the compatibility mode behind `control: "click"`
 
 **Updates**
 
@@ -147,6 +156,12 @@ Stored in `config/config.json` (inside the install folder for installed builds);
 | --- | --- | --- |
 | `maa_path` | MAA executable; empty skips the MAA phase | `""` |
 | `maaend_path` | MaaEnd executable; empty skips the MaaEnd phase | `""` |
+| `control` | `inject` (config injection + log judgement, the 2.0 default) / `click` (1.x vision-click compatibility) | `inject` |
+| `maaend_instance` | MaaEnd instance (scheme) name; empty = whatever MaaEnd used last | `""` |
+| `retry` | Per-stage retries in `inject` mode | `2` |
+| `update_policy` | `between-rounds` (only between two runs) / `manual` | `between-rounds` |
+| `keep_upstream` | Keep MAA / MaaEnd running after a run | `false` |
+| `launcher_proc` | Hypergryph launcher process, tree-killed when the MaaEnd stage ends; keep `Games.exe` only | `Games.exe` |
 | `emulator_proc` | Emulator process name | `MuMuPlayer.exe` |
 | `pc_game_proc` | PC game process name | `Endfield.exe` |
 | `foreground_action` | `none` / `kill_all` / `blacklist` | `none` |
@@ -161,15 +176,28 @@ Stored in `config/config.json` (inside the install folder for installed builds);
 | `min_emulator_runtime` | An emulator dying sooner counts as failure (0 = off) | `60` |
 | `match_threshold` | Similarity threshold 0–1 | `0.80` |
 | `match_scale_min` / `match_scale_max` | Scale search range | `0.60` / `2.00` |
+| `match_scale_step` | Scale step | `0.05` |
+| `match_interval` | Pause between attempts (s) | `1.5` |
+| `search_scope` / `search_padding` | `window` (target client area) / `screen`; extra pixels around the area | `window` / `0` |
 | `click_mode` | `sendinput` (real click) / `postmessage` (background, experimental) | `sendinput` |
 | `click_activate` | Bring the target to the foreground before clicking | `true` |
+| `click_restore_cursor` / `click_move_delay_ms` / `click_offset_x` / `click_offset_y` | Restore the cursor, pause before pressing (ms), hit-point nudge (px) | `true` / `80` / `0` / `0` |
+| `click_verify` / `click_verify_delay_ms` / `click_retries` | Post-click pixel verification, wait before the screenshot (ms), extra clicks on failure | `true` / `900` / `1` |
 | `click_verify` | Compare pixels after the click to confirm it landed | `true` |
 | `template_dir` | Custom template folder (empty = `config/templates`) | `""` |
 | `theme` / `accent_color` / `language` | Appearance | `system` / `#3b82f6` / `zh_CN` |
+| `background_image` / `background_opacity` / `background_blur` / `background_mode` | Background image, opacity 0–1, blur radius, fit mode | `""` / `0.3` / `0` / `cover` |
+| `show_animation` | Page transition animation | `true` |
 | `ui_scale` | UI scale (1.0 / 1.25 / 1.5) | `1.0` |
 | `auto_start` / `minimize_to_tray` / `kill_on_exit` | Behaviour toggles | `false` / `true` / `true` |
 | `log_retention_days` | Keep logs for N days (0 = keep all) | `90` |
 | `auto_check_update` / `auto_download_update` / `update_channel` | Update behaviour | `true` / `false` / `stable` |
+| `minimize_on_task` | Minimise the main window while a run is in progress | `true` |
+| `enable_system_notify` | Tray balloon when a run ends | `true` |
+| `tutorial_seen` / `announcements_seen` / `announcements_seen_updated` | Onboarding and announcement bookkeeping | `false` / `[]` / `""` |
+| `last_trigger_date` | Last trigger date (internal anti-duplicate) | `""` |
+| `config_version` / `setup_wizard_seen` | Config schema version (internal) / first-run wizard done | `4` / `false` |
+| `run_count` / `last_run_time` / `last_trigger_key` / `window_geometry` | Runtime bookkeeping, maintained automatically | — |
 
 > **Editing announcements needs no release**: edit `MaaAutoProject/resources/announcements.json` and push to `main`. Clients fetch it in the background (falling back to a jsDelivr mirror) and cache it. New ids show as unread; when you only change the text, bump the top-level `updated` so readers see the red dot again.
 
@@ -196,9 +224,9 @@ Content-Type: application/json
 
 ## 🔄 Updates and versions
 
-Current version **1.4.6**; see [CHANGELOG.md](CHANGELOG.md).
+Current version **2.0.0**; see [CHANGELOG.md](CHANGELOG.md).
 
-Any installed 1.x can update in-app: the delta package `MaaAuto_delta_v{old}_to_{new}.zip` is preferred (usually under 1 MB; skipping versions chains deltas automatically), falling back to the full `MaaAuto_payload_v{version}.zip`; failures roll back.
+**1.4.2 and newer** update in-app: the delta package `MaaAuto_delta_v{old}_to_{new}.zip` is preferred (1.4.6 → 2.0.0 is only 668 KB; skipping versions chains published deltas automatically), falling back to the full `MaaAuto_payload_v{version}.zip`; failures roll back. Releases for **1.4.1 and older** were removed on 2026-11-01, so those versions get the full package.
 
 An update replaces program files only — `config/`, `logs/` and `.maaauto.json` are always kept. A failed update rolls back and writes `config/upgrade_failed.flag`, which the next launch reports.
 
@@ -223,7 +251,7 @@ An update replaces program files only — `config/`, `logs/` and `.maaauto.json`
 
 **Q3 No push after a run.** Check SendKey / webhook with the "Test" button.
 
-**Q4 MAA / MaaEnd is already running — will it launch twice?** No. A running instance is brought to the foreground instead.
+**Q4 MAA / MaaEnd is already running — will it launch twice?** The 2.0 default (config injection) **will not take over a running MAA**: it reports an error and asks you to quit MAA first (or switch control mode to "Click"). MaaEnd is started from the command line and is not affected by this check.
 
 **Q5 The window is up but buttons do not respond.** Usually a run is in progress; the home button shows "■ Stop".
 

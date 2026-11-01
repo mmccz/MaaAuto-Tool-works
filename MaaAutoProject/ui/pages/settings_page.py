@@ -375,7 +375,7 @@ class SettingsPage(QWidget):
         self._add_item(g, "settings.pc_game_proc", "settings.pc_game_proc.desc",
                        self.pc_game_edit)
         self.launcher_edit = QLineEdit(
-            self.config.get("launcher_proc", "Launcher.exe, Games.exe"))
+            self.config.get("launcher_proc", "Games.exe"))
         self._add_item(g, "settings.launcher_proc", "settings.launcher_proc.desc",
                        self.launcher_edit)
         self.wait_timeout_spin = self._make_spin(10, 300, self.config.get("wait_timeout", 60))

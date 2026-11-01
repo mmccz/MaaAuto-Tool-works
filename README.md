@@ -6,7 +6,7 @@
 
 **MAA & MaaEnd 的定时自动化调度台**
 
-[![Version](https://img.shields.io/badge/version-1.4.6-2f81f7.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-2f81f7.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.15%2B-3776AB.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](https://pypi.org/project/PySide6/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4.svg)](#环境要求)
@@ -20,6 +20,7 @@
 
 
 > **安装器已并入本仓库**：构建脚本、Inno 包装与升级器在 `MaaAutoInstaller/`，不再单独维护安装器仓库。
+
 ## 这是什么
 
 MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 或 [MaaEnd](https://github.com/MaaEnd/MaaEnd)，让它们按你自己配好的任务列表开跑，读它们的日志判定结果，再把结果推送到微信或 Webhook。
@@ -57,7 +58,7 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 ### 自动化调度
 
 - **每日定时启动** —— 自定义执行时间；当天错过时间点，晚些开软件也会补执行一次。
-- **配置注入启动（2.0 默认）** —— 不点按钮：把「直接开始任务」写进 MAA 当前使用的方案，再用 `--autostart --instance <实例> --quit-after-run` 拉起 MaaEnd。上游改版换按钮样式也不会再失手；写入的配置在任务结束后按原始文件逐字节还原，进程被杀也会在下次启动自动还原。
+- **配置注入启动（2.0 默认）** —— 不点按钮：把「直接开始任务」写进 MAA 当前使用的方案，再启动 MAA；MaaEnd 走命令行（`--autostart --instance <实例> --quit-after-run`）。上游改版换按钮样式也不会再失手；写入的配置在任务结束后按原始文件逐字节还原，进程被杀也会在下次启动自动还原。
 - **日志判定结果（2.0）** —— 读 MAA 的 `debug/gui.log` 与 MaaEnd 的 stdout，区分「全部完成 / 部分失败 / 连不上模拟器 / 没选任务 / 超时」，并在失败时给出可执行的提示；判定不出来时**不会**当作成功。
 - **环境自检（2.0）** —— 托盘菜单「环境自检」只读检查：程序路径、配置目录、任务队列是否为空、MaaEnd 末位是否有关闭任务、上游自带定时是否会和本工具重复触发。
 - **图像识别点击（兼容模式）** —— `control` 设为 `"click"` 时回到 1.x 行为：`opencv` 多尺度模板匹配点掉「Link Start!」「开始任务」，支持 100% / 125% / 150% 缩放。
@@ -65,7 +66,7 @@ MaaAuto 是一个 Windows 桌面端的**调度外壳**：到点拉起 [MAA](http
 - **两种点击方式** —— 默认真实点击（SendInput，可还原鼠标位置）；也可选实验性的后台 `PostMessage` 点击（不占用鼠标，但游戏通常不响应）。
 - **前台处理策略** —— 启动前可选：不做任何操作（默认）/ 关闭所有前台程序 / 仅关闭黑名单程序（带可视化进程选择器）。
 - **重试与超时** —— 重试次数、重试间隔、找图超时、游戏启动 / 关闭超时全部可调。
-- **进程保活与唤醒** —— 任务结束自动最小化 MAA / MaaEnd；下次执行先拉回前台，避免多开。
+- **收尾可控（2.0）** —— 默认按阶段关掉自己的进程（MAA → MaaEnd → 鹰角启动器 `Games.exe`），打完就干净；调试时想留着，打开「运行控制 → 任务后保留上游」（`keep_upstream: true`，只最小化不退出）。
 - **开机自启（1.4.5 起）** —— 打包版用「登录时运行 + 最高权限」的计划任务拉起（`--autostart` 静默进托盘）；旧的 HKCU Run 项在启动时自动迁移，关闭开关会删掉任务。
 - **随时中止** —— 「结束任务」或托盘菜单中止，长循环 1 秒内响应，不残留子进程。
 
@@ -181,7 +182,7 @@ py main.py
 7. **设置 → 定时与推送**：执行时间、Server酱 SendKey、Webhook、系统通知。
 8. **设置 → 外观**：主题 / 强调色 / 语言 / 背景图 / 界面缩放。
 9. **设置 → 常规**：开机自启、关闭行为、自动检查更新、自动下载并升级。
-9. 回首页点 **▶ 立即执行** 试跑一次；出问题看首页日志或 `logs/` 里当次 `task.log`。
+10. 回首页点 **▶ 立即执行** 试跑一次；出问题看首页日志或 `logs/` 里当次 `task.log`。
 
 ---
 
@@ -198,6 +199,7 @@ py main.py
 | `retry` | 控制方式为 `inject` 时每个阶段的重试次数 | `2` |
 | `update_policy` | `between-rounds`（只在两轮任务之间升级）/ `manual` | `between-rounds` |
 | `keep_upstream` | 任务结束后保留 MAA / MaaEnd 不关闭 | `false` |
+| `launcher_proc` | 鹰角启动器进程，MaaEnd 阶段收尾时 `taskkill /T` 树杀；只填 `Games.exe` | `Games.exe` |
 | `emulator_proc` | 模拟器进程名 | `MuMuPlayer.exe` |
 | `pc_game_proc` | PC 端游戏进程名 | `Endfield.exe` |
 | `foreground_action` | 前台策略：`none` / `kill_all` / `blacklist` | `none` |
@@ -213,6 +215,7 @@ py main.py
 | `wait_timeout` | 找图超时（秒） | `60` |
 | `game_start_timeout` | 等待游戏启动（秒） | `120` |
 | `game_exit_timeout` | 等待游戏关闭（秒） | `7200` |
+| `min_emulator_runtime` | 模拟器启动后不到这么多秒就退出，判为失败（`0` = 关闭该判断） | `60` |
 | `retry_times` | 失败重试次数 | `3` |
 | `retry_interval` | 重试间隔（秒） | `30` |
 | `theme` | `light` / `dark` / `system` | `system` |
@@ -240,13 +243,19 @@ py main.py
 | `click_activate` | 点击前把目标窗口切到前台；**关闭后只允许后台点击**（PostMessage），不会发真实点击 | `true` |
 | `click_restore_cursor` | 点击后还原鼠标位置 | `true` |
 | `click_move_delay_ms` | 移到目标后停顿再按下（毫秒） | `80` |
+| `click_verify` | 点击后比较像素确认真的点中 | `true` |
+| `click_verify_delay_ms` | 点击后等多久再截图校验（毫秒） | `900` |
+| `click_retries` | 校验没通过时的补点次数 | `1` |
 | `click_offset_x` / `click_offset_y` | 命中点微调（像素） | `0` / `0` |
 | `template_dir` | 自定义模板目录（留空 = `config/templates`） | `""` |
 | `ui_scale` | 界面缩放（切换即时生效，无需重启） | `1.0` |
 | `tutorial_seen` | 新手教程是否已看过（首次启动自动弹） | `false` |
+| `minimize_on_task` | 任务运行时最小化主窗口 | `true` |
+| `config_version` | 配置结构版本（内部，用于迁移） | `4` |
+| `setup_wizard_seen` | 首启向导是否已走完 | `false` |
 | `announcements_seen` | 已读公告 id 列表（首页红点） | `[]` |
 | `announcements_seen_updated` | 上次已读时的公告 `updated`（内容更新会重新提示） | `""` |
-| `run_count` / `last_run_time` / `window_geometry` | 运行态数据，自动维护 | — |
+| `run_count` / `last_run_time` / `last_trigger_key` / `window_geometry` | 运行态数据，自动维护 | — |
 
 > **公告怎么改（不用发版）**：编辑仓库里的 `MaaAutoProject/resources/announcements.json`
 > （结构见文件内 `_note`），push 到 `main` 分支即可。客户端启动后会在后台拉取
@@ -277,11 +286,12 @@ Content-Type: application/json
 
 ## 🔄 升级与版本
 
-当前版本 **1.4.6**，变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 **2.0.0**，变更见 [CHANGELOG.md](CHANGELOG.md)。
 
-任何已安装的 1.x 都可以在程序内一键升级：优先下载 `MaaAuto_delta_v{旧}_to_{新}.zip` 差分包
-（通常不到 1 MB，跳版本会自动串链），没有可用补丁时才回退 `MaaAuto_payload_v{版本}.zip` 整包；
-失败自动回滚。
+**1.4.2 及以后**可以在程序内一键升级：优先下载 `MaaAuto_delta_v{旧}_to_{新}.zip` 差分包
+（1.4.6 → 2.0.0 只有 668 KB；跳版本会把已发布的补丁自动串成链），没有可用补丁时才回退
+`MaaAuto_payload_v{版本}.zip` 整包；失败自动回滚。
+**更老的版本**（1.4.1 及以前）的 Release 已于 2026-11-01 下架，升级会直接走整包。
 
 升级只替换程序文件，`config/`、`logs/`、`.maaauto.json` 一律保留。失败会回滚并写入 `config/upgrade_failed.flag`，下次启动弹窗提示。
 
@@ -313,7 +323,7 @@ Content-Type: application/json
 
 **Q3 任务结束没有推送？** 检查 SendKey / Webhook 是否正确，用设置页的「测试」按钮验证。
 
-**Q4 MAA / MaaEnd 已在运行，会重复启动吗？** 不会。检测到已在运行会拉到前台。
+**Q4 MAA / MaaEnd 已在运行，会重复启动吗？** 2.0 默认的配置注入**不会接管已经开着的 MAA**：检测到 MAA 在运行会直接报错并提示先退出（或把控制方式切成「点击」）；MaaEnd 走命令行启动，不受这条限制。
 
 **Q5 界面出来了但按钮点不动？** 多半是任务执行中；看首屏按钮是否显示「■ 结束任务」。
 

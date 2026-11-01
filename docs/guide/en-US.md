@@ -144,7 +144,7 @@ Tray menu: Show, Settings, Stop, Restart, Quit. Whether closing the window keeps
 | Stage retries | 3 / 30 s | Classified backoff (30 / 60 / 120 s); repeated identical failures trip a circuit breaker |
 | Update timing | Between two runs | A new version never interrupts the current run; after a failure auto-retry pauses for 24 hours |
 | Keep upstreams after a run | Off | Off = each stage closes its own process (MAA / MaaEnd / Hypergryph launcher); on = keep them for debugging |
-| Game launcher processes | `HypergryphLauncher.exe, Launcher.exe, Games.exe` | Closed by name at the end of the MaaEnd stage; leave empty to leave them alone |
+| Game launcher process | `Games.exe` | Tree-killed with `taskkill /F /T` when the MaaEnd stage ends (children included); keep `Games.exe` only — `Launcher.exe` is the bootstrap; empty = leave it alone |
 
 > The matching/clicking group only appears when control mode is "Click" (values are kept and restored when you switch back).
 

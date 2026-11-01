@@ -22,6 +22,7 @@
 - **MaaEnd 不再点「开始任务」**：改用 MXU 命令行，实例名取 `maaend_instance`，为空则沿用
   MaaEnd 自己上次使用的实例。
 - **任务结束默认关闭上游**：1.x 是最小化留着；`keep_upstream: true` 恢复旧行为。
+  收尾顺序是 MAA → MaaEnd → 鹰角启动器（`launcher_proc`，默认只 `Games.exe`，用 `taskkill /F /T` 树杀；`Launcher.exe` 是引导入口不碰，游戏本体交给 MaaEnd 任务列表里的关闭任务收尾）。
 - **新增配置键**：`control` / `config_version` / `maaend_instance` / `retry` /
   `update_policy` / `keep_upstream` / `setup_wizard_seen`。
 
